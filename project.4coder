@@ -1,0 +1,68 @@
+version(2);
+project_name = "clang_test.exe";
+patterns = {
+    "*.c",
+    "*.cpp",
+    "*.h",
+    "*.m",
+    "*.bat",
+    "*.sh",
+    "*.4coder",
+};
+blacklist_patterns = {
+    ".*",
+};
+load_paths_base = {
+    { ".", .relative = true, .recursive = true, },
+};
+load_paths = {
+    .win = load_paths_base,
+    .linux = load_paths_base,
+    .mac = load_paths_base,
+};
+
+commands = {
+    .build = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
+        .win = "build.bat",
+        .linux = "./build.sh",
+        .mac = "./build.sh", 
+    },
+    
+    .build_compiler = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
+        .win = "build_compiler.bat", 
+    },
+    
+    .build_gui = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
+        .win = "build_gui.bat", 
+    },
+    
+    .build_tests = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
+        .win = "test\\build_tests.bat", 
+    },
+    
+    .run = { .out = "*run*", .footer_panel = false, .save_dirty_files = false,
+        .win = "build\\clang_test.exe build\\mix.wav build\\test.cpp",
+        .linux = "build/clang_test.exe",
+        .mac = "build/clang_test.exe", 
+    },
+    
+    
+    .run_tests = { .out = "*run*", .footer_panel = false, .save_dirty_files = false,
+        .win = "build\\tests.exe",
+    },
+    
+    .debug = { 
+        .save_dirty_files = false,
+        .win = "remedybg.exe build\\clang_test.exe loop16.wav test.cpp",
+    },
+};
+
+fkey_command = {
+    .F1 = "build",
+    .F2 = "run",
+    .F3 = "debug",
+    .F4 = "build_compiler",
+    .F5 = "build_gui",
+    .F6 = "build_tests",
+    .F7 = "run_tests"
+};
