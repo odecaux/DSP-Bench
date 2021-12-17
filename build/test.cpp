@@ -1,3 +1,4 @@
+
 #define INT_ARAM(min_value, max_value) __attribute__(( annotate( "Int " #min_value " " #max_value ) )) int
 
 #define FLOAT_ARAM(min_value, max_value) __attribute__(( annotate( "Float " #min_value " " #max_value ) )) float
@@ -30,7 +31,7 @@ Parameters default_parameters()
     return initial_state;
 }
 
-State initialize_state(Parameters& param, 
+State initialize_state(const Parameters& param, 
                        const unsigned int num_channels, 
                        const float sample_rate,
                        allocator_t allocator)
@@ -42,7 +43,7 @@ State initialize_state(Parameters& param,
 typedef float real32;
 typedef unsigned int u32;
 
-void audio_callback(const Parameters& data,
+void audio_callback(const Parameters& param,
                     State& state,
                     float** out_buffer, 
                     const u32  num_channels, 

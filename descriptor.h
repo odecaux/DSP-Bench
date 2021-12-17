@@ -45,6 +45,51 @@ typedef struct {
     
 } Plugin_Descriptor_Parameter;
 
+typedef struct {
+    //String name;
+    //le nom c'est le filename ?
+    struct { 
+        u32 size;
+        u32 alignment;
+    } parameters_struct;
+    
+    struct { 
+        u32 size;
+        u32 alignment;
+    } state_struct;
+    
+    Plugin_Descriptor_Parameter *parameters;
+    u32 num_parameters;
+} Plugin_Descriptor;
+
+typedef struct {
+    union{
+        int int_value;
+        float float_value;
+        int enum_value;
+    };
+} Plugin_Parameter_Value;
+
+
+//TODO pour l'instant il y a un bug : si l'ui arrive à emettre 4096 blocs pendant que le thread audio fait 1 copie
+typedef struct{
+    Plugin_Parameter_Value *buffer;
+    volatile Plugin_Parameter_Value **head;
+    u32 writer_idx;
+    u32 buffer_size;
+    u32 num_fields_by_plugin;
+} Plugin_Parameters_Ring_Buffer;
+
+
+Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_fields_by_plugin, u32 buffer_slot_count);
+
+//TODO, ça marche pas, on sait pas qui c'est
+void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_Parameter_Value *new_parameters);
+
+Plugin_Parameter_Value* plugin_parameters_buffer_pull(Plugin_Parameters_Ring_Buffer& ring);
+
+
+
 
 internal float normalize_parameter_int_value(Parameter_Int param, int value)
 {
@@ -99,38 +144,5 @@ internal u32 enum_value_to_index(Parameter_Enum& parameter, int value)
     assert(false);
     return 0;
 }
-
-typedef struct {
-    String name;
-    u32 size;
-    u32 alignment;
-    Plugin_Descriptor_Parameter *parameters;
-    u32 num_parameters;
-} Plugin_Descriptor;
-
-typedef struct {
-    union{
-        int int_value;
-        float float_value;
-        int enum_value;
-    };
-} Plugin_Parameter_Value;
-
-
-//TODO pour l'instant il y a un bug : si l'ui arrive à emettre 4096 blocs pendant que le thread audio fait 1 copie
-typedef struct{
-    Plugin_Parameter_Value *buffer;
-    volatile Plugin_Parameter_Value **head;
-    u32 writer_idx;
-    u32 buffer_size;
-    u32 num_fields_by_plugin;
-} Plugin_Parameters_Ring_Buffer;
-
-Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_fields_by_plugin, u32 buffer_slot_count);
-
-//TODO, ça marche pas, on sait pas qui c'est
-void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_Parameter_Value *new_parameters);
-
-Plugin_Parameter_Value *plugin_parameters_buffer_pull(Plugin_Parameters_Ring_Buffer& ring);
 
 #endif //DESCRIPTOR_H

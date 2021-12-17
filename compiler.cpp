@@ -42,9 +42,55 @@
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/Host.h>
 #include <llvm/Support/DynamicLibrary.h>
+#include "llvm/Analysis/AliasAnalysis.h"
 
 #include "base.h"
 #include "structs.h"
+
+struct Clang_Context{
+    llvm::ModulePassManager module_pass_manager;
+    llvm::ModuleAnalysisManager module_analysis_manager;
+};
+
+
+extern "C" __declspec(dllexport) void* create_clang_context()
+{
+    llvm::PassBuilder passBuilder;
+    llvm::LoopAnalysisManager loopAnalysisManager;
+    llvm::FunctionAnalysisManager functionAnalysisManager;
+    llvm::CGSCCAnalysisManager cGSCCAnalysisManager;
+    llvm::ModuleAnalysisManager moduleAnalysisManager;
+    
+    
+    passBuilder.registerModuleAnalyses(moduleAnalysisManager);
+    passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
+    passBuilder.registerFunctionAnalyses(functionAnalysisManager);
+    functionAnalysisManager.registerPass([&]{ return passBuilder.buildDefaultAAPipeline(); });
+    passBuilder.registerLoopAnalyses(loopAnalysisManager);
+    passBuilder.crossRegisterProxies(loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager, moduleAnalysisManager);
+    
+    llvm::ModulePassManager module_pass_manager = passBuilder.buildPerModuleDefaultPipeline(llvm::PassBuilder::OptimizationLevel::O3);
+    
+    auto& Registry = *llvm::PassRegistry::getPassRegistry();
+    llvm::initializeCore(Registry);
+    llvm::initializeScalarOpts(Registry);
+    llvm::initializeVectorization(Registry);
+    llvm::initializeIPO(Registry);
+    llvm::initializeAnalysis(Registry);
+    llvm::initializeTransformUtils(Registry);
+    llvm::initializeInstCombine(Registry);
+    llvm::initializeInstrumentation(Registry);
+    llvm::initializeTarget(Registry);
+    
+    llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
+    
+    
+    auto* clang_ctx = new Clang_Context();
+    clang_ctx->module_pass_manager = std::move(module_pass_manager);
+    clang_ctx->module_analysis_manager = std::move(moduleAnalysisManager);
+    
+    return (void*) clang_ctx;
+}
 
 String allocate_and_copy_llvm_stringref(llvm::StringRef llvm_stringref)
 {
@@ -81,6 +127,7 @@ static void print_parameter(Plugin_Descriptor_Parameter parameter)
         }break;
     }
 }
+
 
 
 template<typename Exec>
@@ -138,8 +185,6 @@ void match_ast(Matcher& matcher, Exec& exec, clang::ASTContext& ast_ctx)
     match_finder.matchAST(ast_ctx);
 } 
 
-
-
 template<typename Matcher, typename Exec, typename Node>
 void match_node(Matcher& matcher, Exec& exec, const Node& node, clang::ASTContext& ast_ctx)
 {
@@ -153,104 +198,127 @@ void match_node(Matcher& matcher, Exec& exec, const Node& node, clang::ASTContex
     match_finder.match<Node>(node, ast_ctx);
 } 
 
+bool parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
+                             const clang::CXXRecordDecl* state_struct_decl,
+                             Plugin_Descriptor& plugin_descriptor);
 
-
-
-extern "C" __declspec(dllexport) Plugin_Handle try_compile(const char* filename)
+extern "C" __declspec(dllexport) Plugin_Handle try_compile(const char* filename, void* clang_ctx_ptr)
 {
     
-    clang::DiagnosticOptions diagnosticOptions;
-    llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs> pDiagIDs;
+    //magic stuff
+    llvm::InitializeNativeTarget();
+    llvm::InitializeNativeTargetAsmPrinter();
+    llvm::InitializeNativeTargetAsmParser();
     
-    clang::TextDiagnosticPrinter *pTextDiagnosticPrinter =
+    clang::DiagnosticOptions diagnosticOptions;
+    llvm::IntrusiveRefCntPtr<clang::DiagnosticIDs> diagnostics_ids;
+    
+    clang::TextDiagnosticPrinter *text_diagnostics_printer =
         new clang::TextDiagnosticPrinter(
                                          llvm::outs(),
                                          &diagnosticOptions);
     
-    clang::DiagnosticsEngine pDiagnosticsEngine (pDiagIDs,
+    clang::DiagnosticsEngine diagnostics_engine (diagnostics_ids,
                                                  &diagnosticOptions,
-                                                 pTextDiagnosticPrinter);
+                                                 text_diagnostics_printer);
     
-    clang::LangOptions languageOptions;
-    languageOptions.Bool = 1;
-    languageOptions.CPlusPlus = 1;
+    clang::LangOptions language_options;
+    language_options.Bool = 1;
+    language_options.CPlusPlus = 1;
+    language_options.RTTI = 0;
+    language_options.CXXExceptions = 0;
     
-    clang::FileSystemOptions fileSystemOptions;
-    clang::FileManager fileManager(fileSystemOptions);
+    clang::FileSystemOptions filesystem_options;
+    clang::FileManager file_manager(filesystem_options);
     
-    clang::SourceManager sourceManager(pDiagnosticsEngine,
-                                       fileManager);
-    
-    std::shared_ptr<clang::HeaderSearchOptions> headerSearchOptions(new clang::HeaderSearchOptions());
+    std::shared_ptr<clang::HeaderSearchOptions> header_searchOptions(new clang::HeaderSearchOptions());
     
     const std::shared_ptr<clang::TargetOptions> targetOptions = std::make_shared<clang::TargetOptions>();
     targetOptions->Triple = llvm::sys::getDefaultTargetTriple();
     
-    clang::TargetInfo *pTargetInfo = 
+    clang::TargetInfo *target_infos = 
         clang::TargetInfo::CreateTargetInfo(
-                                            pDiagnosticsEngine,
+                                            diagnostics_engine,
                                             targetOptions);
     
-    clang::HeaderSearch headerSearch(headerSearchOptions,
-                                     sourceManager, 
-                                     pDiagnosticsEngine,
-                                     languageOptions,
-                                     pTargetInfo);
-    clang::CompilerInstance compInst;
+    //~
+    clang::SourceManager source_manager(diagnostics_engine,
+                                        file_manager);
     
     
-    std::shared_ptr<clang::PreprocessorOptions> pOpts( new clang::PreprocessorOptions());
-    clang::Preprocessor preprocessor(pOpts,
-                                     pDiagnosticsEngine,
-                                     languageOptions,
-                                     sourceManager,
-                                     headerSearch,
-                                     compInst);
-    preprocessor.Initialize(*pTargetInfo);
+    clang::HeaderSearch header_search(header_searchOptions,
+                                      source_manager, 
+                                      diagnostics_engine,
+                                      language_options,
+                                      target_infos);
     
-    clang::PCHContainerOperations pchContainer{};
+    clang::CompilerInstance compiler_instance;
     
-    clang::FrontendOptions frontendOptions;
+    std::shared_ptr<clang::PreprocessorOptions> preprocessor_options( new clang::PreprocessorOptions());
+    clang::Preprocessor preprocessor(preprocessor_options,
+                                     diagnostics_engine,
+                                     language_options,
+                                     source_manager,
+                                     header_search,
+                                     compiler_instance);
+    preprocessor.Initialize(*target_infos);
+    
+    clang::PCHContainerOperations pch_container{};
+    
+    clang::FrontendOptions frontend_options;
     
     clang::InitializePreprocessor(preprocessor,
-                                  *pOpts,
-                                  pchContainer.getRawReader(),
-                                  frontendOptions);
+                                  *preprocessor_options,
+                                  pch_container.getRawReader(),
+                                  frontend_options);
     
     clang::ApplyHeaderSearchOptions( preprocessor.getHeaderSearchInfo(),
-                                    compInst.getHeaderSearchOpts(),
+                                    compiler_instance.getHeaderSearchOpts(),
                                     preprocessor.getLangOpts(),
                                     preprocessor.getTargetInfo().getTriple());
     
     
-    llvm::ErrorOr< const clang::FileEntry * > pFile = fileManager.getFile(filename);
-    sourceManager.setMainFileID( sourceManager.createFileID( *pFile, clang::SourceLocation(), clang::SrcMgr::C_User));
+    const clang::TargetInfo &targetInfo = *target_infos;
     
-    const clang::TargetInfo &targetInfo = *pTargetInfo;
+    clang::IdentifierTable identifier_table(language_options);
+    clang::SelectorTable selector_table;
     
-    clang::IdentifierTable identifierTable(languageOptions);
-    clang::SelectorTable selectorTable;
+    clang::Builtin::Context builtin_context;
+    builtin_context.InitializeTarget(targetInfo, nullptr);
     
-    clang::Builtin::Context builtinContext;
-    builtinContext.InitializeTarget(targetInfo, nullptr);
+    //~
+    //plugin source
+    llvm::ErrorOr<const clang::FileEntry *> plugin_source_file_handle = file_manager.getFile(filename);
+    if(!plugin_source_file_handle)
+    {
+        std::cout<<"invalid source file\n";
+        return {false};
+    }
+    auto plugin_source_file_id = source_manager.createFileID(*plugin_source_file_handle, clang::SourceLocation(), clang::SrcMgr::C_User);
+    source_manager.setMainFileID(plugin_source_file_id);
     
-    clang::ASTContext astContext(languageOptions,
-                                 sourceManager,
-                                 identifierTable,
-                                 selectorTable,
-                                 builtinContext,
-                                 clang::TU_Complete);
     
-    astContext.InitBuiltinTypes(*pTargetInfo);
+    //~AST CONTEXT
     
-    Plugin_Handle handle;
+    clang::ASTContext plugin_source_ast_context(language_options,
+                                                source_manager,
+                                                identifier_table,
+                                                selector_table,
+                                                builtin_context,
+                                                clang::TU_Complete);
+    
+    plugin_source_ast_context.InitBuiltinTypes(*target_infos);
+    
+    //~
+    
+    Plugin_Descriptor descriptor;
+    std::unique_ptr<llvm::MemoryBuffer> new_buffer = nullptr;
     
     bool error = false;
     
     auto visit_ast = [&](clang::ASTContext& ast_ctx){
         
         using namespace clang::ast_matchers;
-        
         
         //~ does functions exists ?
         
@@ -354,7 +422,7 @@ extern "C" __declspec(dllexport) Plugin_Handle try_compile(const char* filename)
         if(error)
             return;
         
-        //~ Do they have the right parameters / return types ?
+        //~ audio callback has the right signature
         
         auto audio_callback_has_right_signature_matcher = 
             functionDecl(hasName("audio_callback"), 
@@ -403,65 +471,472 @@ extern "C" __declspec(dllexport) Plugin_Handle try_compile(const char* filename)
         if(error) return;
         
         
-        auto initialize_state_has_right_signature_matcher = 
-            functionDecl(hasName("initialize_state"), 
-                         parameterCountIs(4),
-                         hasBody(compoundStmt()),
-                         
-                         hasParameter(1, varDecl(hasType(hasCanonicalType(allOf(isConstQualified(), isUnsignedInteger()))))),
-                         hasParameter(2, varDecl(hasType(hasCanonicalType(allOf(isConstQualified(), realFloatingPointType())))))
-                         ,
-                         hasParameter(3, varDecl(hasType(hasCanonicalType(functionType())))))
-            .bind("initialize_state");
+        //~
+        // check initializer signature
         
-        bool has_initialize_state_the_right_signature = false;
-        
-        auto initialize_state_has_right_signature_lambda = [&](const auto& result)
-        {
-            if(error) return; 
-            const clang::FunctionDecl* decl = result.Nodes.getNodeAs<clang::FunctionDecl>("initialize_state");
-            if(decl == nullptr) return;
-            if(!decl->isThisDeclarationADefinition()) return;
+        bool initializer_has_the_right_signature = [&](){
             
-            if(has_initialize_state_the_right_signature == false)
+            auto num_params = initialize_state_decl->getNumParams();
+            if(num_params != 4)
             {
-                has_initialize_state_the_right_signature = true;
+                std::cout<<"invalid parameter count\n";
+                return false;
             }
-            else
+            
+            //TODO check que c'est ni const ni volatile
+            const auto& parameters_type = *initialize_state_decl->getParamDecl(0)->getType().getCanonicalType();
+            const auto& num_channels_type = *initialize_state_decl->getParamDecl(1)->getType().getCanonicalType();
+            const auto& sample_rate_type = *initialize_state_decl->getParamDecl(2)->getType().getCanonicalType();
+            const auto& allocator_type = *initialize_state_decl->getParamDecl(3)->getType().getCanonicalType();
+            
+            
+            
+            if(!num_channels_type.isSpecificBuiltinType(clang::BuiltinType::UInt))
             {
-                error = true;
+                std::cout << "second parameter is unsigned int num_channels\n";
+                return false;
             }
-        };
+            
+            //TODO assert que float est 32 bit
+            if(!sample_rate_type.isSpecificBuiltinType(clang::BuiltinType::Float))
+            {
+                std::cout << "third parameter is float sample_rate\n";
+                return false;
+            }
+            
+            auto allocator_has_the_right_signature = [&]() -> bool {
+                if(!allocator_type.isFunctionPointerType()) return false;
+                const auto* pt = llvm::dyn_cast<clang::PointerType>(&allocator_type);
+                const auto* ft = pt->getPointeeType()->getAs<clang::FunctionProtoType>();
+                
+                auto allocator_num_params = ft->getNumParams();
+                if(allocator_num_params != 1) return false;
+                
+                const auto& num_samples_param_type = *ft->getParamType(0);
+                if(!num_samples_param_type.isSpecificBuiltinType(clang::BuiltinType::UInt)) return false;
+                
+                if(!ft->getReturnType()->isVoidPointerType()) return false;
+                
+                return true;
+            }();
+            
+            if(!allocator_has_the_right_signature)
+            {
+                std::cout<<"fourth parameter should be allocator (unsigned int num_samples) -> void\n"; 
+                return false;
+            }
+            return true;
+        }();
         
-        match_node(initialize_state_has_right_signature_matcher,
-                   initialize_state_has_right_signature_lambda,
-                   *initialize_state_decl,
-                   ast_ctx);
-        
-        if(has_initialize_state_the_right_signature == false)
+        if(!initializer_has_the_right_signature)
         {
-            std::cout << "initialize_state doesn't have the right signature\n";
+            error = true;
+            return;
         }
-        if(error) return;
+        
+        if(default_parameters_decl->getNumParams() != 0)
+        {
+            std::cout<<"default_parameters doesn't take any parameters\n";
+            error = true;
+            return;
+        }
+        
+        //~comparer les types
+        
+        const auto& default_parameters_return_type = *default_parameters_decl->getReturnType();
+        const auto& initialize_state_return_type = *initialize_state_decl->getReturnType();
+        
+        //TODO si c'est pas des pointers, alors ça va être pas ouf
+        
+        const auto& initialize_state_parameter_type = *initialize_state_decl->getParamDecl(0)->getType()->getPointeeType();
+        const auto& audio_callback_parameter_type = *audio_callback_decl->getParamDecl(0)->getType()->getPointeeType();
+        const auto& audio_callback_state_type = *audio_callback_decl->getParamDecl(1)->getType()->getPointeeType();
+        
+        if(&default_parameters_return_type != &initialize_state_parameter_type ||
+           &default_parameters_return_type != &audio_callback_parameter_type)
+        {
+            std::cout<<"parameter type don't match\n";
+            error = true;
+            return;
+        }
+        
+        if(&initialize_state_return_type != &audio_callback_state_type)
+        {
+            std::cout << "state types don't match\n";
+            error = true;
+            return;
+        }
+        
+        const auto& state_type = initialize_state_return_type;
+        const auto& parameters_type = default_parameters_return_type;
+        
+        if(!state_type.isRecordType() || !parameters_type.isRecordType())
+        {
+            std::cout<< "must be records\n"; 
+            error = true;
+            return;
+        }
+        
+        const auto* state_struct_decl = state_type.getAsCXXRecordDecl();
+        const auto* parameters_struct_decl = parameters_type.getAsCXXRecordDecl();
+        
+        parse_plugin_descriptor(parameters_struct_decl, state_struct_decl, descriptor); 
+        
+        //~ rewrite the source file
+        
+        auto audio_callback_source_range = audio_callback_decl->getSourceRange();
+        auto default_parameters_source_range = default_parameters_decl->getSourceRange();
+        auto initialize_state_source_range = initialize_state_decl->getSourceRange();
+        
+        auto parameters_struct_name = parameters_struct_decl->getNameAsString();
+        auto state_struct_name = state_struct_decl->getNameAsString();
+        
+        std::string audio_callback_wrapper_declaration = ""
+            "\nextern \"C\" void audio_callback_wrapper(void* param_ptr, void* state_ptr,float** out_buffer, unsigned int num_channels, unsigned int num_samples, float sample_rate);\n"
+            "\n";
+        
+        std::string audio_callback_wrapper_definition = "\n"
+            "void audio_callback_wrapper(void* param_ptr, void* state_ptr,float** out_buffer, unsigned int num_channels, unsigned int num_samples, float sample_rate)\n"
+            "{\n"
+            + parameters_struct_name  +"* param  = (" + parameters_struct_name + "*)param_ptr;\n"
+            + state_struct_name  +"* state  = (" + state_struct_name + "*)state_ptr;\n"
+            "audio_callback(*param, *state, out_buffer, num_channels, num_samples, sample_rate);\n"
+            "}\n";
+        
+        std::string default_parameters_wrapper_declaration = "\nextern \"C\" void default_parameters_wrapper(void* out_parameters);\n"
+            "";
+        
+        std::string default_parameters_wrapper_definition = "\n"
+            "void default_parameters_wrapper(void* out_parameters_ptr)\n"
+            "{\n"
+            + parameters_struct_name + "* out_parameters = (" + parameters_struct_name + "*)void_out_parameters_ptr;\n"
+            "*out_initial_parameters = default_parameters();\n"
+            "}\n";
+        
+        std::string initialize_state_wrapper_declaration = "\nextern \"C\" void initialize_state_wrapper(void* parameters, void* out_initial_state);\n"
+            "";
+        
+        std::string initialize_state_wrapper_definition = "\n"
+            "void initialize_state_wrapper(void* parameters_ptr, void* out_initial_state_ptr)\n"
+            "{\n"
+            + parameters_struct_name + "* parameters = (" + parameters_struct_name + "*)parameters_ptr;\n"
+            
+            + state_struct_name + "* out_initial_state = (" + state_struct_name + "*)out_initial_state_ptr;\n"
+            "*out_initial_state = initialize_state(*parameters);\n"
+            "}\n";
         
         
+        clang::Rewriter rewriter{source_manager, language_options};
         
-        return; 
+        
+        rewriter.InsertTextBefore(audio_callback_source_range.getBegin(), audio_callback_wrapper_declaration);
+        rewriter.InsertTextAfter(audio_callback_source_range.getEnd().getLocWithOffset(1), audio_callback_wrapper_definition);
+        
+        
+        rewriter.InsertTextBefore(default_parameters_source_range.getBegin(), default_parameters_wrapper_declaration);
+        rewriter.InsertTextAfter(default_parameters_source_range.getEnd().getLocWithOffset(1), default_parameters_wrapper_definition);
+        
+        rewriter.InsertTextBefore(initialize_state_source_range.getBegin(), initialize_state_wrapper_declaration);
+        rewriter.InsertTextAfter(initialize_state_source_range.getEnd().getLocWithOffset(1),  initialize_state_wrapper_definition);
+        
+        auto start_loc = source_manager.getLocForStartOfFile(plugin_source_file_id);
+        auto end_loc = source_manager.getLocForEndOfFile(plugin_source_file_id);
+        auto range = clang::SourceRange(start_loc, end_loc);
+        
+        auto new_text = rewriter.getRewrittenText(range);
+        new_buffer = llvm::MemoryBuffer::getMemBuffer(new_text);
+        
+        std::cout<< "\n\n\n";
+        std::cout<< new_text;
     };
+    
     
     auto astConsumer = make_consumer(visit_ast);
     
     clang::Sema sema(preprocessor,
-                     astContext,
+                     plugin_source_ast_context,
                      astConsumer);
     
-    pTextDiagnosticPrinter->BeginSourceFile(languageOptions, &preprocessor);
+    text_diagnostics_printer->BeginSourceFile(language_options, &preprocessor);
     clang::ParseAST(sema); 
-    pTextDiagnosticPrinter->EndSourceFile();
+    text_diagnostics_printer->EndSourceFile();
+    
+    //TODO necessary ?
+    //plugin_source_ast_context.cleanup();
+    
+    if(error == true)
+    {
+        std::cout<<"error while parsing file\n";
+        return {false};
+    }
+    
+    //~ JIT compilation
+    
+    source_manager.overrideFileContents(*plugin_source_file_handle, std::move(new_buffer));
+    
+    const auto& compiler_invocation = compiler_instance.getInvocation();
+    auto& compiler_frontend_ops = compiler_invocation.getFrontendOpts();
+    //assert(compiler_frontend_ops == frontend_options); 
+    
+    
+    auto llvm = std::make_unique<llvm::LLVMContext>();
+    auto compile_action = std::make_unique<clang::EmitLLVMOnlyAction>(llvm.get());
+    
+    if (compiler_instance.ExecuteAction(*compile_action)) 
+    {
+        printf("tried compiling\n");
+        if(compiler_instance.getDiagnostics().getNumErrors() == 0)
+        {
+            std::cout << "compilation worked\n";
+            
+            
+            std::unique_ptr<llvm::Module> module = compile_action->takeModule();
+            
+            if(module)
+            {
+                printf("module loaded\n");
+                
+                Clang_Context* clang_ctx = (Clang_Context*) clang_ctx_ptr;
+                
+                //Optimizations
+                clang_ctx->module_pass_manager.run(*module, clang_ctx->module_analysis_manager);
+                
+                //create JIT
+                llvm::EngineBuilder builder(std::move(module));
+                builder.setMCJITMemoryManager(std::make_unique<llvm::SectionMemoryManager>());
+                builder.setOptLevel(llvm::CodeGenOpt::Level::Aggressive);
+                
+                llvm::ExecutionEngine *engine = builder.create();
+                
+                
+                if (engine) 
+                {
+                    engine->finalizeObject();
+                    
+                    auto audio_callback_f = (audio_callback_t)engine->getFunctionAddress("audio_callback_wrapper");
+                    auto default_parameters_f = (default_parameters_t)engine->getFunctionAddress("default_parameters_wrapper");
+                    auto initialize_state_f = (initialize_state_t)engine->getFunctionAddress("initialize_state_wrapper");
+                    
+                    
+                    assert(audio_callback_f && default_parameters_f && initialize_state_f);
+                    return Plugin_Handle{
+                        true, 
+                        (void*)engine, 
+                        audio_callback_f, 
+                        default_parameters_f, 
+                        initialize_state_f,
+                        descriptor
+                    };
+                    
+                }
+                
+            }
+            
+        }
+    }
+    
+    
+    
+    Plugin_Handle handle;
     
     return {false};
 }
 
+
+bool parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
+                             const clang::CXXRecordDecl* state_struct_decl,
+                             Plugin_Descriptor& plugin_descriptor)
+{
+    if(parameters_struct_decl->isPolymorphic() || 
+       state_struct_decl->isPolymorphic())
+    {
+        std::cout<<"Cannot be polymorphic\n";
+        return false;
+    }
+    
+    const clang::ASTRecordLayout& parameters_struct_layout  = parameters_struct_decl->getASTContext().getASTRecordLayout(parameters_struct_decl);
+    
+    auto parameters_struct_size = parameters_struct_layout.getSize();
+    auto parameters_struct_alignment = parameters_struct_layout.getAlignment();
+    
+    
+    const clang::ASTRecordLayout& state_struct_layout  = state_struct_decl->getASTContext().getASTRecordLayout(state_struct_decl);
+    
+    auto state_struct_size = state_struct_layout.getSize();
+    auto state_struct_alignment = state_struct_layout.getAlignment();
+    
+    
+    
+    //plugin_descriptor.name = allocate_and_copy_llvm_stringref(plugin_descriptor_declaration->getName());
+    plugin_descriptor.parameters_struct.size = parameters_struct_size.getQuantity();
+    plugin_descriptor.parameters_struct.alignment = parameters_struct_alignment.getQuantity();
+    
+    plugin_descriptor.state_struct.size = state_struct_size.getQuantity();
+    plugin_descriptor.state_struct.alignment = state_struct_alignment.getQuantity();
+    
+    
+    u32 num_fields = 0;
+    
+    for(const auto* _ : parameters_struct_decl->fields())
+    {
+        num_fields++;
+    }
+    
+    auto *valid_parameters = (Plugin_Descriptor_Parameter*)malloc(sizeof(Plugin_Descriptor_Parameter) * num_fields);
+    
+    u32 valid_parameter_idx = 0;
+    for(const auto* field : parameters_struct_decl->fields())
+    {
+        const auto& type = *field->getType();
+        
+        if (field->hasAttr<clang::AnnotateAttr>()) {
+            clang::AnnotateAttr* attr = field->getAttr<clang::AnnotateAttr>();
+            
+            std::string space_delimiter = " ";
+            std::string text = attr->getAnnotation().str() ;
+            std::vector<std::string> param_strings{};
+            
+            std::istringstream iss(text);
+            
+            std::string token;
+            
+            while(std::getline(iss, token, ' ')) {
+                param_strings.push_back(token);
+            }
+            
+            Plugin_Descriptor_Parameter plugin_parameter = {};
+            plugin_parameter.name = allocate_and_copy_llvm_stringref(field->getName());
+            
+            auto index = field->getFieldIndex();
+            plugin_parameter.offset = parameters_struct_layout.getFieldOffset(index) / 8;
+            
+            if (param_strings[0] == "Int") {
+                const auto *maybe_int = llvm::dyn_cast<clang::BuiltinType>(&type);
+                if(maybe_int == nullptr || maybe_int->getKind() != clang::BuiltinType::Int)
+                {
+                    
+                    std::cout<<"Error : not an Int type\n";
+                    return false;
+                }
+                
+                if(param_strings.size() != 3) 
+                {
+                    std::cout<<"two parameters required : min and max\n";
+                    return false;
+                }
+                
+                char* end_ptr = nullptr;
+                i32 min = strtol(param_strings[1].c_str() , &end_ptr, 0);
+                if(end_ptr == nullptr)
+                {
+                    std::cout<<"invalid min value\n";
+                    return false;
+                }
+                i32 max = strtol(param_strings[2].c_str(), &end_ptr, 0);
+                if(end_ptr == nullptr)
+                {
+                    std::cout<<"invalid max value\n";
+                    return false;
+                }
+                if(min >= max)
+                {
+                    std::cout<<"min must be greater than max\n";
+                    return false;
+                }
+                
+                plugin_parameter.int_param.min = min;
+                plugin_parameter.int_param.max = max; //TODO conversion;
+                plugin_parameter.type = Int;
+            }
+            else if (param_strings[0] == "Float") 
+            {
+                
+                const auto *maybe_float = llvm::dyn_cast<clang::BuiltinType>(&type);
+                if(maybe_float == nullptr || maybe_float->getKind() != clang::BuiltinType::Float)
+                {
+                    
+                    std::cout<<"Error : not a Float type\n";
+                    return false;
+                }
+                
+                if(param_strings.size() != 3) 
+                {
+                    std::cout<<"two parameters required : min and max\n";
+                    return false;
+                }
+                
+                char* end_ptr = nullptr;
+                real32 min = strtof(param_strings[1].c_str(), &end_ptr);
+                if(end_ptr == nullptr)
+                {
+                    std::cout<<"invalid min value\n";
+                    return false;
+                }
+                real32 max = strtof(param_strings[2].c_str(), &end_ptr);
+                if(end_ptr == nullptr)
+                {
+                    std::cout<<"invalid max value\n";
+                    return false;
+                }
+                if(min >= max)
+                {
+                    std::cout<<"min must be greater than max\n";
+                    return false;
+                }
+                
+                plugin_parameter.float_param.min = min;
+                plugin_parameter.float_param.max = max; //TODO conversion;
+                plugin_parameter.type = Float;}
+            else if (param_strings[0] == "Enum") 
+            {
+                const auto *maybe_enum = llvm::dyn_cast<clang::EnumType>(&type);
+                if(maybe_enum == nullptr)
+                {
+                    
+                    std::cout<<"Error : not an Enum type\n";
+                    return false;
+                }
+                
+                Parameter_Enum enum_param = {};
+                
+                auto *enum_decl = maybe_enum->getDecl();
+                //TODO assert que le getIntegerType soit un int normal
+                for(auto _: maybe_enum->getDecl()->enumerators())
+                    enum_param.num_entries++;
+                
+                enum_param.entries = new Parameter_Enum_Entry[enum_param.num_entries];
+                
+                auto i = 0;
+                for(const auto *field : maybe_enum->getDecl()->enumerators())
+                {
+                    enum_param.entries[i].name = allocate_and_copy_llvm_stringref(field->getName());
+                    enum_param.entries[i].value = field->getInitVal().getExtValue(); //TODO conversion
+                    i++;
+                }
+                
+                plugin_parameter.type = Enum;
+                plugin_parameter.enum_param = enum_param;
+            }
+            else {
+                
+                std::cout<<"Invalid type annotation, should be Int, Float or Enum\n";
+                return false;
+            }
+            
+            std::cout<<"\n";
+            print_parameter(plugin_parameter);
+            std::cout<<"\n";
+            
+            valid_parameters[valid_parameter_idx++] = plugin_parameter;
+        }
+    }
+    
+    valid_parameters = (Plugin_Descriptor_Parameter*) realloc(valid_parameters, sizeof(Plugin_Descriptor_Parameter) * valid_parameter_idx);
+    
+    plugin_descriptor.num_parameters = valid_parameter_idx;
+    plugin_descriptor.parameters = valid_parameters;
+    return true;
+}
 
 
 

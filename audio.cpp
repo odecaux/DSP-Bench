@@ -55,7 +55,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
     
     if(plugin_is_valid)
     {
-        ctx->callback(ctx->plugin_state_holder, output_buffer, parameters.num_channels, parameters.num_samples);
+        ctx->audio_callback_f(ctx->plugin_parameters_holder, ctx->plugin_state_holder, output_buffer, parameters.num_channels, parameters.num_samples, parameters.sample_rate);
     }
     
     *read_cursor += samples_to_write;

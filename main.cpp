@@ -1,5 +1,4 @@
 
-
 #include "stdio.h"
 #include <iostream>
 #include "assert.h"
@@ -38,8 +37,6 @@ i32 main(i32 argc, char** argv)
     
     
     audio_initialize(&platform_audio_context, &audio_parameters, &audio_context);
-    
-    
     
     
     auto wav_data = windows_load_wav(audio_filename);
@@ -114,7 +111,11 @@ i32 main(i32 argc, char** argv)
         return -1;
     }
     
-    auto handle = try_compile_f(argv[2]);
+    typedef void*(*create_clang_context_t)();
+    
+    void* clang_ctx = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context")();
+    
+    auto handle = try_compile_f(argv[2], clang_ctx);
     
     
     if(handle.worked)
@@ -128,8 +129,16 @@ i32 main(i32 argc, char** argv)
         Plugin_Parameter_Value *parameter_values_ui_side = (Plugin_Parameter_Value*) 
             malloc(sizeof(Plugin_Parameter_Value) * handle.descriptor.num_parameters);
         
-        char* plugin_state_holder = (char*)malloc(handle.descriptor.size);
-        handle.initializer(plugin_state_holder);
+        char* plugin_parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
+        char* plugin_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
+        
+        handle.default_parameters_f(plugin_parameters_holder);
+        handle.initialize_state_f(plugin_parameters_holder, 
+                                  plugin_state_holder, 
+                                  audio_parameters.num_channels,
+                                  audio_parameters.sample_rate, 
+                                  &malloc_allocator
+                                  );
         
         for(auto param_idx = 0; param_idx < handle.descriptor.num_parameters; param_idx++)
         {
@@ -157,7 +166,7 @@ i32 main(i32 argc, char** argv)
         Plugin_Parameters_Ring_Buffer ring = plugin_parameters_ring_buffer_initialize(handle.descriptor.num_parameters,4096);
         
         audio_context.ring = &ring;
-        audio_context.callback = handle.audio_callback;
+        audio_context.audio_callback_f = handle.audio_callback_f;
         audio_context.plugin_state_holder = plugin_state_holder;
         audio_context.parameter_values_audio_side = parameter_values_audio_side;
         audio_context.descriptor = &handle.descriptor;

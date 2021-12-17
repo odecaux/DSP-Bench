@@ -4,5 +4,6 @@
 #define COMILER_H
 
 //#include "base.h"
+//void* create_clang_context();
 
 #endif //COMILER_H

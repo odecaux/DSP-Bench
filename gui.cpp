@@ -299,7 +299,7 @@ void frame(Plugin_Descriptor& descriptor,
         Vec2{total_width, title_height}
     };
     win32_draw_rectangle(title_bounds, Color_Front, graphics_ctx);
-    win32_draw_text(descriptor.name, title_bounds, Color_Front, graphics_ctx);
+    //win32_draw_text(descriptor.name, title_bounds, Color_Front, graphics_ctx);
     
     Vec2 position = {0.0f, title_height};
     
