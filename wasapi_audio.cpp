@@ -102,7 +102,7 @@ DWORD audio_thread_fn(LPVOID Context)
         //~
         // update parameters
         
-        
+        //TODO mettre un memcopy ici ??? comme ça on a peut faire des trucs comme log sans que ça interfère avec le machin bidule
         if(audio_context->plugin_is_valid){
             Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_buffer_pull(*ring);
             if(maybe_new_parameter_values)
@@ -123,14 +123,17 @@ DWORD audio_thread_fn(LPVOID Context)
                     switch(param_descriptor.type){
                         case Int :
                         {
+                            printf("%d\n", parameter_values_audio_side[param_idx].int_value);
                             *(int*)(plugin_state_holder + offset) = parameter_values_audio_side[param_idx].int_value;
                         }break;
                         case Float : 
                         {
+                            printf("%f\n", parameter_values_audio_side[param_idx].float_value);
                             *(float*)(plugin_state_holder + offset) = parameter_values_audio_side[param_idx].float_value;
                         }break;
                         case Enum : 
                         {
+                            printf("%d\n", parameter_values_audio_side[param_idx].enum_value);
                             *(int*)(plugin_state_holder + offset) = parameter_values_audio_side[param_idx].enum_value;
                         }break;
                     }

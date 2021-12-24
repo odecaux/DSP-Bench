@@ -2,14 +2,171 @@
 #include "assert.h"
 #include "stdio.h"
 
+#include "../compiler.h"
+
 #include "../base.h"
 #include "../descriptor.h"
+
 
 enum TEST_ENUM{
     A = 0,
     B = 1,
     C = 256
 };
+
+bool test_init_compiler()
+{
+    auto* clang_ctx = create_clang_context_impl();
+    
+    delete clang_ctx;
+    printf("compiler creation passed\n");
+    
+    return true;
+}
+
+
+bool test_compiler_works()
+{
+    bool worked = false;
+    auto* clang_ctx = create_clang_context_impl();
+    
+    
+    char source[] = 
+        "int main() { return 0; }"
+        ;
+    
+    auto buffer = llvm::MemoryBuffer::getMemBuffer(source);
+    
+    auto new_file = clang::FrontendInputFile{
+        buffer->getMemBufferRef(), 
+        clang::InputKind{clang::Language::CXX}
+    };
+    
+    auto& compiler_instance = clang_ctx->compiler_instance;
+    
+    compiler_instance.getFrontendOpts().Inputs.clear();
+    compiler_instance.getFrontendOpts().Inputs.push_back(new_file);
+    
+    llvm::LLVMContext llvm_context;
+    auto compile_action = std::make_unique<clang::EmitLLVMOnlyAction>(&llvm_context);
+    
+    if (compiler_instance.ExecuteAction(*compile_action)) 
+    {
+        printf("tried compiling\n");
+        if(compiler_instance.getDiagnostics().getNumErrors() == 0)
+        {
+            std::cout << "compilation worked\n";
+            worked = true;
+        }
+    }
+    
+    delete clang_ctx;
+    return worked;
+}
+
+bool test_compile_file()
+{
+    bool worked = false;
+    auto* clang_ctx = create_clang_context_impl();
+    
+    
+    
+    auto new_file = clang::FrontendInputFile{
+        "../test/no_op.cpp", 
+        clang::InputKind{clang::Language::CXX}
+    };
+    
+    auto& compiler_instance = clang_ctx->compiler_instance;
+    
+    compiler_instance.getFrontendOpts().Inputs.clear();
+    compiler_instance.getFrontendOpts().Inputs.push_back(new_file);
+    
+    llvm::LLVMContext llvm_context;
+    auto compile_action = std::make_unique<clang::EmitLLVMOnlyAction>(&llvm_context);
+    
+    if (compiler_instance.ExecuteAction(*compile_action)) 
+    {
+        printf("tried compiling\n");
+        if(compiler_instance.getDiagnostics().getNumErrors() == 0)
+        {
+            std::cout << "compilation worked\n";
+            worked = true;
+        }
+    }
+    
+    delete clang_ctx;
+    return worked;
+}
+
+
+bool test_parse_parameters()
+{
+    bool worked = false;
+    auto* clang_ctx = create_clang_context_impl();
+    
+    
+    auto new_file = clang::FrontendInputFile{
+        "../test/plugin_with_parameters.cpp", 
+        clang::InputKind{clang::Language::CXX}
+    };
+    
+    auto& compiler_instance = clang_ctx->compiler_instance;
+    
+    compiler_instance.getFrontendOpts().Inputs.clear();
+    compiler_instance.getFrontendOpts().Inputs.push_back(new_file);
+    
+    Plugin_Descriptor descriptor;
+    
+    auto visit_ast = [&](clang::ASTContext& ast_ctx){
+        auto decls = find_decls(ast_ctx);
+        if(!decls.worked)
+        {
+            return;
+        }
+        
+        if(!parse_plugin_descriptor(decls.parameters_struct, decls.state_struct, descriptor))
+        {
+            return;
+        }
+        
+        if(descriptor.num_parameters != 3)
+            return;
+        
+        auto& first_param = descriptor.parameters[0];
+        auto& first_param_int = first_param.int_param;
+        
+        auto& second_param = descriptor.parameters[1];
+        auto& second_param_float = second_param.float_param;
+        
+        auto& third_param = descriptor.parameters[2];
+        auto& third_param_enum = third_param.enum_param;
+        
+        if( /*compare name*/ 
+           first_param.type != Int ||
+           first_param_int.min != 0 ||
+           first_param_int.max != 4 ||
+           
+           second_param.type != Float ||
+           second_param_float.min != 0.0f ||
+           second_param_float.max != 1.0f ||
+           
+           third_param.type != Enum ||
+           third_param_enum.num_entries != 4)
+            
+        {
+            return;
+        }
+        
+        worked = true;
+    };
+    
+    auto action = make_action(visit_ast);
+    compiler_instance.ExecuteAction(action);
+    
+    
+    delete clang_ctx;
+    return worked;
+}
 
 void test_normalization()
 {
@@ -131,6 +288,12 @@ int main()
     Plugin_Descriptor descriptor;
     descriptor.num_parameters = 1;
     
+    
+    //test_reuse_compiler()
+    assert(test_init_compiler());
+    assert(test_compiler_works());
+    assert(test_compile_file());
+    assert(test_parse_parameters());
     test_normalization();
     test_ring_buffer_single_threaded_single_value();
     test_ring_buffer_single_threaded_multiple_values();

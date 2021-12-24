@@ -36,7 +36,7 @@ commands = {
         .win = "build_gui.bat", 
     },
     
-    .build_tests = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
+    .build_and_run_tests = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
         .win = "test\\build_tests.bat", 
     },
     
@@ -46,14 +46,9 @@ commands = {
         .mac = "build/clang_test.exe", 
     },
     
-    
-    .run_tests = { .out = "*run*", .footer_panel = false, .save_dirty_files = false,
-        .win = "build\\tests.exe",
-    },
-    
     .debug = { 
         .save_dirty_files = false,
-        .win = "remedybg.exe build\\clang_test.exe loop16.wav test.cpp",
+        .win = "remedybg.exe build\\session.rdbg",
     },
 };
 
@@ -63,6 +58,5 @@ fkey_command = {
     .F3 = "debug",
     .F4 = "build_compiler",
     .F5 = "build_gui",
-    .F6 = "build_tests",
-    .F7 = "run_tests"
+    .F6 = "build_and_run_tests",
 };

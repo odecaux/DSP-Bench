@@ -6,7 +6,6 @@
 #include "base.h"
 
 #include "windows.h"
-#include "compiler.h"
 
 #include "wav_reader.h"
 #include "audio.h"
@@ -36,7 +35,8 @@ i32 main(i32 argc, char** argv)
     audio_context.file_is_valid = 0;
     
     
-    audio_initialize(&platform_audio_context, &audio_parameters, &audio_context);
+    if(!audio_initialize(&platform_audio_context, &audio_parameters, &audio_context))
+        return -1;
     
     
     auto wav_data = windows_load_wav(audio_filename);
@@ -97,6 +97,14 @@ i32 main(i32 argc, char** argv)
     //~
     //compiler stuff
     
+    
+    HMODULE gui_dll = LoadLibraryA("gui.dll");
+    if(gui_dll == NULL)
+    {
+        printf("couldn't find gui.dll\n");
+        return -1;
+    }
+    
     HMODULE compiler_dll = LoadLibraryA("compiler.dll");
     if(compiler_dll == NULL)
     {
@@ -147,18 +155,18 @@ i32 main(i32 argc, char** argv)
             switch(param_descriptor.type){
                 case Int :
                 {
-                    parameter_values_ui_side[param_idx].int_value = *(int*)(plugin_state_holder + offset);
-                    parameter_values_audio_side[param_idx].int_value = *(int*)(plugin_state_holder + offset);
+                    parameter_values_ui_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
+                    parameter_values_audio_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
                 }break;
                 case Float : 
                 {
-                    parameter_values_ui_side[param_idx].float_value = *(float*)(plugin_state_holder + offset);
-                    parameter_values_audio_side[param_idx].float_value = *(float*)(plugin_state_holder + offset);
+                    parameter_values_ui_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
+                    parameter_values_audio_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
                 }break;
                 case Enum : 
                 {
-                    parameter_values_ui_side[param_idx].enum_value = *(int*)(plugin_state_holder + offset);
-                    parameter_values_audio_side[param_idx].enum_value = *(int*)(plugin_state_holder + offset);
+                    parameter_values_ui_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
+                    parameter_values_audio_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
                     
                 }break;
             }
@@ -175,12 +183,6 @@ i32 main(i32 argc, char** argv)
         
         
         
-        HMODULE gui_dll = LoadLibraryA("gui.dll");
-        if(gui_dll == NULL)
-        {
-            printf("couldn't find gui.dll\n");
-            return -1;
-        }
         
         typedef void(*initialize_gui_t)(Plugin_Descriptor, 
                                         Plugin_Parameter_Value*,

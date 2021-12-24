@@ -36,7 +36,7 @@ State initialize_state(const Parameters& param,
                        const float sample_rate,
                        allocator_t allocator)
 {
-    State initial_state = {param.gain};
+    State initial_state = {param.gain * 0.5f};
     return initial_state;
 }
 
@@ -50,7 +50,7 @@ void audio_callback(const Parameters& param,
                     const u32  num_samples,
                     const real32 sample_rate)
 {
-    float real_gain = data.gain * data.gain;
+    float real_gain = param.gain * param.gain;
     for(int channel = 0; channel < num_channels; channel++)
     {
         for(int sample = 0; sample < num_samples; sample++)

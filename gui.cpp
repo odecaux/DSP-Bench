@@ -431,6 +431,8 @@ void frame(Plugin_Descriptor& descriptor,
         plugin_parameters_buffer_push(*ring, current_parameter_values);
     }
     
+    
+    
 }
 
 
