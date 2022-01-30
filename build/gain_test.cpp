@@ -1,7 +1,6 @@
 #include "plugin_header.h"
 
 
-
 enum random_enum{
     A, B, C, D
 };

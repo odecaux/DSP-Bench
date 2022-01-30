@@ -1,16 +1,14 @@
-#include "stdlib.h"
+//#include "stdlib.h"
 #include "assert.h"
 #include "stdio.h"
 #include "math.h"
 
-#include "initguid.h"
 #include "windows.h"
-#include "windowsx.h"
-#include "d2d1.h"
-#define  DIRECTINPUT_VERSION 0x0800
-#include "Dinput.h"
-#include "Dwrite.h"
+#include <GL/GL.h>
 
+
+#define STB_TRUETYPE_IMPLEMENTATION 
+#include "stb_truetype.h"
 
 #include "base.h"
 #include "structs.h"
@@ -65,12 +63,6 @@ typedef struct{
 
 
 typedef struct {
-    ID2D1Factory* factory;
-    ID2D1HwndRenderTarget* render_target;
-    IDWriteFactory* write_factory;
-    IDWriteTextFormat* text_format;
-    ID2D1SolidColorBrush* black_brush;
-    ID2D1SolidColorBrush* white_brush;
 } GraphicsContext;
 
 static real32 total_width = 200.0f;
@@ -127,59 +119,38 @@ i64 win32_pace_60_fps(i64 last_time, LARGE_INTEGER counter_frequency, real32* de
 }
 
 
-D2D1_POINT_2F to_d2d_point(Vec2 point)
-{
-    return {point.x, point.y};
-}
-D2D1_RECT_F to_d2d_rect(Rect rect)
-{
-    return D2D1::RectF(rect.origin.x, rect.origin.y, rect.origin.x + rect.dim.x, rect.origin.y + rect.dim.y);
-}
-
-ID2D1SolidColorBrush* win32_color_to_brush(Color color, GraphicsContext& graphics_ctx)
-{
-    ID2D1SolidColorBrush* brush;
-    switch(color)
-    {
-        case Color_Front:
-        {
-            brush = graphics_ctx.white_brush;
-        }break;
-        case Color_Back:
-        {
-            brush = graphics_ctx.black_brush;
-        }break;
-    }
-    return brush;
-}
 
 void win32_draw_rectangle(Rect bounds, Color color, GraphicsContext& graphics_ctx)
 {
-    auto d2d_bounds  = to_d2d_rect(bounds);
+    /* auto d2d_bounds  = to_d2d_rect(bounds);
     auto brush = win32_color_to_brush(color, graphics_ctx);
     graphics_ctx.render_target->DrawRectangle(&d2d_bounds, brush);
+
+*/
 }
 void win32_fill_rectangle(Rect bounds, Color color, GraphicsContext& graphics_ctx)
 {
-    auto d2d_bounds  = to_d2d_rect(bounds);
+    /*auto d2d_bounds  = to_d2d_rect(bounds);
     auto brush = win32_color_to_brush(color, graphics_ctx);
     graphics_ctx.render_target->FillRectangle(&d2d_bounds, brush);
+*/
 }
 
 void win32_draw_text(const String& text, Rect bounds, Color color, GraphicsContext& graphics_ctx)
 {
-    auto brush = win32_color_to_brush(color, graphics_ctx);
+    /*auto brush = win32_color_to_brush(color, graphics_ctx);
     // TODO(octave): verifier que y a pas de bug ici
     WCHAR dest[512] = {0};
     MultiByteToWideChar(CP_UTF8, 0,text.str, (i32)text.size,dest,511);
     graphics_ctx.render_target->DrawText(dest, text.size,  graphics_ctx.text_format,to_d2d_rect(bounds), brush); 
-    
+    */
 }
 
 void win32_draw_line(Vec2 start, Vec2 end, Color color, real32 width, GraphicsContext& graphics_ctx)
 {
-    auto brush = win32_color_to_brush(color, graphics_ctx);
+    /*auto brush = win32_color_to_brush(color, graphics_ctx);
     graphics_ctx.render_target->DrawLine({start.x, start.y}, {end.x, end.y}, brush, width);
+    */
 }
 
 void draw_slider(Rect slider_bounds, 
@@ -192,6 +163,7 @@ void draw_slider(Rect slider_bounds,
         Vec2{5.0f, slider_bounds.dim.y}
     };
     win32_fill_rectangle(slider_rect, Color_Front, graphics_ctx);
+    
 }
 
 
@@ -277,12 +249,11 @@ IO io_state_advance(const IO old_io)
     return new_io;
 }
 
+// TODO(octave): rename, what does this function actually do ? it's not really buffers
 void render_IR(real32** IR_buffer, u32 channel_count, u32 IR_length, real32* min_buffer, real32* max_buffer, u32 pixel_count)
 {
     memset(min_buffer, 0, pixel_count * sizeof(real32));
     memset(max_buffer, 0, pixel_count * sizeof(real32));
-    
-    
     
     for(u32 channel = 0; channel < channel_count; channel++)
     {
@@ -296,8 +267,6 @@ void render_IR(real32** IR_buffer, u32 channel_count, u32 IR_length, real32* min
                 min_buffer[pixel_idx] = value;
         }
     }
-    
-    
 }
 
 void win32_draw_IR(Rect bounds,
@@ -365,9 +334,6 @@ void frame(Plugin_Descriptor& descriptor,
            Plugin_Parameter_Value* current_parameter_values,
            bool& parameters_were_tweaked)
 {
-    
-    
-    
     
     if(frame_io.mouse_released)
     {
@@ -574,12 +540,14 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
         
         if(message == WM_SIZE)
         {
+            /*
             if(graphics_ctx->render_target != nullptr)
             {
                 UINT width = LOWORD(l_param);
                 UINT height = HIWORD(l_param);
                 graphics_ctx->render_target->Resize(D2D1::SizeU(width, height));
             }
+            */
         }
         else if (message == WM_SIZE)
         {
@@ -598,13 +566,51 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
     return result;
 }
 
-
+internal void load_fonts(const char* font_filename)
+{
+    
+    HANDLE handle = CreateFileA(
+                                font_filename,
+                                GENERIC_READ,
+                                0,
+                                0,
+                                OPEN_EXISTING,
+                                FILE_ATTRIBUTE_NORMAL ,
+                                0);
+    
+    
+    if(handle == INVALID_HANDLE_VALUE)
+    {
+        printf("error opening font\n");
+        exit(1);
+    }
+    
+    LARGE_INTEGER file_size_quad;
+    BOOL result = GetFileSizeEx(handle, &file_size_quad);
+    u64 file_size = file_size_quad.QuadPart;
+    
+    char* font_file_buffer = (char*) malloc(file_size);
+    
+    auto success = ReadFile(handle, font_file_buffer, file_size, 0, 0);
+    if(success == FALSE)
+    {
+        printf("error reading font file\n");
+        exit(1);
+    }
+    
+    
+    CloseHandle(handle);
+    free(font_file_buffer);
+    
+}
 
 extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
                                                       Audio_Parameters& audio_parameters,
                                                       Plugin_Parameter_Value *current_value,
                                                       Plugin_Parameters_Ring_Buffer* ring)
 {
+    
+    //~ IR initialization
     Plugin_Descriptor& descriptor = handle.descriptor;
     
     const u32 IR_length = 44100;
@@ -621,27 +627,18 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
     
     render_IR(IR_buffer, audio_parameters.num_channels, 44100, IR_min_buffer, IR_max_buffer, 480);
     
+    //~ Win32 initialization
     HINSTANCE instance = GetModuleHandle(0);
     
     CoInitializeEx(NULL, COINIT_MULTITHREADED); 
-    
-    //d2d loading
-    GraphicsContext graphics_ctx = {};
-    {
-        auto success  = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,
-                                          __uuidof(graphics_ctx.factory),
-                                          (void**)&graphics_ctx.factory);
-        assert(graphics_ctx.factory != nullptr && SUCCEEDED(success));
-    }
     
     
     LARGE_INTEGER counter_frequency;
     QueryPerformanceFrequency(&counter_frequency);
     
-    
     WNDCLASSEX main_class{
         .cbSize        = sizeof main_class,
-        .style         = CS_HREDRAW | CS_VREDRAW,
+        .style         = CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
         .lpfnWndProc   = WindowProc,
         .hInstance     = instance,
         .hCursor       = LoadCursor(NULL, IDC_ARROW),
@@ -651,14 +648,65 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
     
     HWND window = CreateWindow("Main Class", "Test", 
                                WS_OVERLAPPEDWINDOW,
-                               CW_USEDEFAULT, CW_USEDEFAULT, 
-                               600+ total_width, 400,
+                               CW_USEDEFAULT, 
+                               CW_USEDEFAULT, 
+                               600 + total_width, 
+                               400,
                                0,0,
                                instance, 
                                &graphics_ctx);
+    
+    
+    //~ Init OpenGL
+    GraphicsContext graphics_ctx = {};
+    
+    HDC window_dc = GetDC(window);
+    HGLRC opengl_rc = wglCreateContext(window_dc);
+    
+    
+    PIXELFORMATDESCRIPTOR pixel_format =
+    {
+        sizeof(PIXELFORMATDESCRIPTOR),
+        1,
+        PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
+        PFD_TYPE_RGBA,        
+        32,                   
+        0, 0, 0, 0, 0, 0,
+        0,
+        0,
+        0,
+        0, 0, 0, 0,
+        24,                   
+        8,                   
+        0,
+        PFD_MAIN_PLANE,
+        0,
+        0, 0, 0
+    };
+    
+    int pixel_format_idx = ChoosePixelFormat(window_dc, &pixel_format);
+    if(pixel_format_idx == 0)
+    {
+        printf("couldn't find a valid pixel format\n");
+        exit(1);
+    }
+    
+    SetPixelFormat(window_dc, pixel_format_idx, &pixel_format);
+    
+    if(wglMakeCurrent(window_dc, opengl_rc) == FALSE)
+    {
+        printf("couldn't open opengl context\n");
+        exit(1);
+    }
+    
+    ReleaseDC(window, window_dc);
+    
+    
     ShowWindow(window, 1);
     UpdateWindow(window);
     
+    
+    //~ IO initialization
     IO frame_io
     {
         .frame_count = 0,
@@ -691,6 +739,8 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
     MSG message;
     
     i64 last_time = win32_init_timer();
+    
+    //~ Main Loop
     while(done == FALSE)
     {
         
@@ -745,83 +795,11 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
             DispatchMessage(&message);
         }
         
-        
-        //~
-        //acquire render resources
-        if(graphics_ctx.render_target == nullptr)
-        {
-            log("recreate target\n");
-            RECT rc;
-            GetClientRect(window, &rc);
-            const D2D1_SIZE_U size = D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top);
-            auto success = graphics_ctx.factory->CreateHwndRenderTarget(D2D1::RenderTargetProperties(),
-                                                                        D2D1::HwndRenderTargetProperties(window, size, D2D1_PRESENT_OPTIONS_IMMEDIATELY),
-                                                                        &graphics_ctx.render_target);
-            assert(SUCCEEDED(success));
-            
-            assert(graphics_ctx.render_target != nullptr);
-        }
-        if(graphics_ctx.write_factory == nullptr)
-        {
-            // Create a DirectWrite factory.
-            auto hr = DWriteCreateFactory(
-                                          DWRITE_FACTORY_TYPE_SHARED,
-                                          __uuidof(graphics_ctx.write_factory),
-                                          reinterpret_cast<IUnknown **>(&graphics_ctx.write_factory)
-                                          );
-            assert(SUCCEEDED(hr));
-            assert(graphics_ctx.write_factory != nullptr);
-        }
-        if(graphics_ctx.text_format == nullptr)
-        {
-            
-            static const WCHAR msc_fontName[] = L"Jetbrains Mono";
-            static const FLOAT msc_fontSize = 14;
-            // Create a DirectWrite text format object.
-            auto hr = graphics_ctx.write_factory->CreateTextFormat(
-                                                                   msc_fontName,
-                                                                   NULL,
-                                                                   DWRITE_FONT_WEIGHT_NORMAL,
-                                                                   DWRITE_FONT_STYLE_NORMAL,
-                                                                   DWRITE_FONT_STRETCH_NORMAL,
-                                                                   msc_fontSize,
-                                                                   L"", //locale
-                                                                   &graphics_ctx.text_format
-                                                                   );
-            
-            assert(SUCCEEDED(hr));
-            assert(graphics_ctx.text_format!= nullptr);
-            // Center the text horizontally and vertically.
-            graphics_ctx.text_format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            graphics_ctx.text_format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-            
-        }
-        
-        if(graphics_ctx.white_brush == nullptr)
-        {
-            auto success = graphics_ctx.render_target->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::White),&graphics_ctx.white_brush);
-            assert(SUCCEEDED(success));
-        }
-        if(graphics_ctx.black_brush == nullptr)
-        {
-            auto success = graphics_ctx.render_target->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Black),&graphics_ctx.black_brush);
-            assert(SUCCEEDED(success));
-        }
-        /*
-        real32 temp = fmod(frame_io.time * 0.8f, 1000.0f) / 500.0f;
-        if(temp > 1.0f) temp = 2.0F - temp;
-        
-        graphics_ctx.white_brush->SetColor(D2D1::ColorF(0.54f, 0.91f, 1.0f, temp)); 
-        */
         //~
         //frame
         
         frame_io = io_state_advance(frame_io);
         frame_io.mouse_position = win32_get_mouse_position(window);
-        graphics_ctx.render_target->BeginDraw();
-        graphics_ctx.render_target->SetTransform(D2D1::Matrix3x2F::Identity());
-        graphics_ctx.render_target->Clear(D2D1::ColorF(D2D1::ColorF::Black));
-        
         
         bool parameters_were_tweaked = false;
         
@@ -834,32 +812,17 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
             render_IR(IR_buffer, audio_parameters.num_channels, 44100, IR_min_buffer, IR_max_buffer, 480);
         }
         
+        glViewport(0,0, 600 + total_width, 400);
+        glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        SwapBuffers(window_dc);
+        
         ValidateRect(window, NULL);
-        
-        //~
-        //release render resource if needed
-        auto result = graphics_ctx.render_target->EndDraw();
-        if(result == D2DERR_RECREATE_TARGET)
-        {
-            log("recreate graphics\n");
-            graphics_ctx.render_target->Release();
-            graphics_ctx.render_target = nullptr;
-            
-            graphics_ctx.write_factory->Release();
-            graphics_ctx.write_factory = nullptr;
-            
-            graphics_ctx.text_format->Release();
-            graphics_ctx.text_format = nullptr;
-            
-            graphics_ctx.white_brush->Release();
-            graphics_ctx.white_brush = nullptr;
-            
-            graphics_ctx.black_brush->Release();
-            graphics_ctx.black_brush = nullptr;
-        }
-        
         last_time = win32_pace_60_fps(last_time, counter_frequency, &frame_io.delta_time);
         
     }
+    
+    wglMakeCurrent (NULL, NULL) ; 
+    wglDeleteContext (opengl_rc);
     
 }

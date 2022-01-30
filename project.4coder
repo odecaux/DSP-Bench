@@ -41,7 +41,7 @@ commands = {
     },
     
     .run = { .out = "*run*", .footer_panel = false, .save_dirty_files = false,
-        .win = "build\\clang_test.exe build\\mix2.wav build\\test.cpp",
+        .win = "run.bat",
         .linux = "build/clang_test.exe",
         .mac = "build/clang_test.exe", 
     },

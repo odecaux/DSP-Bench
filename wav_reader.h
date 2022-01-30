@@ -107,30 +107,9 @@ internal WavData windows_load_wav(const char* filename)
                                 FILE_ATTRIBUTE_NORMAL ,
                                 0);
     
-    /*
-    if(file_handle == HFILE_ERROR || opened_info.nErrCode != 0)
-    {
-        switch(opened_info.nErrCode)
-        {
-            case 2: {
-                printf("file not found\n");
-                exit(0);
-            }break;
-            case 5: {
-                printf("access denied\n");
-                exit(0);
-            }break;
-            default: {
-                printf("couldn't open file error code : %d\n", opened_info.nErrCode);
-                exit(0);
-            }break;
-        }
-    }
-    */
-    
     if(handle == INVALID_HANDLE_VALUE)
     {
-        printf("error opening\n");
+        printf("error opening wav file\n");
         exit(1);
     }
     

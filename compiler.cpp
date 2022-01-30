@@ -158,7 +158,7 @@ Clang_Context* create_clang_context_impl()
     clang_ctx->compiler_instance.getLangOpts() = language_options;
     
     auto& header_opts = clang_ctx->compiler_instance.getHeaderSearchOpts();
-    header_opts.Verbose = true;
+    //header_opts.Verbose = true;
     header_opts.AddPath(".", clang::frontend::Quoted , false, false);
     
     return clang_ctx;
