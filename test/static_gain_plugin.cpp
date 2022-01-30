@@ -1,23 +1,7 @@
 
-#define INT_ARAM(min_value, max_value) __attribute__(( annotate( "Int " #min_value " " #max_value ) )) int
-
-#define FLOAT_ARAM(min_value, max_value) __attribute__(( annotate( "Float " #min_value " " #max_value ) )) float
-
-#define ENUM_ARAM(enum_name)  __attribute__(( annotate( "Enum" ) )) enum_name
-
-
-enum random_enum{
-    A, B, C, D
-};
-
-// TODO(octave): courbe exponentielle, power factor
-
 typedef void*(*allocator_t)(unsigned int);
 
 struct Parameters{
-    INT_ARAM(0, 4) ish;
-    FLOAT_ARAM(0.0f, 1.0f) gain;
-    ENUM_ARAM(random_enum) truc;
 };
 
 struct State {
@@ -28,7 +12,7 @@ typedef void*(*allocator_t)(unsigned int);
 
 
 Parameters default_parameters() { 
-    Parameters ish = {0, 0.9f, A}; 
+    Parameters ish = {}; 
     return ish; 
 }
 State initialize_state(Parameters& param, 
@@ -47,4 +31,11 @@ void audio_callback(const Parameters& param,
                     const unsigned int num_samples,
                     const float sample_rate)
 {
+    for(auto channel = 0; channel < num_channels; channel++)
+    {
+        for(auto sample = 0; sample < num_samples; sample++)
+        {
+            out_buffer[channel][sample] *= state.gain;
+        }
+    }
 }

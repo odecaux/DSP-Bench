@@ -9,6 +9,49 @@ extern "C" __declspec(dllexport) void* create_clang_context()
     return (void*) create_clang_context_impl();
 }
 
+
+
+double oct_sin_64(double d1) { return sin(d1); }
+double oct_cos_64(double d1) { return cos(d1); }
+double oct_tan_64(double d1) { return tan(d1); }
+double oct_fabs_64(double d1) { return fabs(d1); }
+double oct_pow_64(double d1, double d2) { return pow(d1, d2); }
+double oct_fmod_64(double d1, double d2) { return fmod(d1, d2); }
+double oct_ceil_64(double d1) { return ceil(d1); }
+double oct_floor_64(double d1) { return floor(d1); }
+double oct_sqrt_64(double d1) { return sqrt(d1); }
+double oct_exp_64(double d1) { return exp(d1); }
+double oct_log10_64(double d1) { return log10(d1); }
+double oct_log_64(double d1) { return log(d1); }
+double oct_asin_64(double d1) { return asin(d1); }
+double oct_acos_64(double d1) { return acos(d1); }
+double oct_atan_64(double d1) { return atan(d1); }
+double oct_atan2_64(double d1, double d2) { return atan2(d1, d2); }
+double oct_sinh_64(double d1) { return sinh(d1); }
+double oct_cosh_64(double d1) { return cosh(d1); }
+double oct_tanh_64(double d1) { return tanh(d1); }
+
+
+float oct_sin_32(float d1) { return sin(d1); }
+float oct_cos_32(float d1) { return cos(d1); }
+float oct_tan_32(float d1) { return tan(d1); }
+float oct_fabs_32(float d1) { return fabs(d1); }
+float oct_pow_32(float d1, float d2) { return pow(d1, d2); }
+float oct_fmod_32(float d1, float d2) { return fmod(d1, d2); }
+float oct_ceil_32(float d1) { return ceil(d1); }
+float oct_floor_32(float d1) { return floor(d1); }
+float oct_sqrt_32(float d1) { return sqrt(d1); }
+float oct_exp_32(float d1) { return exp(d1); }
+float oct_log10_32(float d1) { return log10(d1); }
+float oct_log_32(float d1) { return log(d1); }
+float oct_asin_32(float d1) { return asin(d1); }
+float oct_acos_32(float d1) { return acos(d1); }
+float oct_atan_32(float d1) { return atan(d1); }
+float oct_atan2_32(float d1, float d2) { return atan2(d1, d2); }
+float oct_sinh_32(float d1) { return sinh(d1); }
+float oct_cosh_32(float d1) { return cosh(d1); }
+float oct_tanh_32(float d1) { return tanh(d1); }
+
 Clang_Context* create_clang_context_impl()
 {
     
@@ -44,10 +87,49 @@ Clang_Context* create_clang_context_impl()
     llvm::initializeInstrumentation(Registry);
     llvm::initializeTarget(Registry);
     
+    
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
     
+    llvm::sys::DynamicLibrary::AddSymbol("sin_32", oct_sin_32);
+    llvm::sys::DynamicLibrary::AddSymbol("cos_32", oct_cos_32);
+    llvm::sys::DynamicLibrary::AddSymbol("tan_32", oct_tan_32);
+    llvm::sys::DynamicLibrary::AddSymbol("fabs_32", oct_fabs_32);
+    llvm::sys::DynamicLibrary::AddSymbol("pow_32", oct_pow_32);
+    llvm::sys::DynamicLibrary::AddSymbol("fmod_32", oct_fmod_32);
+    llvm::sys::DynamicLibrary::AddSymbol("ceil_32", oct_ceil_32);
+    llvm::sys::DynamicLibrary::AddSymbol("floor_32", oct_floor_32);
+    llvm::sys::DynamicLibrary::AddSymbol("sqrt_32", oct_sqrt_32);
+    llvm::sys::DynamicLibrary::AddSymbol("exp_32", oct_exp_32);
+    llvm::sys::DynamicLibrary::AddSymbol("log10_32", oct_log10_32);
+    llvm::sys::DynamicLibrary::AddSymbol("log_32", oct_log_32);
+    llvm::sys::DynamicLibrary::AddSymbol("asin_32", oct_asin_32);
+    llvm::sys::DynamicLibrary::AddSymbol("acos_32", oct_acos_32);
+    llvm::sys::DynamicLibrary::AddSymbol("atan_32", oct_atan_32);
+    llvm::sys::DynamicLibrary::AddSymbol("atan2_32", oct_atan2_32);
+    llvm::sys::DynamicLibrary::AddSymbol("sinh_32", oct_sinh_32);
+    llvm::sys::DynamicLibrary::AddSymbol("cosh_32", oct_cosh_32);
+    llvm::sys::DynamicLibrary::AddSymbol("tanh_32", oct_tanh_32);
     
     
+    llvm::sys::DynamicLibrary::AddSymbol("sin_64", oct_sin_64);
+    llvm::sys::DynamicLibrary::AddSymbol("cos_64", oct_cos_64);
+    llvm::sys::DynamicLibrary::AddSymbol("tan_64", oct_tan_64);
+    llvm::sys::DynamicLibrary::AddSymbol("fabs_64", oct_fabs_64);
+    llvm::sys::DynamicLibrary::AddSymbol("pow_64", oct_pow_64);
+    llvm::sys::DynamicLibrary::AddSymbol("fmod_64", oct_fmod_64);
+    llvm::sys::DynamicLibrary::AddSymbol("ceil_64", oct_ceil_64);
+    llvm::sys::DynamicLibrary::AddSymbol("floor_64", oct_floor_64);
+    llvm::sys::DynamicLibrary::AddSymbol("sqrt_64", oct_sqrt_64);
+    llvm::sys::DynamicLibrary::AddSymbol("exp_64", oct_exp_64);
+    llvm::sys::DynamicLibrary::AddSymbol("log10_64", oct_log10_64);
+    llvm::sys::DynamicLibrary::AddSymbol("log_64", oct_log_64);
+    llvm::sys::DynamicLibrary::AddSymbol("asin_64", oct_asin_64);
+    llvm::sys::DynamicLibrary::AddSymbol("acos_64", oct_acos_64);
+    llvm::sys::DynamicLibrary::AddSymbol("atan_64", oct_atan_64);
+    llvm::sys::DynamicLibrary::AddSymbol("atan2_64", oct_atan2_64);
+    llvm::sys::DynamicLibrary::AddSymbol("sinh_64", oct_sinh_64);
+    llvm::sys::DynamicLibrary::AddSymbol("cosh_64", oct_cosh_64);
+    llvm::sys::DynamicLibrary::AddSymbol("tanh_64", oct_tanh_64);
     
     clang::LangOptions language_options;
     language_options.Bool = 1;
@@ -68,23 +150,28 @@ Clang_Context* create_clang_context_impl()
     auto triple_str = "-triple=" + triple;
     
     clang::CompilerInvocation::CreateFromArgs(clang_ctx->compiler_instance.getInvocation(),
-                                              {triple_str.c_str(),"-O3", "-fcxx-exceptions", "-fms-extensions"}, 
+                                              {triple_str.c_str(),"-Ofast", "-fcxx-exceptions", "-fms-extensions", "-ffast-math", "-fdenormal-fp-math=positive-zero"}, 
                                               clang_ctx->compiler_instance.getDiagnostics());
     
     
     clang_ctx->compiler_instance.getTargetOpts().Triple = triple;
     clang_ctx->compiler_instance.getLangOpts() = language_options;
     
+    auto& header_opts = clang_ctx->compiler_instance.getHeaderSearchOpts();
+    header_opts.Verbose = true;
+    header_opts.AddPath(".", clang::frontend::Quoted , false, false);
+    
     return clang_ctx;
 }
 
 
-
 extern "C" __declspec(dllexport) Plugin_Handle try_compile(const char* filename, void* clang_ctx_ptr)
 {
-    Clang_Context* clang_ctx = (Clang_Context*) clang_ctx_ptr;
-    
-    
+    return try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr);
+}
+
+Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx)
+{
     auto& compiler_instance = clang_ctx->compiler_instance;
     
     compiler_instance.getFrontendOpts().Inputs.clear();
@@ -131,7 +218,12 @@ extern "C" __declspec(dllexport) Plugin_Handle try_compile(const char* filename,
         
     }
     
-    return jit_compile(new_buffer->getMemBufferRef(), compiler_instance, descriptor);
+    return jit_compile(new_buffer->getMemBufferRef(), 
+                       compiler_instance, 
+                       descriptor,
+                       clang_ctx->module_pass_manager,
+                       clang_ctx->module_analysis_manager
+                       );
 }
 
 
@@ -695,7 +787,9 @@ bool parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl,
 
 
 Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
-                          Plugin_Descriptor& descriptor)
+                          Plugin_Descriptor& descriptor,
+                          llvm::ModulePassManager& module_pass_manager,
+                          llvm::ModuleAnalysisManager& module_analysis_manager)
 {
     
     auto new_file = clang::FrontendInputFile{
@@ -712,21 +806,15 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
     
     if (compiler_instance.ExecuteAction(*compile_action)) 
     {
-        printf("tried compiling\n");
         if(compiler_instance.getDiagnostics().getNumErrors() == 0)
         {
-            std::cout << "compilation worked\n";
-            
-            
             std::unique_ptr<llvm::Module> module = compile_action->takeModule();
             
             if(module)
             {
-                printf("module loaded\n");
-                
                 
                 //Optimizations
-                //clang_ctx->module_pass_manager.run(*module, clang_ctx->module_analysis_manager);
+                //module_pass_manager.run(*module, module_analysis_manager);
                 
                 //create JIT
                 llvm::EngineBuilder builder(std::move(module));

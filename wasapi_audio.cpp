@@ -98,6 +98,7 @@ DWORD audio_thread_fn(LPVOID Context)
         Plugin_Parameter_Value* parameter_values_audio_side = audio_context->parameter_values_audio_side;
         Plugin_Descriptor* descriptor = audio_context->descriptor;
         char* plugin_state_holder = audio_context->plugin_state_holder;
+        char* plugin_parameters_holder = audio_context->plugin_parameters_holder;
         
         //~
         // update parameters
@@ -115,29 +116,7 @@ DWORD audio_thread_fn(LPVOID Context)
                 MemoryBarrier();
                 assert(ring->num_fields_by_plugin == descriptor->num_parameters);
                 
-                for(auto param_idx = 0; param_idx < ring->num_fields_by_plugin; param_idx++)
-                {
-                    auto& param_descriptor = descriptor->parameters[param_idx];
-                    auto offset = param_descriptor.offset;
-                    
-                    switch(param_descriptor.type){
-                        case Int :
-                        {
-                            printf("%d\n", parameter_values_audio_side[param_idx].int_value);
-                            *(int*)(plugin_state_holder + offset) = parameter_values_audio_side[param_idx].int_value;
-                        }break;
-                        case Float : 
-                        {
-                            printf("%f\n", parameter_values_audio_side[param_idx].float_value);
-                            *(float*)(plugin_state_holder + offset) = parameter_values_audio_side[param_idx].float_value;
-                        }break;
-                        case Enum : 
-                        {
-                            printf("%d\n", parameter_values_audio_side[param_idx].enum_value);
-                            *(int*)(plugin_state_holder + offset) = parameter_values_audio_side[param_idx].enum_value;
-                        }break;
-                    }
-                }
+                update_parameters_holder(descriptor, parameter_values_audio_side, plugin_parameters_holder);
             }
         }
         
@@ -463,6 +442,7 @@ bool audio_initialize(void **out_ctx,
     param.num_samples = user_buffer_num_samples;
     ctx->param = param;
     ctx->audio_context = audio_context;
+    *out_parameters = param;
     
     //~ Thread
     ctx->audio_thread = CreateThread(0,0, audio_thread_fn, (void*)ctx, 0, 0);

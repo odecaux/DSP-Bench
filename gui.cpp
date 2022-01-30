@@ -277,13 +277,93 @@ IO io_state_advance(const IO old_io)
     return new_io;
 }
 
+void render_IR(real32** IR_buffer, u32 channel_count, u32 IR_length, real32* min_buffer, real32* max_buffer, u32 pixel_count)
+{
+    memset(min_buffer, 0, pixel_count * sizeof(real32));
+    memset(max_buffer, 0, pixel_count * sizeof(real32));
+    
+    
+    
+    for(u32 channel = 0; channel < channel_count; channel++)
+    {
+        for(u32 sample = 0; sample < IR_length; sample++)
+        {
+            u32 pixel_idx = sample * pixel_count / IR_length;
+            real32 value = IR_buffer[channel][sample];
+            if(value > max_buffer[pixel_idx])
+                max_buffer[pixel_idx] = value;
+            if(value < min_buffer[pixel_idx])
+                min_buffer[pixel_idx] = value;
+        }
+    }
+    
+    
+}
+
+void win32_draw_IR(Rect bounds,
+                   real32* IR_min_buffer,
+                   real32* IR_max_buffer,
+                   u32 IR_pixel_count,
+                   GraphicsContext& graphics_ctx)
+{
+    real32 middle_y = bounds.origin.y  + bounds.dim.y / 2.0f;
+    real32 half_h = bounds.dim.y / 2.0f;
+    
+    for(u32 i = 0; i < IR_pixel_count; i++)
+    {
+        Vec2 start = {bounds.origin.x + i, middle_y};
+        Vec2 end_max = {bounds.origin.x + i, middle_y - IR_max_buffer[i] * half_h};
+        Vec2 end_min = {bounds.origin.x + i, middle_y - IR_min_buffer[i] * half_h};
+        win32_draw_line(start, end_max, Color_Front, 1.0f, graphics_ctx);
+        win32_draw_line(start, end_min, Color_Front, 1.0f, graphics_ctx);
+    }
+}
+
+void compute_IR(Plugin_Handle& handle, 
+                real32** IR_buffer, 
+                u32 IR_length, 
+                Audio_Parameters& audio_parameters,
+                Plugin_Parameter_Value* current_parameters_values)
+{
+    for(u32 channel = 0; channel < audio_parameters.num_channels; channel++){
+        IR_buffer[channel][0] = 1.0f;
+        for(u32 sample = 1; sample < IR_length; sample++)
+        {
+            IR_buffer[channel][sample] = 0.0f;
+        }
+    }
+    
+    char* IR_parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
+    char* IR_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
+    
+    update_parameters_holder(&handle.descriptor, current_parameters_values, IR_parameters_holder);
+    
+    handle.initialize_state_f(IR_parameters_holder, 
+                              IR_state_holder, 
+                              audio_parameters.num_channels, 
+                              audio_parameters.sample_rate, 
+                              &malloc_allocator);
+    
+    handle.audio_callback_f(IR_parameters_holder, 
+                            IR_state_holder, 
+                            IR_buffer, 
+                            audio_parameters.num_channels, 
+                            IR_length, 
+                            audio_parameters.sample_rate);
+    
+    delete IR_parameters_holder;
+    delete IR_state_holder;
+}
 
 void frame(Plugin_Descriptor& descriptor, 
            GraphicsContext& graphics_ctx, 
            UI_State& ui_state, 
            IO frame_io, 
-           Plugin_Parameters_Ring_Buffer* ring,
-           Plugin_Parameter_Value* current_parameter_values)
+           real32* IR_min_buffer,
+           real32* IR_max_buffer,
+           u32 IR_pixel_count,
+           Plugin_Parameter_Value* current_parameter_values,
+           bool& parameters_were_tweaked)
 {
     
     
@@ -299,11 +379,10 @@ void frame(Plugin_Descriptor& descriptor,
         Vec2{total_width, title_height}
     };
     win32_draw_rectangle(title_bounds, Color_Front, graphics_ctx);
-    //win32_draw_text(descriptor.name, title_bounds, Color_Front, graphics_ctx);
+    win32_draw_text(StringLit("gain.cpp"), title_bounds, Color_Front, graphics_ctx);
     
     Vec2 position = {0.0f, title_height};
     
-    bool should_update = false;
     
     for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters; parameter_idx++)
     {
@@ -343,13 +422,14 @@ void frame(Plugin_Descriptor& descriptor,
         win32_draw_rectangle(slider_bounds, Color_Front, graphics_ctx);
         win32_draw_rectangle(max_label_bounds, Color_Front, graphics_ctx);
         
-        bool should_update_parameter = false;
         real32 new_normalized_value;
         
         if(frame_io.mouse_clicked && rect_contains(slider_bounds, frame_io.mouse_position))
         {
             ui_state.selected_parameter_idx = parameter_idx;
         }
+        
+        bool should_update_this_parameter = false;
         
         if(ui_state.selected_parameter_idx == parameter_idx 
            && frame_io.mouse_down 
@@ -364,8 +444,8 @@ void frame(Plugin_Descriptor& descriptor,
                 normalized_mouse_value = 1.0f;
             
             new_normalized_value = normalized_mouse_value;
-            should_update_parameter = true;
-            should_update = true;
+            parameters_were_tweaked = true;
+            should_update_this_parameter = true;
         }
         
         
@@ -379,7 +459,7 @@ void frame(Plugin_Descriptor& descriptor,
                 real32 current_normalized_value = normalize_parameter_int_value(parameter_descriptor.int_param, current_value);
                 draw_slider(slider_bounds, current_normalized_value, graphics_ctx);
                 
-                if(should_update_parameter)
+                if(should_update_this_parameter)
                 {
                     auto new_int_value = denormalize_int_value(parameter_descriptor.int_param, new_normalized_value);
                     current_parameter_value.int_value = new_int_value;
@@ -387,15 +467,11 @@ void frame(Plugin_Descriptor& descriptor,
             }break;
             case Float : 
             {
-                if(should_update_parameter)
-                {
-                    auto x = 1;
-                }
                 float current_value = current_parameter_value.float_value;
                 real32 current_normalized_value = normalize_parameter_float_value(parameter_descriptor.float_param, current_value);
                 draw_slider(slider_bounds, current_normalized_value, graphics_ctx);
                 
-                if(should_update_parameter)
+                if(should_update_this_parameter)
                 {
                     auto new_float_value = denormalize_float_value(parameter_descriptor.float_param, new_normalized_value);
                     current_parameter_value.float_value = new_float_value;
@@ -410,15 +486,11 @@ void frame(Plugin_Descriptor& descriptor,
                 
                 win32_draw_text(value.name, slider_bounds, Color_Front, graphics_ctx);
                 
-                if(should_update_parameter)
+                if(should_update_this_parameter)
                 {
-                    
-                    
                     auto new_index = denormalize_enum_index(parameter_descriptor.enum_param, new_normalized_value);
                     auto new_value = enum_index_to_value(parameter_descriptor.enum_param, new_index);
                     current_parameter_value.enum_value = new_value;
-                    
-                    
                 }
             }break;
         }
@@ -426,13 +498,52 @@ void frame(Plugin_Descriptor& descriptor,
         position.y += field_height;
     }
     
-    if(should_update)
+    
+    
+    //~ 
+    //IR
     {
-        plugin_parameters_buffer_push(*ring, current_parameter_values);
+        Rect IR_title_bounds = {
+            {total_width + 10.0f, 5.0f},
+            {200.0f, 10.0f}
+        };
+        
+        
+        win32_draw_text(StringLit("Impulse Response"), IR_title_bounds, Color_Front, graphics_ctx); 
+        
+        Rect IR_outer_bounds{
+            {total_width, 10.0f},
+            {500.0f, 150.0f}
+        };
+        auto IR_inner_bounds = rect_remove_padding(IR_outer_bounds, 10.0f, 10.0f);
+        win32_draw_rectangle(IR_inner_bounds, Color_Front, graphics_ctx);
+        win32_draw_IR(IR_inner_bounds, IR_min_buffer, IR_max_buffer, IR_pixel_count, graphics_ctx);
+        
+        
     }
     
     
+    //~ 
     
+    {
+        
+        Rect IR_title_bounds = {
+            {total_width + 10.0f, 160.0f},
+            {200.0f, 10.0f}
+        };
+        
+        
+        win32_draw_text(StringLit("Frequency Response"), IR_title_bounds, Color_Front, graphics_ctx); 
+        
+        Rect IR_outer_bounds{
+            {total_width, 170.0f},
+            {500.0f, 150.0f}
+        };
+        auto IR_inner_bounds = rect_remove_padding(IR_outer_bounds, 10.0f, 10.0f);
+        win32_draw_rectangle(IR_inner_bounds, Color_Front, graphics_ctx);
+        
+        
+    }
 }
 
 
@@ -489,10 +600,27 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 
 
 
-extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Descriptor descriptor, 
+extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
+                                                      Audio_Parameters& audio_parameters,
                                                       Plugin_Parameter_Value *current_value,
                                                       Plugin_Parameters_Ring_Buffer* ring)
 {
+    Plugin_Descriptor& descriptor = handle.descriptor;
+    
+    const u32 IR_length = 44100;
+    real32** IR_buffer = (real32**)malloc(sizeof(real32*) * audio_parameters.num_channels);
+    for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
+    {
+        IR_buffer[channel] = (real32*)malloc(sizeof(real32) * IR_length);
+    }
+    
+    compute_IR(handle, IR_buffer, IR_length, audio_parameters, current_value);
+    
+    real32* IR_max_buffer = (real32*)malloc(sizeof(real32) * 480);
+    real32* IR_min_buffer = (real32*)malloc(sizeof(real32) * 480);
+    
+    render_IR(IR_buffer, audio_parameters.num_channels, 44100, IR_min_buffer, IR_max_buffer, 480);
+    
     HINSTANCE instance = GetModuleHandle(0);
     
     CoInitializeEx(NULL, COINIT_MULTITHREADED); 
@@ -524,7 +652,7 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Descriptor descript
     HWND window = CreateWindow("Main Class", "Test", 
                                WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, CW_USEDEFAULT, 
-                               1000,600,
+                               600+ total_width, 400,
                                0,0,
                                instance, 
                                &graphics_ctx);
@@ -695,7 +823,16 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Descriptor descript
         graphics_ctx.render_target->Clear(D2D1::ColorF(D2D1::ColorF::Black));
         
         
-        frame(descriptor, graphics_ctx, ui_state, frame_io, ring, current_value);
+        bool parameters_were_tweaked = false;
+        
+        frame(descriptor, graphics_ctx, ui_state, frame_io, IR_min_buffer, IR_max_buffer, 480, current_value, parameters_were_tweaked);
+        
+        if(parameters_were_tweaked)
+        {
+            plugin_parameters_buffer_push(*ring, current_value);
+            compute_IR(handle, IR_buffer, IR_length, audio_parameters, current_value);
+            render_IR(IR_buffer, audio_parameters.num_channels, 44100, IR_min_buffer, IR_max_buffer, 480);
+        }
         
         ValidateRect(window, NULL);
         

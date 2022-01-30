@@ -176,15 +176,15 @@ i32 main(i32 argc, char** argv)
         audio_context.ring = &ring;
         audio_context.audio_callback_f = handle.audio_callback_f;
         audio_context.plugin_state_holder = plugin_state_holder;
+        audio_context.plugin_parameters_holder = plugin_parameters_holder;
         audio_context.parameter_values_audio_side = parameter_values_audio_side;
         audio_context.descriptor = &handle.descriptor;
         InterlockedExchange8(&audio_context.plugin_is_valid, 1);
         
         
         
-        
-        
-        typedef void(*initialize_gui_t)(Plugin_Descriptor, 
+        typedef void(*initialize_gui_t)(Plugin_Handle&,
+                                        Audio_Parameters&,
                                         Plugin_Parameter_Value*,
                                         Plugin_Parameters_Ring_Buffer*);
         
@@ -195,7 +195,7 @@ i32 main(i32 argc, char** argv)
             return -1;
         }
         
-        initialize_gui_f(handle.descriptor, parameter_values_ui_side, &ring);
+        initialize_gui_f(handle, audio_parameters, parameter_values_ui_side, &ring);
         
     }
     else

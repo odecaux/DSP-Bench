@@ -10,12 +10,11 @@ State initialize_state(Parameters& param,
                        const float sample_rate,
                        allocator_t allocator) { return State(); }
 
-
 void audio_callback(const Parameters& param,
                     State& state,
                     float** out_buffer, 
-                    unsigned int num_channels, 
-                    unsigned int num_samples,
-                    float sample_rate)
+                    const unsigned int num_channels, 
+                    const unsigned int num_samples,
+                    const float sample_rate)
 {
 }

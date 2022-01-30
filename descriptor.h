@@ -89,6 +89,34 @@ void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_P
 Plugin_Parameter_Value* plugin_parameters_buffer_pull(Plugin_Parameters_Ring_Buffer& ring);
 
 
+internal void update_parameters_holder(Plugin_Descriptor* descriptor, 
+                                       Plugin_Parameter_Value* new_values,
+                                       char* plugin_parameters_holder)
+{
+    for(auto param_idx = 0; param_idx < descriptor->num_parameters ; param_idx++)
+    {
+        auto& param_descriptor = descriptor->parameters[param_idx];
+        auto offset = param_descriptor.offset;
+        
+        switch(param_descriptor.type){
+            case Int :
+            {
+                //printf("%d\n", parameter_values_audio_side[param_idx].int_value);
+                *(int*)(plugin_parameters_holder + offset) = new_values[param_idx].int_value;
+            }break;
+            case Float : 
+            {
+                //printf("%f\n", new_values[param_idx].float_value);
+                *(float*)(plugin_parameters_holder + offset) = new_values[param_idx].float_value;
+            }break;
+            case Enum : 
+            {
+                //printf("%d\n", new_values[param_idx].enum_value);
+                *(int*)(plugin_parameters_holder + offset) = new_values[param_idx].enum_value;
+            }break;
+        }
+    }
+}
 
 
 internal float normalize_parameter_int_value(Parameter_Int param, int value)

@@ -168,6 +168,139 @@ bool test_parse_parameters()
     return worked;
 }
 
+bool test_initialization()
+{
+    bool worked = false;
+    auto* clang_ctx = create_clang_context_impl();
+    
+    auto handle = try_compile_impl("../test/plugin_with_parameters.cpp", clang_ctx);
+    
+    if(handle.worked)
+    {
+        char* plugin_parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
+        char* plugin_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
+        
+        handle.default_parameters_f(plugin_parameters_holder);
+        handle.initialize_state_f(plugin_parameters_holder, 
+                                  plugin_state_holder, 
+                                  1,
+                                  44100.0f, 
+                                  &malloc_allocator
+                                  );
+        
+        int ish = *(int*)(plugin_parameters_holder);
+        float gain = *(float*)(plugin_parameters_holder + 4);
+        int truc_value = *(int*)(plugin_parameters_holder + 8) ;
+        float state_gain = *(float*)(plugin_state_holder);
+        
+        if(ish == 0 &&
+           float_cmp(gain , 0.9f, 0.001f) &&
+           truc_value == 0 &&
+           float_cmp(state_gain , 0.1f, 0.001f))
+        {
+            worked = true;
+        }
+        
+        delete plugin_state_holder;
+        delete plugin_parameters_holder;
+    }
+    
+    delete clang_ctx;
+    return worked;
+}
+
+
+bool test_no_op_callback()
+{
+    bool worked = false;
+    auto* clang_ctx = create_clang_context_impl();
+    
+    auto handle = try_compile_impl("../test/no_op.cpp", clang_ctx);
+    
+    if(handle.worked)
+    {
+        float* buffer = (float*) malloc(sizeof(float) * 512);
+        
+        for(auto i = 0; i < 512; i++)
+        {
+            buffer[i] = (float) i;
+        }
+        
+        bool all_samples_stayed_the_same = true;
+        
+        handle.audio_callback_f(nullptr, nullptr, &buffer, 1, 512, 44100.0f);
+        
+        for(auto i = 0; i < 512; i++)
+        {
+            if(buffer[i] != (float) i)
+            {
+                all_samples_stayed_the_same = false;
+                break;
+            }
+            
+            if(all_samples_stayed_the_same)
+                worked = true;
+            delete buffer;
+        }
+        
+    }
+    
+    delete clang_ctx;
+    return worked;
+}
+
+
+bool test_static_gain_callback()
+{
+    bool worked = false;
+    auto* clang_ctx = create_clang_context_impl();
+    
+    auto handle = try_compile_impl("../test/static_gain_plugin.cpp", clang_ctx);
+    
+    if(handle.worked)
+    {
+        
+        char* plugin_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
+        
+        handle.initialize_state_f(nullptr, 
+                                  plugin_state_holder, 
+                                  1,
+                                  44100.0f, 
+                                  &malloc_allocator
+                                  );
+        
+        float* buffer = (float*) malloc(sizeof(float) * 512);
+        
+        for(auto i = 0; i < 512; i++)
+        {
+            buffer[i] = (float) i;
+        }
+        
+        bool all_samples_stayed_the_same = true;
+        
+        handle.audio_callback_f(nullptr, plugin_state_holder, &buffer, 1, 512, 44100.0f);
+        
+        for(auto i = 0; i < 512; i++)
+        {
+            if(!float_cmp((float) i * 0.1f, buffer[i], 0.001f))
+            {
+                all_samples_stayed_the_same = false;
+                break;
+            }
+        }
+        
+        if(all_samples_stayed_the_same)
+            worked = true;
+        delete buffer;
+        delete plugin_state_holder;
+        
+        
+    }
+    
+    delete clang_ctx;
+    return worked;
+}
+
 void test_normalization()
 {
     
@@ -284,18 +417,19 @@ void test_ring_buffer_single_threaded_multiple_values(){
 }
 int main()
 {
-    //Plugin_Descriptor_Parameter parameters[2];
-    Plugin_Descriptor descriptor;
-    descriptor.num_parameters = 1;
-    
     
     //test_reuse_compiler()
     assert(test_init_compiler());
     assert(test_compiler_works());
     assert(test_compile_file());
     assert(test_parse_parameters());
+    assert(test_initialization());
+    assert(test_no_op_callback());
+    assert(test_static_gain_callback());
+    
     test_normalization();
     test_ring_buffer_single_threaded_single_value();
     test_ring_buffer_single_threaded_multiple_values();
     
+    return 0;
 }

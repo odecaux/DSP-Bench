@@ -18,6 +18,8 @@ typedef long long i64;
 typedef float real32;
 typedef double real64;
 
+#define ArrayCount(a) (sizeof(a) / sizeof((a)[0]))
+
 #define Kilobytes(count) (u64)(count*(u64)1024)
 #define Megabytes(count) (u64)(count*Kilobytes(1024))
 #define Gigabytes(count) (u64)(count*Megabytes(1024))
@@ -28,11 +30,16 @@ typedef double real64;
 
 #define octave_max(x, y) (((x) > (y)) ? (x) : (y))
 #define octave_min(x, y) (((x) < (y)) ? (x) : (y))
+#define octave_abs(x) ((x > 0) ? (x) : -(x))
 
 typedef struct{
     char* str;
     u64 size;
 } String;
+
+
+
+#define StringLit(s) String((char*)(s), ArrayCount(s) - 1)
 
 typedef struct {
     real32 x;
@@ -64,6 +71,11 @@ internal Rect rect_remove_padding(Rect rect, real32 padding_x, real32 padding_y)
             rect.dim.y - padding_y * 2
         }
     };
+}
+
+internal bool float_cmp(real32 a, real32 b, real32 epsilon)
+{
+    return octave_abs(a - b) < epsilon;
 }
 
 #endif //BASE_H

@@ -214,7 +214,11 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
                       clang::FileID plugin_source_file_id);
 
 Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
-                          Plugin_Descriptor& descriptor);
+                          Plugin_Descriptor& descriptor,
+                          llvm::ModulePassManager& module_pass_manager,
+                          llvm::ModuleAnalysisManager& module_analysis_manager);
+
+Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_cts);
 
 #if _WIN32
 #pragma comment(lib, "version.lib")
