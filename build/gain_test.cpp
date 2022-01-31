@@ -53,7 +53,7 @@ void audio_callback(const Parameters& param,
         double lfo_gain = cos_64(state.theta);
         for(int channel = 0; channel < num_channels; channel++)
         {
-            out_buffer[channel][sample] = lfo_gain;
+            out_buffer[channel][sample] = 0.05f * lfo_gain;
             
             //out_buffer[channel][sample] = gain * lfo_gain * lfo_gain * lfo_gain * out_buffer[channel][sample];
         }

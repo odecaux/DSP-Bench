@@ -6,12 +6,91 @@
 #include "windows.h"
 #include <GL/GL.h>
 
-
 #define STB_TRUETYPE_IMPLEMENTATION 
 #include "stb_truetype.h"
 
 #include "base.h"
 #include "structs.h"
+
+
+
+//~ OpenGL defines
+#define GL_VERTEX_SHADER                  0x8B31
+#define GL_FRAGMENT_SHADER                0x8B30
+#define GL_ARRAY_BUFFER                   0x8892
+#define GL_STATIC_DRAW                    0x88E4
+
+
+typedef GLuint(*glCreateProgram_t) (void);
+static glCreateProgram_t glCreateProgram = nullptr;
+
+typedef GLuint(*glCreateShader_t)(GLenum);
+static glCreateShader_t glCreateShader = nullptr;
+
+typedef void (*glDeleteProgram_t) (GLuint program);
+static glDeleteProgram_t  glDeleteProgram = nullptr;
+
+typedef void (*glDeleteShader_t) (GLuint shader);
+static glDeleteShader_t  glDeleteShader = nullptr;
+
+typedef void (*glCompileShader_t) (GLuint shader);
+static glCompileShader_t  glCompileShader = nullptr;
+
+typedef void (*glLinkProgram_t) (GLuint program);
+static glLinkProgram_t  glLinkProgram = nullptr;
+
+typedef void (*glGenBuffers_t) (GLsizei n, GLuint *buffers);
+static glGenBuffers_t  glGenBuffers = nullptr;
+
+typedef void (*glBindBuffer_t) (GLenum target, GLuint buffer);
+static glBindBuffer_t  glBindBuffer = nullptr;
+
+typedef void (*glShaderSource_t)(GLuint shader, GLsizei count, const char *const* string, const GLint *length);
+static glShaderSource_t glShaderSource = nullptr;
+
+typedef void (*glBufferData_t) (GLenum target, i64 size, const void *data, GLenum usage);
+static glBufferData_t  glBufferData = nullptr;
+
+typedef void(*glAttachShader_t) (GLuint program, GLuint shader);
+static glAttachShader_t glAttachShader = nullptr;
+
+typedef void (*glGenVertexArrays_t) (GLsizei n, GLuint *arrays);
+static glGenVertexArrays_t glGenVertexArrays = nullptr;
+
+typedef void (*glBindVertexArray_t) (GLuint array);
+static glBindVertexArray_t glBindVertexArray = nullptr;
+
+typedef void (*glUseProgram_t) (GLuint program);
+static glUseProgram_t glUseProgram = nullptr;
+
+typedef void (*glVertexAttribPointer_t) (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
+static glVertexAttribPointer_t glVertexAttribPointer = nullptr;
+
+typedef void (*glEnableVertexAttribArray_t) (GLuint index);
+static glEnableVertexAttribArray_t glEnableVertexAttribArray = nullptr;
+
+#define LOAD_GL(function_name) function_name = (function_name##_t) wglGetProcAddress(#function_name); if(!function_name) { printf("failed to load" #function_name "\n"); return false; }
+
+bool load_opengl_functions()
+{
+    LOAD_GL(glEnableVertexAttribArray);
+    LOAD_GL(glCreateProgram);
+    LOAD_GL(glCreateShader);
+    LOAD_GL(glDeleteProgram);
+    LOAD_GL(glDeleteShader);
+    LOAD_GL(glCompileShader);
+    LOAD_GL(glLinkProgram);
+    LOAD_GL(glGenBuffers);
+    LOAD_GL(glBindBuffer);
+    LOAD_GL(glShaderSource);
+    LOAD_GL(glBufferData);
+    LOAD_GL(glAttachShader);
+    LOAD_GL(glGenVertexArrays);
+    LOAD_GL(glBindVertexArray);
+    LOAD_GL(glUseProgram);
+    LOAD_GL(glVertexAttribPointer);
+    return true;
+}
 
 
 //#define log printf
@@ -63,7 +142,24 @@ typedef struct{
 
 
 typedef struct {
+    Vec2 *vertex_buffer;
+    u64 used_triangles;
 } GraphicsContext;
+
+void push_triangle(Vec2 a, Vec2 b, Vec2 c, GraphicsContext *ctx)
+{
+    /*ctx->vertex_buffer[ctx->used_triangles * 3] = a;
+        ctx->vertex_buffer[ctx->used_triangles * 3 + 1] = b;
+        ctx->vertex_buffer[ctx->used_triangles * 3 + 2] = c;
+        */
+    
+    ctx->vertex_buffer[ctx->used_triangles * 3] = {0.0f, 0.0f};
+    ctx->vertex_buffer[ctx->used_triangles * 3 + 1] = {0.0f, 0.5f};
+    ctx->vertex_buffer[ctx->used_triangles * 3 + 2] = {0.5f, 0.5f};
+    
+    ctx->used_triangles++;
+    
+}
 
 static real32 total_width = 200.0f;
 static real32 title_height = 40.0f;
@@ -130,10 +226,15 @@ void win32_draw_rectangle(Rect bounds, Color color, GraphicsContext& graphics_ct
 }
 void win32_fill_rectangle(Rect bounds, Color color, GraphicsContext& graphics_ctx)
 {
-    /*auto d2d_bounds  = to_d2d_rect(bounds);
-    auto brush = win32_color_to_brush(color, graphics_ctx);
-    graphics_ctx.render_target->FillRectangle(&d2d_bounds, brush);
-*/
+    //auto brush = win32_color_to_brush(color, graphics_ctx);
+    //graphics_ctx.render_target->FillRectangle(&d2d_bounds, brush);
+    auto top_left = bounds.origin;
+    auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
+    auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
+    auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
+    
+    push_triangle(top_left, top_right, bottom_left, &graphics_ctx);
+    push_triangle(bottom_left, top_right, bottom_right, &graphics_ctx);
 }
 
 void win32_draw_text(const String& text, Rect bounds, Color color, GraphicsContext& graphics_ctx)
@@ -604,6 +705,8 @@ internal void load_fonts(const char* font_filename)
     
 }
 
+
+
 extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
                                                       Audio_Parameters& audio_parameters,
                                                       Plugin_Parameter_Value *current_value,
@@ -645,23 +748,33 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
         .lpszClassName = "Main Class"
     };
     RegisterClassEx(&main_class);
+    GraphicsContext graphics_ctx = { 
+        (Vec2*) malloc(sizeof(Vec2) * 1024),
+        0
+    };
     
+    
+    real32 window_width = 600.0f + total_width;
+    real32 window_height = 400.0f;
     HWND window = CreateWindow("Main Class", "Test", 
                                WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, 
                                CW_USEDEFAULT, 
-                               600 + total_width, 
-                               400,
+                               (u32)window_width, (u32)window_height + 30,
                                0,0,
                                instance, 
                                &graphics_ctx);
     
     
     //~ Init OpenGL
-    GraphicsContext graphics_ctx = {};
+    
+    
+    u32 pixel_buffer_size = window_height * window_width * sizeof(u8) * 4;
+    u8* pixel_buffer = (u8*) malloc(pixel_buffer_size);
+    memset(pixel_buffer, 1, pixel_buffer_size);
+    
     
     HDC window_dc = GetDC(window);
-    HGLRC opengl_rc = wglCreateContext(window_dc);
     
     
     PIXELFORMATDESCRIPTOR pixel_format =
@@ -693,14 +806,82 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
     
     SetPixelFormat(window_dc, pixel_format_idx, &pixel_format);
     
+    HGLRC opengl_rc = wglCreateContext(window_dc);
     if(wglMakeCurrent(window_dc, opengl_rc) == FALSE)
     {
         printf("couldn't open opengl context\n");
         exit(1);
     }
     
-    ReleaseDC(window, window_dc);
     
+    if(!load_opengl_functions())
+    {
+        printf("failed to load opengl functions\n");
+        exit(1);
+    }
+    
+    
+    const char *vertexShaderSource = 
+        "#version 330 core\n"
+        "layout (location = 0) in vec2 aPos;\n"
+        "void main()\n"
+        "{\n"
+        "   gl_Position = vec4(aPos.x, aPos.y, 1.0, 1.0);\n"
+        "}\0";
+    
+    unsigned int vertexShader;
+    vertexShader = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+    glCompileShader(vertexShader);
+    
+    const char *fragmentShaderSource =  
+        "#version 330 core\n"
+        "out vec4 FragColor;\n"
+        "void main()\n"
+        "{\n"
+        "    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+        "} \n";
+    
+    
+    unsigned int fragmentShader;
+    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+    glCompileShader(fragmentShader);
+    
+    unsigned int shaderProgram;
+    shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glLinkProgram(shaderProgram);
+    
+    
+    glDeleteShader(vertexShader);
+    glDeleteShader(fragmentShader);
+    
+    
+    
+    float vertices[] = {
+        0.0f, 1.0f,
+        0.0f, 0.0f,
+        1.0f, 1.0f
+    };
+    
+    unsigned int VBO;
+    unsigned int VAO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    
+    glBindVertexArray(VAO);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    
+    ReleaseDC(window, window_dc);
     
     ShowWindow(window, 1);
     UpdateWindow(window);
@@ -795,8 +976,14 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
             DispatchMessage(&message);
         }
         
+        // TODO(octave): hack ?
+        if(done)
+            break;
+        
         //~
         //frame
+        
+        graphics_ctx.used_triangles = 0;
         
         frame_io = io_state_advance(frame_io);
         frame_io.mouse_position = win32_get_mouse_position(window);
@@ -812,12 +999,66 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
             render_IR(IR_buffer, audio_parameters.num_channels, 44100, IR_min_buffer, IR_max_buffer, 480);
         }
         
-        glViewport(0,0, 600 + total_width, 400);
-        glClearColor(1.0f, 1.0f, 0.0f, 1.0f);
+        glViewport(0,0, window_width, window_height);
+        
+        
+        
+        unsigned int texture = 0;
+        static bool init = false;
+        if(!init)
+        {
+            glGenTextures(1, &texture);
+            init = true;
+        }
+        
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexImage2D(GL_TEXTURE_2D,
+                     0,
+                     GL_RGBA4,
+                     window_width,
+                     window_height,
+                     0,
+                     GL_RGBA,
+                     GL_UNSIGNED_BYTE,
+                     pixel_buffer
+                     );
+        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+        
+        glEnable(GL_TEXTURE_2D);
+        
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
+        
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+        
+        glMatrixMode(GL_PROJECTION);
+        float projection_matrix[] = 
+        {
+            1.0f / window_width, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f / window_height, 0.0f, 0.0f ,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f,
+        };
+        glLoadMatrixf(projection_matrix);
+        
+        //glLoadIdentity();
+        
+        glUseProgram(shaderProgram);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBindVertexArray(VAO);
+        
+        glBufferData(GL_ARRAY_BUFFER, sizeof(Vec2) * 1024, graphics_ctx.vertex_buffer, GL_STATIC_DRAW);
+        
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+        
         SwapBuffers(window_dc);
         
-        ValidateRect(window, NULL);
         last_time = win32_pace_60_fps(last_time, counter_frequency, &frame_io.delta_time);
         
     }
