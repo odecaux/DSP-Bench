@@ -46,6 +46,17 @@ typedef struct {
     real32 y;
 } Vec2;
 
+internal inline Vec2 vec2_add(Vec2 a, Vec2 b)
+{
+    return Vec2{a.x + b.x, a.y + b.y};
+}
+
+
+internal inline Vec2 vec2_minus(Vec2 a, Vec2 b)
+{
+    return Vec2{a.x - b.x, a.y - b.y};
+}
+
 typedef struct {
     Vec2 origin;
     Vec2 dim;

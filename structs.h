@@ -59,4 +59,51 @@ typedef struct
 } Audio_Context;
 
 
+typedef struct
+{
+    u64 frame_count;
+    
+    real32 delta_time;
+    real32 time;
+    
+    bool mouse_down;
+    bool mouse_clicked;
+    bool mouse_released;
+    
+    bool right_mouse_down;
+    bool mouse_double_clicked;
+    bool right_mouse_clicked;
+    
+    bool delete_pressed;
+    
+    Vec2 mouse_position;
+    Vec2 mouse_pos_prev;
+    Vec2 mouse_delta;
+    
+    real32 mouse_double_click_time;
+    real32 mouse_down_time;
+    real32 right_mouse_down_time;
+    real32 mouse_clicked_time;
+} IO;
+
+
+
+enum Color
+{
+    Color_Back,
+    Color_Front
+};
+
+
+typedef struct{
+    i64 selected_parameter_idx;
+} UI_State;
+
+
+typedef struct {
+    Vec2 *vertex_buffer;
+    u64 used_triangles;
+    
+} GraphicsContext;
+
 #endif //STRUCTS_H
