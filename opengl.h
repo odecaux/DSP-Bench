@@ -206,7 +206,7 @@ OpenGL_Context opengl_initialize(HWND window)
         "out vec4 FragColor;\n"
         "void main()\n"
         "{\n"
-        "    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+        "    FragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f);\n"
         "} \n";
     
     
@@ -280,7 +280,7 @@ OpenGL_Context opengl_initialize(HWND window)
 }
 
 
-void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx)
+void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx, Font *font)
 {
     //TODO hack
     real32 window_width = 600.0f;
@@ -289,53 +289,11 @@ void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx)
     glViewport(0,0, window_width, window_height);
     
     //NOTE texture stuff, we don't care anymore, unless it's going to be used in the core profile pipeline ????
-    /*
-    unsigned int texture = 0;
-    static bool init = false;
-    if(!init)
-    {
-        glGenTextures(1, &texture);
-        init = true;
-    }
     
-    glBindTexture(GL_TEXTURE_2D, texture);
-    
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-
-glTexImage2D(GL_TEXTURE_2D,
-                 0,
-                 GL_RGBA4,
-                 window_width,
-                 window_height,
-                 0,
-                 GL_RGBA,
-                 GL_UNSIGNED_BYTE,
-                 pixel_buffer
-                 );
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-    
-    
-    glEnable(GL_TEXTURE_2D);
-    
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    
-    glMatrixMode(GL_PROJECTION);
-    float projection_matrix[] = 
-    {
-        -1.0f / window_width, 0.0f, 0.0f, 0.0f,
-        0.0f,- 1.0f / window_height, 0.0f, 0.0f ,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        1.0f, 1.0f, 0.0f, 1.0f,
-    };
-    glLoadMatrixf(projection_matrix);
-    */
     
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    
     
     glUseProgram(opengl_ctx->shader_program);
     
@@ -354,6 +312,91 @@ glTexImage2D(GL_TEXTURE_2D,
     
     glDrawArrays(GL_TRIANGLES, 0, graphics_ctx->used_triangles * 3);
     
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glUseProgram(0);
+    
+    //~
+    
+    /*
+    unsigned int texture = 0;
+    static bool init = false;
+    if(!init)
+    {
+        glGenTextures(1, &texture);
+        init = true;
+    }
+    
+    glBindTexture(GL_TEXTURE_2D, texture);
+    
+    
+    
+    glEnable(GL_TEXTURE_2D);
+    
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+    
+    glMatrixMode(GL_PROJECTION);
+    float projection_matrix[] = 
+    {
+        2.0f / window_width, 0.0f, 0.0f, 0.0f,
+        0.0f,- 2.0f / window_height, 0.0f, 0.0f ,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        -1.0f, 1.0f, 0.0f, 1.0f,
+    };
+    glLoadMatrixf(projection_matrix);
+    
+    
+    real32 x = 0.0f;
+    
+    for(u8 i = 65; i < 90; i++)
+    {
+        Glyph *glyph = &font->glyphs[i];
+        glTexImage2D(GL_TEXTURE_2D,
+                     0,
+                     GL_RGBA4,
+                     glyph->width,
+                     glyph->height,
+                     0,
+                     GL_BGRA_EXT,
+                     GL_UNSIGNED_BYTE,
+                     glyph->bitmap
+                     );
+        
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+        
+        glBegin(GL_TRIANGLES);
+        
+        
+        glTexCoord2f(0.0f, 0.0f);
+        glVertex2f(x, 0.0f);
+        
+        glTexCoord2f(1.0f, 0.0f);
+        glVertex2f(x + 50.0f, 0.0f);
+        
+        glTexCoord2f(0.0f, 1.0f);
+        glVertex2f(x, 70.0f);
+        
+        
+        
+        glTexCoord2f(1.0f, 1.0f);
+        glVertex2f(x + 50.0f, 70.0f);
+        
+        glTexCoord2f(1.0f, 0.0f);
+        glVertex2f(x + 50.0f, 0.0f);
+        
+        glTexCoord2f(0.0f, 1.0f);
+        glVertex2f(x, 70.0f);
+        
+        glEnd();
+        
+        x += 50.0f;
+    }
+    */
     SwapBuffers(opengl_ctx->window_dc);
     
     graphics_ctx->used_triangles = 0;

@@ -5,10 +5,9 @@
 
 #include "windows.h"
 
-
-
 #include "base.h"
 #include "structs.h"
+#include "font.h"
 
 #include "opengl.h"
 
@@ -619,12 +618,14 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
                                instance, 
                                &graphics_ctx);
     
+    
+    Font jetbrains_font = load_fonts("JetBrainsMono-Regular.ttf");
+    
     OpenGL_Context opengl_ctx = opengl_initialize(window);
     
     ShowWindow(window, 1);
     UpdateWindow(window);
     
-    Font jetbrains_font = load_fonts("JetBrainsMono-Regular.fnt");
     
     IO frame_io
     {
@@ -736,7 +737,7 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
             render_IR(IR_buffer, audio_parameters.num_channels, 44100, IR_min_buffer, IR_max_buffer, 480);
         }
         
-        opengl_render_ui(&opengl_ctx, &graphics_ctx);
+        opengl_render_ui(&opengl_ctx, &graphics_ctx, &jetbrains_font);
         
         last_time = win32_pace_60_fps(last_time, counter_frequency, &frame_io.delta_time);
     }

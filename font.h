@@ -190,9 +190,25 @@ internal Font load_fonts(const char* font_filename)
 }
 */
 
-struct Font{
+typedef struct {
+    i32 width;
+    i32 height;
+    i32 x_offset;
+    i32 y_offset;
+    i32 *bitmap;
+} Glyph;
+
+typedef struct{
+    stbtt_fontinfo info;
+    u8* data;
+    Glyph glyphs[128]; //NOTE 128  : ascii index, anything else will be discarded. 
+} Font;
+
+internal void glyph_lookup(Font *font_data)
+{
     
-};
+}
+
 internal Font load_fonts(const char* font_filename)
 {
     Font new_font = {};
@@ -214,7 +230,7 @@ internal Font load_fonts(const char* font_filename)
     BOOL result = GetFileSizeEx(handle, &file_size_quad);
     u64 file_size = file_size_quad.QuadPart;
     
-    unsigned char* font_file_buffer = (unsigned char*) malloc(file_size);
+    u8* font_file_buffer = (u8*) malloc(file_size);
     
     auto success = ReadFile(handle, font_file_buffer, file_size, 0, 0);
     if(success == FALSE)
@@ -225,16 +241,37 @@ internal Font load_fonts(const char* font_filename)
     
     CloseHandle(handle);
     
-    stbtt_fontinfo font;
-    if(!stbtt_InitFont(&font, font_file_buffer, stbtt_GetFontOffsetForIndex(font_file_buffer, 0)))
+    stbtt_fontinfo font_info;
+    if(!stbtt_InitFont(&font_info, font_file_buffer, stbtt_GetFontOffsetForIndex(font_file_buffer, 0)))
     {
         printf("stbtt failed at parsing font\n");
         exit(1);
     }
     
-    int width, height, xoff, yoff;
-    u8 *bitmap = stbtt_GetCodepointBitmap(&font, 0, stbtt_ScaleForPixelHeight(&font, 20.0f), , &width, &height, &xoff, &yoff);
-    
+    for(u8 c = 32; c < 127; c++)
+    {
+        i32 width, height, xoff, yoff;
+        u8 *mono_bitmap = stbtt_GetCodepointBitmap(&font_info, 0, stbtt_ScaleForPixelHeight(&font_info, 100.0f), c, &width, &height, &xoff, &yoff);
+        
+        i32 *alpha_bitmap = (i32*)malloc(sizeof(i32) * width * height);
+        
+        for(auto y = 0; y < height; y++)
+        {
+            for(auto x = 0; x < width; x++)
+            {
+                //NOTE does not invert 
+                alpha_bitmap[y * width + x] = 0x00FFFFFF | mono_bitmap[y * width + x] << 24;
+            }
+        }
+        
+        stbtt_FreeBitmap(mono_bitmap, NULL);
+        
+        new_font.glyphs[c] = Glyph{
+            width, height, xoff, yoff,
+            alpha_bitmap
+        };
+    }
+    return  new_font;
 }
 
 
