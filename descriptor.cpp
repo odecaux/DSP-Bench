@@ -1,4 +1,5 @@
 #include "windows.h"
+#include "math.h"
 #include "base.h"
 #include "descriptor.h"
 
@@ -18,7 +19,7 @@ void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_P
 {
     Plugin_Parameter_Value *pointer_to_push = &ring.buffer[ring.writer_idx];
     
-    for(auto i = 0; i < ring.num_fields_by_plugin; i++)
+    for(u32 i = 0; i < ring.num_fields_by_plugin; i++)
         pointer_to_push[i] = new_parameters[i];
     
     ring.writer_idx += ring.num_fields_by_plugin;

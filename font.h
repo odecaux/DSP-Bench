@@ -3,276 +3,260 @@
 #ifndef FONT_H
 #define FONT_H
 
+#include "string.h"
 
+#define STB_RECT_PACK_IMPLEMENTATION 1
+#include "include/stb_rect_pack.h"
 #define STB_TRUETYPE_IMPLEMENTATION 1 
-#include "stb_truetype.h"
+#include "include/stb_truetype.h"
 
-/*
-
-#pragma pack(push, 1)
-struct FntInfo
-{
-    signed short	FontSize;
-    unsigned char	BitField;		// bit 0: smooth, bit 1: unicode, bit 2: italic, bit 3: bold, bit 4: fixedHeight, bits 5-7: reserved
-    unsigned char	CharSet;
-    unsigned short	StretchH;
-    unsigned char	AA;
-    unsigned char	PaddingUp, PaddingRight, PaddingDown, PaddingLeft;
-    unsigned char	SpacingHoriz, SpacingVert;
-    unsigned char	Outline;
-    //char			FontName[];
-};
-
-struct FntCommon
-{
-    unsigned short	LineHeight;
-    unsigned short	Base;
-    unsigned short	ScaleW, ScaleH;
-    unsigned short	Pages;
-    unsigned char	BitField;
-    unsigned char	Channels[4];
-};
-
-struct FntGlyph
-{
-    unsigned int	Id;
-    unsigned short	X, Y;
-    unsigned short	Width, Height;
-    signed short	XOffset, YOffset;
-    signed short	XAdvance;
-    unsigned char	Page;
-    unsigned char	Channel;
-};
-
-struct FntKerning
-{
-    unsigned int	IdFirst;
-    unsigned int	IdSecond;
-    signed short	Amount;
-};
-
-#pragma pack(pop)
-
-typedef struct {
-    unsigned char* file_buffer;
-    u64 file_buffer_size;
-    
-    FntInfo *info;
-    FntCommon *common;
-    FntGlyph *glyphs;
-    u32 glyphs_count;
-    FntKerning *kerning;
-    u32 kerning_count;
-    i32 *index_lookup;
-    i32 max_idx;
-} Font;
-*/
-
-/*
+//TODO padding -> filtering ????
+//NOTE hardcoded : unicode range, font size, 
 internal Font load_fonts(const char* font_filename)
 {
     Font new_font = {};
-    HANDLE handle = CreateFileA(font_filename,
-                                GENERIC_READ,
-                                0,
-                                0,
-                                OPEN_EXISTING,
-                                FILE_ATTRIBUTE_NORMAL ,
-                                0);
     
-    if(handle == INVALID_HANDLE_VALUE)
+    i64 font_file_size = file_get_size(font_filename);
+    if(font_file_size <= 0)
     {
-        printf("error opening font file\n");
+        exit(1);
+    }
+    u8* font_file_buffer = (u8*) m_allocate(font_file_size);
+    if(load_file_to_memory(font_filename, font_file_buffer) == false)
+    {
         exit(1);
     }
     
-    LARGE_INTEGER file_size_quad;
-    BOOL result = GetFileSizeEx(handle, &file_size_quad);
-    u64 file_size = file_size_quad.QuadPart;
+    //1) check that the file is usable
     
-    unsigned char* font_file_buffer = (unsigned char*) malloc(file_size);
+    stbtt_fontinfo font_info = {};
     
-    auto success = ReadFile(handle, font_file_buffer, file_size, 0, 0);
-    if(success == FALSE)
+    const int font_offset = stbtt_GetFontOffsetForIndex(font_file_buffer, /* TODO autre font dans le fichier ?*/ 0);
+    
+    assert(font_offset >= 0 && "FontData is incorrect, or FontNo cannot be found.");
+    if (!stbtt_InitFont(&font_info, font_file_buffer, font_offset))
     {
-        printf("error reading font file\n");
-        exit(1);
+        printf("couldn't initialize stbtt\n");
+        exit(0);
     }
     
-    CloseHandle(handle);
     
-    if (file_size < 4 
-        || font_file_buffer[0] != 'B' 
-        || font_file_buffer[1] != 'M' 
-        || font_file_buffer[2] != 'F' 
-        || font_file_buffer[3] != 0x03)
+    //2) register glyphs
+    
+    u32 min_codepoint = 0x0020;
+    u32 max_codepoint = 0x00FF;
+    i32 glyph_count = 0;
+    
+    i32 *codepoint_to_idx = m_allocate_array(i32, max_codepoint);
+    memset(codepoint_to_idx, -1, max_codepoint * sizeof(i32));
+    
+    i32 *codepoint_list = m_allocate_array(i32, max_codepoint);
+    
+    for(u32 codepoint = min_codepoint; codepoint < max_codepoint; codepoint++)
     {
-        printf("wrong header\n");
-        exit(1);
+        if (!stbtt_FindGlyphIndex(&font_info, codepoint))    // It is actually in the font?
+            continue;
+        codepoint_to_idx[codepoint] = glyph_count;
+        codepoint_list[glyph_count] = codepoint;
+        glyph_count++;
     }
-	new_font.file_buffer = font_file_buffer;
-    new_font.file_buffer_size = file_size;
     
-    FntInfo *info = nullptr;
-    FntCommon *common = nullptr;
-    FntGlyph *glyphs = nullptr;
-    u32 glyphs_count = 0;
-    FntKerning *kerning = nullptr;
-    u32 kerning_count = 0;
-    for (const unsigned char* p = font_file_buffer + 4 ; p < font_file_buffer + file_size; )
-	{
-		const unsigned char block_type = *(unsigned char*)p;
-		p += sizeof(unsigned char);
-		const u32 block_size = *(u32*)p;
-		p += sizeof(u32);
+    if(glyph_count == 0)
+    {
+        //free(font_file_buffer);
+        //free(codepoint_list);
+        printf("empty font ???\n");
+        exit(0);
+    }
+    
+    //TODO osef, ça ira dans le scratch
+    realloc(codepoint_list, glyph_count * sizeof(i32));
+    
+    
+    //3) on chope la taille de chaque glyph
+    stbrp_rect *glyph_rects = m_allocate_array(stbrp_rect, glyph_count);
+    memset(glyph_rects, 0, glyph_count * sizeof(stbrp_rect));
+    
+    
+    float PIXEL_SIZE = 22.0f;
+    u8 oversample_h = 3;
+    u8 oversample_v = 1;
+    const float scale = stbtt_ScaleForPixelHeight(&font_info, PIXEL_SIZE);
+    int total_surface = 0;
+    
+    for (int glyph_i = 0; glyph_i < glyph_count; glyph_i++)
+    {
+        int x0, y0, x1, y1;
+        const int glyph_index_in_font = stbtt_FindGlyphIndex(&font_info, codepoint_list[glyph_i]);
         
-		switch (block_type)
-		{
-            case 1: {
-                assert(info == NULL);
-                info = (FntInfo*)p;
-            } break;
-            
-            case 2: {
-                assert(common == NULL);
-                common = (FntCommon*)p;
-			}break;
-            
-            case 3: {
-                for (const unsigned char* s = p;
-                     s < p + block_size && s < font_file_buffer + file_size;
-                     s = s + strlen((const char*)s) + 1)
-                    
-                    ; //Filenames.push_back((const char*)s);
-                
-			} break;
-            
-            case 4: {
-                assert(glyphs == NULL && glyphs_count == 0);
-                glyphs = (FntGlyph*)p;
-                glyphs_count = block_size / sizeof(FntGlyph);
-			} break;
-            
-            default: {
-                assert(kerning == NULL && kerning_count == 0);
-                kerning = (FntKerning*)p;
-                kerning_count = block_size / sizeof(FntKerning);
-			} break;
-		}
-		p += block_size;
-	}
-    
-    new_font.info = info;
-    new_font.common = common;
-    new_font.glyphs = glyphs;
-    new_font.glyphs_count = glyphs_count;
-    new_font.kerning = kerning;
-    new_font.kerning_count = kerning_count;
-    
-	ImU32 max_idx = 0;
-	for (int i = 0; i != glyphs_count; i++)
-		if (max_idx < glyphs[i].Id)
-        max_idx = glyphs[i].Id;
-    
-    
-    i32 *index_lookup = (int*) malloc(sizeof(i32) * (max_idx + 1));
-    
-	for (size_t i = 0; i < index_lookup.size(); i++)
-		index_lookup[i] = -1;
-	for (size_t i = 0; i < glyphs_count; i++)
-		index_lookup[glyphs[i].Id] = (int)i;
-    
-    new_font.index_lookup = index_lookup;
-    new_font.max_idx = max_idx;
-    
-    return new_font;
-    
-}
-*/
-
-typedef struct {
-    i32 width;
-    i32 height;
-    i32 x_offset;
-    i32 y_offset;
-    i32 *bitmap;
-} Glyph;
-
-typedef struct{
-    stbtt_fontinfo info;
-    u8* data;
-    Glyph glyphs[128]; //NOTE 128  : ascii index, anything else will be discarded. 
-} Font;
-
-internal void glyph_lookup(Font *font_data)
-{
-    
-}
-
-internal Font load_fonts(const char* font_filename)
-{
-    Font new_font = {};
-    HANDLE handle = CreateFileA(font_filename,
-                                GENERIC_READ,
-                                0,
-                                0,
-                                OPEN_EXISTING,
-                                FILE_ATTRIBUTE_NORMAL ,
-                                0);
-    
-    if(handle == INVALID_HANDLE_VALUE)
-    {
-        printf("error opening font file\n");
-        exit(1);
+        assert(glyph_index_in_font != 0);
+        stbtt_GetGlyphBitmapBoxSubpixel(&font_info, glyph_index_in_font, scale * oversample_h, scale * oversample_v, 0, 0, &x0, &y0, &x1, &y1);
+        glyph_rects[glyph_i].w = (stbrp_coord)(x1 - x0 + oversample_h - 1);
+        glyph_rects[glyph_i].h = (stbrp_coord)(y1 - y0 + oversample_v - 1);
+        total_surface += glyph_rects[glyph_i].w * glyph_rects[glyph_i].h;
     }
     
-    LARGE_INTEGER file_size_quad;
-    BOOL result = GetFileSizeEx(handle, &file_size_quad);
-    u64 file_size = file_size_quad.QuadPart;
+    const int surface_sqrt = (int)sqrt((float)total_surface) + 1;
+    int texture_width = (surface_sqrt >= 4096 * 0.7f) ? 4096 : (surface_sqrt >= 2048 * 0.7f) ? 2048 : (surface_sqrt >= 1024 * 0.7f) ? 1024 : 512;
     
-    u8* font_file_buffer = (u8*) malloc(file_size);
+    const int TEX_HEIGHT_MAX = 1024 * 32;
     
-    auto success = ReadFile(handle, font_file_buffer, file_size, 0, 0);
-    if(success == FALSE)
+    //4) on pack
+    stbtt_pack_context spc = {};
+    stbtt_PackBegin(&spc, /* pixels */0, texture_width, TEX_HEIGHT_MAX, /*stride*/ 0, /*padding*/ 0, /* malloc ctx*/ 0);
+    
+    stbrp_rect white_rect;
+    white_rect.h = 2;
+    white_rect.w = 2;
+    stbrp_pack_rects((stbrp_context*)spc.pack_info, &white_rect, 1);
+    
+    stbrp_pack_rects((stbrp_context*)spc.pack_info, glyph_rects, glyph_count);
+    
+    //on a la hauteur finale
+    int texture_height = 0;
+    for (int glyph_i = 0; glyph_i < glyph_count; glyph_i++)
+        if (glyph_rects[glyph_i].was_packed)
+        texture_height = octave_max(texture_height, glyph_rects[glyph_i].y + glyph_rects[glyph_i].h);
+    
+    
+    //texture_height = (Flags & ImFontAtlasFlags_NoPowerOfTwoHeight) ? (texture_height + 1) : ImUpperPowerOfTwo(texture_height);
+    ///TODO c'est quoi cette histoire de power of two ?
+    
+    Vec2 uv_scale = {
+        1.0f / texture_width, 
+        1.0f / texture_height
+    };
+    
+    //5) FINALLY RENDER TO A GRAYSCALE BITMAP
+    
+    u8 *grayscale_pixels = (u8*)m_allocate(texture_width * texture_height);
+    memset(grayscale_pixels, 0, sizeof(u8) * texture_width * texture_height);
+    
+    spc.pixels = grayscale_pixels;
+    spc.height = texture_height;
+    
+    
+    stbtt_packedchar *packedchars = m_allocate_array(stbtt_packedchar, glyph_count);
+    memset(packedchars, 0, glyph_count * sizeof(stbtt_packedchar));
+    
+    stbtt_pack_range pack_range = {
+        PIXEL_SIZE,
+        0,
+        codepoint_list,
+        glyph_count,
+        packedchars, //output
+        oversample_h, oversample_v //TODO dans la doc ça dit "don't set these"
+    }; 
+    
+    
+    stbtt_PackFontRangesRenderIntoRects(&spc, &font_info, &pack_range, 1, glyph_rects);
+    
+    // End packing
+    stbtt_PackEnd(&spc);
+    m_freee(glyph_rects);
+    glyph_rects = NULL;
+    
+    const float font_scale = stbtt_ScaleForPixelHeight(&font_info, PIXEL_SIZE);
+    int unscaled_ascent, unscaled_descent, unscaled_line_gap;
+    stbtt_GetFontVMetrics(&font_info, &unscaled_ascent, &unscaled_descent, &unscaled_line_gap);
+    
+    const float ascent = floor(unscaled_ascent * font_scale + ((unscaled_ascent > 0.0f) ? +1 : -1));
+    const float descent = floor(unscaled_descent * font_scale + ((unscaled_descent > 0.0f) ? +1 : -1));
+    
+    const float font_off_x = 0;//= cfg.GlyphOffset.x;
+    const float font_off_y = 0; //cfg.GlyphOffset.y + IM_ROUND(dst_font->Ascent);
+    
+    Glyph* glyphs = m_allocate_array(Glyph, glyph_count);
+    
+    for (int glyph_i = 0; glyph_i < glyph_count; glyph_i++)
     {
-        printf("error reading font file\n");
-        exit(1);
-    }
-    
-    CloseHandle(handle);
-    
-    stbtt_fontinfo font_info;
-    if(!stbtt_InitFont(&font_info, font_file_buffer, stbtt_GetFontOffsetForIndex(font_file_buffer, 0)))
-    {
-        printf("stbtt failed at parsing font\n");
-        exit(1);
-    }
-    
-    for(u8 c = 32; c < 127; c++)
-    {
-        i32 width, height, xoff, yoff;
-        u8 *mono_bitmap = stbtt_GetCodepointBitmap(&font_info, 0, stbtt_ScaleForPixelHeight(&font_info, 100.0f), c, &width, &height, &xoff, &yoff);
+        // Register glyph
+        const int codepoint = codepoint_list[glyph_i];
+        const stbtt_packedchar& pc = packedchars[glyph_i];
+        stbtt_aligned_quad q;
+        float unused_x = 0.0f, unused_y = 0.0f;
+        stbtt_GetPackedQuad(packedchars, 
+                            texture_width, texture_height, 
+                            glyph_i, 
+                            &unused_x, &unused_y, 
+                            &q, 0);
         
-        i32 *alpha_bitmap = (i32*)malloc(sizeof(i32) * width * height);
-        
-        for(auto y = 0; y < height; y++)
+        /*
+        // Clamp & recenter if needed
+        const float advance_x_original = advance_x;
+        advance_x = ImClamp(advance_x, cfg->GlyphMinAdvanceX, cfg->GlyphMaxAdvanceX);
+        if (advance_x != advance_x_original)
         {
-            for(auto x = 0; x < width; x++)
-            {
-                //NOTE does not invert 
-                alpha_bitmap[y * width + x] = 0x00FFFFFF | mono_bitmap[y * width + x] << 24;
-            }
+            float char_off_x = (advance_x - advance_x_original) * 0.5f;
+            x0 += char_off_x;
+            x1 += char_off_x;
         }
+        */
         
-        stbtt_FreeBitmap(mono_bitmap, NULL);
-        
-        new_font.glyphs[c] = Glyph{
-            width, height, xoff, yoff,
-            alpha_bitmap
-        };
+        Glyph& glyph = glyphs[glyph_i];
+        glyph.codepoint = (unsigned int)codepoint;
+        glyph.X0 = q.x0 + font_off_x;
+        glyph.Y0 = q.y0 + font_off_y;
+        glyph.X1 = q.x1 + font_off_x;
+        glyph.Y1 = q.y1 + font_off_y;
+        glyph.U0 = q.s0;
+        glyph.V0 = q.t0;
+        glyph.U1 = q.s1;
+        glyph.V1 = q.t1;
+        glyph.advance_x = pc.xadvance;
     }
-    return  new_font;
+    
+    
+    real32 *codepoint_to_advancex = m_allocate_array(real32, max_codepoint + 1);
+    memset(codepoint_to_advancex, -1.0f, (max_codepoint + 1) * sizeof(real32));
+    
+    for (int i = 0; i < glyph_count; i++)
+    {
+        int codepoint = (int) glyphs[i].codepoint;
+        codepoint_to_advancex[codepoint] = glyphs[i].advance_x;
+    }
+    
+    
+    // Render 4 white pixels
+    const int offset = (int)white_rect.x + (int)white_rect.y * texture_width;
+    grayscale_pixels[offset] = 
+        grayscale_pixels[offset + 1] = 
+        grayscale_pixels[offset + texture_width] = 
+        grayscale_pixels[offset + texture_width + 1] = 
+        255;
+    
+    Vec2 white_rect_pos = Vec2{ (white_rect.x + 0.5f) * uv_scale.x, (white_rect.y + 0.5f) * uv_scale.y};
+    
+    u32 *rgba_pixels = m_allocate_array(u32, texture_width * texture_height);
+    
+    for(u32 i = 0; i < texture_width * texture_height; i++)
+    {
+        u8 val = grayscale_pixels[i];
+        rgba_pixels[i] = val << 24 | val << 16 | val << 8 | 0xFF;;
+    }
+    
+    
+    
+    m_freee(font_file_buffer);
+    m_freee(codepoint_list);
+    m_freee(packedchars);
+    m_freee(grayscale_pixels);
+    
+    return {
+        .font_size = PIXEL_SIZE,
+        .codepoint_to_idx = codepoint_to_idx,
+        .codepoint_to_advancex = codepoint_to_advancex,
+        .highest_codepoint = max_codepoint,
+        .glyphs = glyphs,
+        .glyph_count = (u32)glyph_count, //TODO ono
+        .white_rect_pos = white_rect_pos,
+        .atlas_pixels = rgba_pixels, 
+        .atlas_texture_dim = Vec2{ (real32)texture_width, (real32)texture_height },
+        .atlas_texture_id = 0
+    };
 }
+
+
 
 
 #endif //FONT_H

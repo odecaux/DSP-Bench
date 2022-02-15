@@ -19,6 +19,7 @@ typedef float real32;
 typedef double real64;
 
 #define ArrayCount(a) (sizeof(a) / sizeof((a)[0]))
+#define OffsetOf(type, member)  ((size_t)&(((type*)0)->member))
 
 #define Kilobytes(count) (u64)(count*(u64)1024)
 #define Megabytes(count) (u64)(count*Kilobytes(1024))
@@ -33,10 +34,12 @@ typedef double real64;
 #define octave_abs(x) ((x > 0) ? (x) : -(x))
 
 typedef struct{
-    char* str;
+    union { 
+        char* str;
+        char* data;
+    };
     u64 size;
 } String;
-
 
 
 #define StringLit(s) String((char*)(s), ArrayCount(s) - 1)
@@ -45,6 +48,26 @@ typedef struct {
     real32 x;
     real32 y;
 } Vec2;
+
+internal inline real32 vec2_length(Vec2 a, Vec2 b)
+{
+    return sqrt((a.x - b.x)*(a.x - b.x) +  (a.y - b.y) * (a.y - b.y));
+}
+
+internal inline Vec2 vec2_normalize(Vec2 a, Vec2 b)
+{
+    real32 length = vec2_length(a, b);
+    
+    if(length == 0.0f) 
+        return Vec2 {0.0f, 0.0f};
+    else 
+        return Vec2 {(a.x - b.x) / length, (a.y - b.y) / length};
+}
+
+internal inline Vec2 vec2_mult_scalar(real32 lambda, Vec2 a)
+{
+    return Vec2{ a.x * lambda, a.y * lambda};
+}
 
 internal inline Vec2 vec2_add(Vec2 a, Vec2 b)
 {

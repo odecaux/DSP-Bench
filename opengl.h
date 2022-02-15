@@ -5,14 +5,25 @@
 
 #include <GL/GL.h>
 
+//TODO définir un point blanc dans la texture !!!!!
+#define DRAW_TEX_UV_FOR_WHITE	Vec{0.0f, 0.0f}
+
 typedef struct {
     u32 shader_program;
+    
     GLint uniform_mvp;
-    u32 VBO;
+    GLint uniform_texture;
+    GLint attribute_pos;
+    GLint attribute_uv;
+    GLint attribute_col;
+    
     u32 VAO;
+    u32 VBO; //TODO rename
+    u32 element_handle;
+    //u32 texture_handle; //TODO c'est chiant, ça veut dire qu'on l'a à deux endroits séparés ????
+    
     HDC window_dc;
     HGLRC opengl_rc;
-    float mvp[4][4];
 } OpenGL_Context;
 
 //~ OpenGL defines
@@ -22,6 +33,8 @@ typedef struct {
 #define GL_STATIC_DRAW                    0x88E4
 #define GL_COMPILE_STATUS                 0x8B81
 #define GL_LINK_STATUS                    0x8B82
+//TODO est-ce qu'on a vraiment besoin de ça ? on a pas tant de triangles que ça à priori
+#define GL_ELEMENT_ARRAY_BUFFER           0x8893
 
 typedef GLuint(*glCreateProgram_t) (void);
 static glCreateProgram_t glCreateProgram = nullptr;
@@ -90,11 +103,39 @@ static glGetProgramiv_t glGetProgramiv = nullptr;
 typedef BOOL(*wglSwapIntervalEXT_t)(int interval);
 static wglSwapIntervalEXT_t wglSwapIntervalEXT = nullptr;
 
-
 typedef int (*wglGetSwapIntervalEXT_t)(void);
 static wglGetSwapIntervalEXT_t wglGetSwapIntervalEXT = nullptr;
 
+typedef GLint (*glGetAttribLocation_t)(GLuint program, const char *name);
+static glGetAttribLocation_t glGetAttribLocation = nullptr;
+
+
+typedef void (*glUniform1i_t) (GLint location, GLint v0);
+static glUniform1i_t glUniform1i = nullptr; 
+
 #define LOAD_GL(function_name) function_name = (function_name##_t) wglGetProcAddress(#function_name); if(!function_name) { printf("failed to load" #function_name "\n"); return false; }
+
+GLenum opengl_check_error_(const char *file, int line)
+{
+    GLenum errorCode;
+    while ((errorCode = glGetError()) != GL_NO_ERROR)
+    {
+        const char *error;
+        switch (errorCode)
+        {
+            case GL_INVALID_ENUM:                  error = "INVALID_ENUM"; break;
+            case GL_INVALID_VALUE:                 error = "INVALID_VALUE"; break;
+            case GL_INVALID_OPERATION:             error = "INVALID_OPERATION"; break;
+            case GL_STACK_OVERFLOW:                error = "STACK_OVERFLOW"; break;
+            case GL_STACK_UNDERFLOW:               error = "STACK_UNDERFLOW"; break;
+            case GL_OUT_OF_MEMORY:                 error = "OUT_OF_MEMORY"; break;
+            default: error = "other error"; break;
+        }
+        printf("opengl error :  %s in %s:%d\n", error, file, line);
+    }
+    return errorCode;
+}
+#define opengl_check_error() opengl_check_error_(__FILE__, __LINE__) 
 
 bool load_opengl_functions()
 {
@@ -120,22 +161,16 @@ bool load_opengl_functions()
     LOAD_GL(glGetProgramiv);
     LOAD_GL(wglSwapIntervalEXT);
     LOAD_GL(wglGetSwapIntervalEXT);
+    LOAD_GL(glGetAttribLocation);
+    LOAD_GL(glUniform1i);
     
     return true;
 }
 
-OpenGL_Context opengl_initialize(HWND window)
+OpenGL_Context opengl_initialize(HWND window, Font* font)
 {
     
-    //we don't use the pixel buffer, we've moved to triangle/shader/core profile rendering
-    /*
-    u32 pixel_buffer_size = window_height * window_width * sizeof(u8) * 4;
-    u8* pixel_buffer = (u8*) malloc(pixel_buffer_size);
-    memset(pixel_buffer, 1, pixel_buffer_size);
-    */
-    
     HDC window_dc = GetDC(window);
-    
     
     PIXELFORMATDESCRIPTOR pixel_format =
     {
@@ -180,17 +215,30 @@ OpenGL_Context opengl_initialize(HWND window)
         exit(1);
     }
     
+    
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
     wglSwapIntervalEXT(1);
     printf("swap interval : %d\n", wglGetSwapIntervalEXT());
 	GLint status = GL_TRUE;
     
     const char *vertexShaderSource = 
         "#version 330 core\n"
-        "uniform mat4 MVP;"
-        "layout (location = 0) in vec2 aPos;\n"
+        "uniform mat4 mvp;"
+        
+        "layout (location = 0) in vec2 pos;\n"
+        "layout (location = 1) in vec2 uv;\n"
+        "layout (location = 2) in vec4 col;\n"
+        
+        "out vec2 frag_uv;\n"
+        "out vec4 frag_col;\n"
+        
         "void main()\n"
         "{\n"
-        "   gl_Position =  MVP * vec4(aPos.x, aPos.y, 1.0, 1.0);\n"
+        "    frag_uv  = uv;\n"
+        "    frag_col = col;\n"
+        "   gl_Position =  mvp * vec4(pos.x, pos.y, 1.0, 1.0);\n"
         "}\0";
     
     unsigned int vertexShader;
@@ -203,14 +251,15 @@ OpenGL_Context opengl_initialize(HWND window)
     
     const char *fragmentShaderSource =  
         "#version 330 core\n"
-        "out vec4 FragColor;\n"
+        "in vec2 frag_uv;\n"
+        "in vec4 frag_col;\n"
+        "uniform sampler2D texture;\n"
+        "layout (location = 0) out vec4 out_col;\n"
         "void main()\n"
         "{\n"
-        "    FragColor = vec4(1.0f, 1.0f, 1.0f, 1.0f);\n"
-        "} \n";
+        "    out_col = frag_col * texture(texture, frag_uv.st);\n"
+        "}\n";
     
-    
-	
     unsigned int fragmentShader;
     fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
@@ -225,186 +274,144 @@ OpenGL_Context opengl_initialize(HWND window)
     glAttachShader(shader_program, fragmentShader);
     glLinkProgram(shader_program);
     
-	glGetProgramiv(shader_program, GL_LINK_STATUS, &status);
-	assert(status == GL_TRUE);
-    
-    GLint uniform_mvp;
-	uniform_mvp = glGetUniformLocation(shader_program, "MVP");
+    glGetProgramiv(shader_program, GL_LINK_STATUS, &status);
+    assert(status == GL_TRUE);
+    opengl_check_error();
     
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
     
+    GLint uniform_mvp = glGetUniformLocation(shader_program, "mvp");
+    GLint uniform_texture = glGetUniformLocation(shader_program, "texture");
     
+    GLint attribute_pos = glGetAttribLocation(shader_program, "pos");
+    GLint attribute_uv = glGetAttribLocation(shader_program, "uv");	
+    GLint attribute_col = (GLuint)glGetAttribLocation(shader_program, "col");
+    opengl_check_error();
     
+    u32 VBO;
+    u32 VAO;
+    u32 element_handle;
     
-    unsigned int VBO;
-    unsigned int VAO;
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
+    glGenBuffers(1, &element_handle);
     
+    //TODO dans quel sens je dois faire ça ?
     glBindVertexArray(VAO);
-    
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
+    glGenTextures(1, &font->atlas_texture_id);
+    glBindTexture(GL_TEXTURE_2D, font->atlas_texture_id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    
-    assert(glGetError() == GL_NO_ERROR);
-    
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 
+                 font->atlas_texture_dim.x, font->atlas_texture_dim.y, 
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, font->atlas_pixels);
+    /*
+    m_freee(font->atlas_pixels);
+    font->atlas_pixels = nullptr;
+    */
     ReleaseDC(window, window_dc);
     
-    //TODO hack
-    real32 window_width = 600.0f;
-    real32 window_height = 400.0f;
-    
-    OpenGL_Context new_opengl_ctx = 
-    {
+    return {
         .shader_program = shader_program, 
         .uniform_mvp = uniform_mvp, 
-        .VBO = VBO, 
+        .uniform_texture = uniform_texture,
+        .attribute_pos = attribute_pos,
+        .attribute_uv = attribute_uv,
+        .attribute_col = attribute_col,
         .VAO = VAO, 
+        .VBO = VBO, 
+        .element_handle = element_handle,
         .window_dc = window_dc, 
         .opengl_rc = opengl_rc,
-        .mvp = {
-            { 2.0f/window_width,	0.0f,			0.0f,		0.0f },
-            { 0.0f,			-2.0f/window_height,		0.0f,		0.0f },
-            { 0.0f,			0.0f,			1.0f,		0.0f },
-            { -1.0f, 1.0f,	0.0f,		1.0f },
-        }
     };
-    
-    return new_opengl_ctx;
 }
 
-
-void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx, Font *font)
+void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx)
 {
-    //TODO hack
-    real32 window_width = 600.0f;
-    real32 window_height = 400.0f;
-    
-    glViewport(0,0, window_width, window_height);
-    
-    //NOTE texture stuff, we don't care anymore, unless it's going to be used in the core profile pipeline ????
-    
-    
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
-    
-    
-    glUseProgram(opengl_ctx->shader_program);
-    
-    glUniformMatrix4fv(opengl_ctx->uniform_mvp, 1, GL_FALSE, &opengl_ctx->mvp[0][0]);
     
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glEnable(GL_SCISSOR_TEST);
     
+    glViewport(0,0, graphics_ctx->window_dim.x, graphics_ctx->window_dim.y);
+    glScissor(0,0, graphics_ctx->window_dim.x, graphics_ctx->window_dim.y);
     
-    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->VBO);
-    glBindVertexArray(opengl_ctx->VAO);
-    
-    glBufferData(GL_ARRAY_BUFFER, sizeof(Vec2) * 4096 * 4, graphics_ctx->vertex_buffer, GL_STATIC_DRAW);
-    
-    glDrawArrays(GL_TRIANGLES, 0, graphics_ctx->used_triangles * 3);
-    
-    glBindVertexArray(0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glUseProgram(0);
-    
-    //~
-    
-    /*
-    unsigned int texture = 0;
-    static bool init = false;
-    if(!init)
+    float projection_matrix[16] = 
     {
-        glGenTextures(1, &texture);
-        init = true;
-    }
-    
-    glBindTexture(GL_TEXTURE_2D, texture);
-    
-    
-    
-    glEnable(GL_TEXTURE_2D);
-    
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    
-    glMatrixMode(GL_PROJECTION);
-    float projection_matrix[] = 
-    {
-        2.0f / window_width, 0.0f, 0.0f, 0.0f,
-        0.0f,- 2.0f / window_height, 0.0f, 0.0f ,
+        2.0f / graphics_ctx->window_dim.x, 0.0f, 0.0f, 0.0f,
+        0.0f,- 2.0f / graphics_ctx->window_dim.y, 0.0f, 0.0f ,
         0.0f, 0.0f, 1.0f, 0.0f,
         -1.0f, 1.0f, 0.0f, 1.0f,
     };
-    glLoadMatrixf(projection_matrix);
     
     
-    real32 x = 0.0f;
+    glUseProgram(opengl_ctx->shader_program);
+    glUniform1i(opengl_ctx->uniform_texture, 0);
+    glUniformMatrix4fv(opengl_ctx->uniform_mvp, 
+                       1, 
+                       GL_FALSE, 
+                       &projection_matrix[0]);
     
-    for(u8 i = 65; i < 90; i++)
-    {
-        Glyph *glyph = &font->glyphs[i];
-        glTexImage2D(GL_TEXTURE_2D,
-                     0,
-                     GL_RGBA4,
-                     glyph->width,
-                     glyph->height,
-                     0,
-                     GL_BGRA_EXT,
-                     GL_UNSIGNED_BYTE,
-                     glyph->bitmap
-                     );
-        
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);   
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-        
-        glBegin(GL_TRIANGLES);
-        
-        
-        glTexCoord2f(0.0f, 0.0f);
-        glVertex2f(x, 0.0f);
-        
-        glTexCoord2f(1.0f, 0.0f);
-        glVertex2f(x + 50.0f, 0.0f);
-        
-        glTexCoord2f(0.0f, 1.0f);
-        glVertex2f(x, 70.0f);
-        
-        
-        
-        glTexCoord2f(1.0f, 1.0f);
-        glVertex2f(x + 50.0f, 70.0f);
-        
-        glTexCoord2f(1.0f, 0.0f);
-        glVertex2f(x + 50.0f, 0.0f);
-        
-        glTexCoord2f(0.0f, 1.0f);
-        glVertex2f(x, 70.0f);
-        
-        glEnd();
-        
-        x += 50.0f;
-    }
-    */
+    
+    glBindVertexArray(opengl_ctx->VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->VBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, opengl_ctx->element_handle);
+    glBindTexture(GL_TEXTURE_2D, graphics_ctx->font->atlas_texture_id);
+    
+    
+    glEnableVertexAttribArray(opengl_ctx->attribute_pos);
+    glEnableVertexAttribArray(opengl_ctx->attribute_uv);
+    glEnableVertexAttribArray(opengl_ctx->attribute_col);
+    
+    glVertexAttribPointer(opengl_ctx->attribute_pos, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)OffsetOf(Vertex, pos));
+    glVertexAttribPointer(opengl_ctx->attribute_uv, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)OffsetOf(Vertex, uv));
+    glVertexAttribPointer(opengl_ctx->attribute_col, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)OffsetOf(Vertex, col));
+    
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    glDrawElements(GL_TRIANGLES, (GLsizei)graphics_ctx->draw_indices_count, GL_UNSIGNED_INT, NULL);
+    glBegin(GL_TRIANGLES);
+    glColor3f(1, 0, 0);
+    glVertex2f(-2, -1);
+    glVertex2f(1, -1);
+    glVertex2f(0, 2);
+    
+    glVertex2f(0, 0);
+    glVertex2f(100, 100);
+    glVertex2f(0, 100);
+    
+    glEnd();
+    
+    
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
+    glUseProgram(0);
+    
     SwapBuffers(opengl_ctx->window_dc);
-    
-    graphics_ctx->used_triangles = 0;
     
 }
 
 void opengl_uninitialize(OpenGL_Context *opengl_ctx)
 {
+    
+    /*
+    glDeleteProgram(shaderProgram);
+    glDeleteShader(fragmentShader);
+    glDeleteShader(vertexShader);
+    glDeleteBuffers(1, &vbo);
+    glDeleteVertexArrays(1, &vao);
+    */
+    
     wglMakeCurrent (NULL, NULL) ; 
     wglDeleteContext (opengl_ctx->opengl_rc);
 }

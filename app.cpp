@@ -5,11 +5,50 @@
 
 #include "windows.h"
 
+void* instrumented_malloc(size_t size, const char* file, int line)
+{
+    printf("malloc : %llu bytes at %s:%d\n", size, file, line);
+    return malloc(size);
+}
+
+
+void* instrumented_array_malloc(size_t count, size_t size, const char* type, const char* file, int line)
+{
+    printf("malloc : %llu * %s at %s:%d\n", count, type, file, line);
+    return malloc(count * size);
+}
+
+void instrumented_free(void* address, const char* file, int line)
+{
+    printf("free : %s:%d\n", file, line);
+    free(address);
+}
+
+#define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
+
+//#define LOG_ALLOCATIONS 1
+
+#ifdef LOG_ALLOCATIONS
+
+#define m_allocate(size) instrumented_malloc(size, __FILENAME__, __LINE__)
+#define m_allocate_array(type, count) (type *)instrumented_array_malloc(count, sizeof(type), #type,__FILENAME__, __LINE__)
+#define m_freee(address) instrumented_free(address, __FILENAME__, __LINE__)
+
+#else 
+
+#define m_allocate(size) malloc(size)
+#define m_allocate_array(type, count) (type *)malloc((count) * sizeof(type))
+#define m_freee(address) free(address)
+
+#endif
+
+
 #include "base.h"
 #include "structs.h"
-#include "font.h"
-
 #include "opengl.h"
+#include "os_helpers.h"
+#include "font.h"
+#include "draw.h"
 
 //#define log printf
 #define log noop_log
@@ -76,91 +115,6 @@ i64 win32_pace_60_fps(i64 last_time, LARGE_INTEGER counter_frequency, real32* de
     return frame_end.QuadPart;
 }
 
-
-
-void push_triangle(Vec2 a, Vec2 b, Vec2 c, GraphicsContext *ctx)
-{
-    ctx->vertex_buffer[ctx->used_triangles * 3] = a;
-    ctx->vertex_buffer[ctx->used_triangles * 3 + 1] = b;
-    ctx->vertex_buffer[ctx->used_triangles * 3 + 2] = c;
-    
-    /*
-    ctx->vertex_buffer[ctx->used_triangles * 3] = { 0.0f, 0.0f};
-    ctx->vertex_buffer[ctx->used_triangles * 3 + 1] = {0.0f, 400.0f};
-    ctx->vertex_buffer[ctx->used_triangles * 3 + 2] = {600.0f, 0.0f};
-    */
-    
-    ctx->used_triangles++;
-    
-}
-
-
-void draw_line(Vec2 start, Vec2 end, Color color, real32 width, GraphicsContext& graphics_ctx)
-{
-    float length = sqrt( (start.x - end.x)*(start.x - end.x) +  (start.y - end.y) * (start.y - end.y));
-    
-    if(length == 0.0f) {
-        printf("length = 0\n");
-        return;
-    }
-    const Vec2 n = { 
-        (start.x - end.x) / length ,
-        (start.y - end.y) / length 
-    };
-    
-	const Vec2 hn = Vec2(n.y * 0.5f, -n.x * 0.5f) ;
-    
-    push_triangle(vec2_minus(end, hn), vec2_minus(start, hn), vec2_add(end, hn), &graphics_ctx);
-    push_triangle(vec2_minus(start, hn), vec2_add(start, hn), vec2_add(end,hn), &graphics_ctx);
-    
-}
-
-void draw_rectangle(Rect bounds, Color color, GraphicsContext& graphics_ctx)
-{
-    auto top_left = bounds.origin;
-    auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
-    auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
-    auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
-    
-    draw_line(top_left, top_right, Color_Front, 1.0f, graphics_ctx);
-    draw_line(top_left, bottom_left, Color_Front, 1.0f, graphics_ctx);
-    draw_line(top_right, bottom_right, Color_Front, 1.0f, graphics_ctx);
-    draw_line(bottom_right, bottom_left, Color_Front, 1.0f, graphics_ctx);
-}
-void fill_rectangle(Rect bounds, Color color, GraphicsContext& graphics_ctx)
-{
-    auto top_left = bounds.origin;
-    auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
-    auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
-    auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
-    
-    push_triangle(top_left, top_right, bottom_left, &graphics_ctx);
-    push_triangle(bottom_left, top_right, bottom_right, &graphics_ctx);
-}
-
-void draw_text(const String& text, Rect bounds, Color color, GraphicsContext& graphics_ctx)
-{
-    /*auto brush = win32_color_to_brush(color, graphics_ctx);
-    // TODO(octave): verifier que y a pas de bug ici
-    WCHAR dest[512] = {0};
-    MultiByteToWideChar(CP_UTF8, 0,text.str, (i32)text.size,dest,511);
-    graphics_ctx.render_target->DrawText(dest, text.size,  graphics_ctx.text_format,to_d2d_rect(bounds), brush); 
-    */
-}
-
-
-void draw_slider(Rect slider_bounds, 
-                 real32 normalized_value, 
-                 GraphicsContext& graphics_ctx)
-{
-    real32 slider_x = slider_bounds.origin.x + normalized_value * slider_bounds.dim.x; 
-    Rect slider_rect = {
-        Vec2{slider_x, slider_bounds.origin.y},
-        Vec2{5.0f, slider_bounds.dim.y}
-    };
-    fill_rectangle(slider_rect, Color_Front, graphics_ctx);
-    
-}
 
 
 IO io_state_advance(const IO old_io)
@@ -269,7 +223,7 @@ void win32_draw_IR(Rect bounds,
                    real32* IR_min_buffer,
                    real32* IR_max_buffer,
                    u32 IR_pixel_count,
-                   GraphicsContext& graphics_ctx)
+                   GraphicsContext *graphics_ctx)
 {
     real32 middle_y = bounds.origin.y  + bounds.dim.y / 2.0f;
     real32 half_h = bounds.dim.y / 2.0f;
@@ -279,8 +233,8 @@ void win32_draw_IR(Rect bounds,
         Vec2 start = {bounds.origin.x + i, middle_y};
         Vec2 end_max = {bounds.origin.x + i, middle_y - IR_max_buffer[i] * half_h};
         Vec2 end_min = {bounds.origin.x + i, middle_y - IR_min_buffer[i] * half_h};
-        draw_line(start, end_max, Color_Front, 1.0f, graphics_ctx);
-        draw_line(start, end_min, Color_Front, 1.0f, graphics_ctx);
+        //draw_line(start, end_max, Color_Front, 1.0f, graphics_ctx);
+        //draw_line(start, end_min, Color_Front, 1.0f, graphics_ctx);
     }
 }
 
@@ -298,8 +252,8 @@ void compute_IR(Plugin_Handle& handle,
         }
     }
     
-    char* IR_parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
-    char* IR_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
+    char* IR_parameters_holder = (char*) m_allocate(handle.descriptor.parameters_struct.size);
+    char* IR_state_holder = (char*) m_allocate(handle.descriptor.state_struct.size);
     
     update_parameters_holder(&handle.descriptor, current_parameters_values, IR_parameters_holder);
     
@@ -321,7 +275,7 @@ void compute_IR(Plugin_Handle& handle,
 }
 
 void frame(Plugin_Descriptor& descriptor, 
-           GraphicsContext& graphics_ctx, 
+           GraphicsContext *graphics_ctx, 
            UI_State& ui_state, 
            IO frame_io, 
            real32* IR_min_buffer,
@@ -536,15 +490,9 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
         
         if(message == WM_SIZE)
         {
-            printf("size\n");
-            /*
-            if(graphics_ctx->render_target != nullptr)
-            {
-                UINT width = LOWORD(l_param);
-                UINT height = HIWORD(l_param);
-                graphics_ctx->render_target->Resize(D2D1::SizeU(width, height));
-            }
-            */
+            UINT width = LOWORD(l_param);
+            UINT height = HIWORD(l_param);
+            graphics_ctx->window_dim = { (real32)width, (real32)height};
         }
         else if(message == WM_DESTROY || message == WM_DESTROY || message == WM_QUIT)
         {
@@ -572,16 +520,16 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
     Plugin_Descriptor& descriptor = handle.descriptor;
     
     const u32 IR_length = 44100;
-    real32** IR_buffer = (real32**)malloc(sizeof(real32*) * audio_parameters.num_channels);
+    real32** IR_buffer = m_allocate_array(real32*, audio_parameters.num_channels);
     for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
     {
-        IR_buffer[channel] = (real32*)malloc(sizeof(real32) * IR_length);
+        IR_buffer[channel] = m_allocate_array(real32, IR_length);
     }
     
     compute_IR(handle, IR_buffer, IR_length, audio_parameters, current_value);
     
-    real32* IR_max_buffer = (real32*)malloc(sizeof(real32) * 480);
-    real32* IR_min_buffer = (real32*)malloc(sizeof(real32) * 480);
+    real32* IR_max_buffer = m_allocate_array(real32, 480);
+    real32* IR_min_buffer = m_allocate_array(real32, 480);
     
     render_IR(IR_buffer, audio_parameters.num_channels, 44100, IR_min_buffer, IR_max_buffer, 480);
     
@@ -602,26 +550,28 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
         .lpszClassName = "Main Class"
     };
     RegisterClassEx(&main_class);
+    
+    
     GraphicsContext graphics_ctx = { 
-        (Vec2*) malloc(sizeof(Vec2) * 4096 * 4),
-        0
+        m_allocate_array(Vertex, 4096 * 4), 0,
+        m_allocate_array(u32, 4096 * 4), 0
     };
     
-    real32 window_width = 600.0f + total_width;
-    real32 window_height = 400.0f;
+    graphics_ctx.window_dim = { 600.0f + total_width, 400.0f};
     HWND window = CreateWindow("Main Class", "Test", 
                                WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, 
                                CW_USEDEFAULT, 
-                               (u32)window_width, (u32)window_height + 30,
+                               (u32)graphics_ctx.window_dim.x, (u32)graphics_ctx.window_dim.y+ 30,
                                0,0,
                                instance, 
                                &graphics_ctx);
     
     
-    Font jetbrains_font = load_fonts("JetBrainsMono-Regular.ttf");
-    
-    OpenGL_Context opengl_ctx = opengl_initialize(window);
+    //TODO c'est un peu nul comme interface en vrai
+    Font jetbrains_mono = load_fonts("JetBrainsMono-Regular.ttf");
+    OpenGL_Context opengl_ctx = opengl_initialize(window, &jetbrains_mono);
+    graphics_ctx.font = &jetbrains_mono;
     
     ShowWindow(window, 1);
     UpdateWindow(window);
@@ -653,7 +603,7 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
         .mouse_clicked_time = 0 // TODO(octave): on est sur ?
     };
     
-    UI_State ui_state = { -1 };
+    UI_State ui_state = {-1};
     
     BOOL done = FALSE;
     MSG message;
@@ -722,13 +672,15 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
         //~
         //frame
         
+        graphics_ctx.draw_vertices_count = 0;
+        graphics_ctx.draw_indices_count = 0;
         
         frame_io = io_state_advance(frame_io);
         frame_io.mouse_position = win32_get_mouse_position(window);
         
         bool parameters_were_tweaked = false;
         
-        frame(descriptor, graphics_ctx, ui_state, frame_io, IR_min_buffer, IR_max_buffer, 480, current_value, parameters_were_tweaked);
+        frame(descriptor, &graphics_ctx, ui_state, frame_io, IR_min_buffer, IR_max_buffer, 480, current_value, parameters_were_tweaked);
         
         if(parameters_were_tweaked)
         {
@@ -737,7 +689,7 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
             render_IR(IR_buffer, audio_parameters.num_channels, 44100, IR_min_buffer, IR_max_buffer, 480);
         }
         
-        opengl_render_ui(&opengl_ctx, &graphics_ctx, &jetbrains_font);
+        opengl_render_ui(&opengl_ctx, &graphics_ctx);
         
         last_time = win32_pace_60_fps(last_time, counter_frequency, &frame_io.delta_time);
     }

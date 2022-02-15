@@ -1,5 +1,5 @@
 version(2);
-project_name = "clang_test.exe";
+project_name = "clang_test";
 patterns = {
     "*.c",
     "*.cpp",
@@ -10,7 +10,7 @@ patterns = {
     "*.4coder",
 };
 blacklist_patterns = {
-    ".*",
+    ".*"
 };
 load_paths_base = {
     { ".", .relative = true, .recursive = true, },

@@ -87,11 +87,11 @@ typedef struct
 } IO;
 
 
+typedef u32 Color;
 
-enum Color
-{
-    Color_Back,
-    Color_Front
+enum Colors : u32 {
+    Color_Front = 0xffffffff,
+    Color_Back = 0x00000000
 };
 
 
@@ -100,10 +100,55 @@ typedef struct{
 } UI_State;
 
 
+
+//TODO types 
 typedef struct {
-    Vec2 *vertex_buffer;
-    u64 used_triangles;
+    float           X0, Y0, X1, Y1;     // Glyph corners
+    float           U0, V0, U1, V1;     // Texture coordinates
+    i32 advance_x;
     
+    u32 codepoint; 
+} Glyph;
+
+
+
+typedef struct{
+    float font_size; 
+    
+    i32 *codepoint_to_idx;  
+    real32 *codepoint_to_advancex; 
+    u32 highest_codepoint;
+    
+    Glyph *glyphs;
+    u32 glyph_count;
+    
+    Vec2 white_rect_pos;
+    //TODO fallback
+    
+    u32* atlas_pixels;
+    Vec2 atlas_texture_dim;
+    u32 atlas_texture_id;
+} Font;
+
+
+typedef struct {
+    Vec2 pos;
+    Vec2 uv;
+    Color col;
+} Vertex;
+
+
+typedef struct {
+    Vertex *draw_vertices;
+    u32 draw_vertices_count;
+    
+    u32 *draw_indices;
+    u32 draw_indices_count;
+    
+    Vec2 window_dim;
+    
+    Font* font;
 } GraphicsContext;
+
 
 #endif //STRUCTS_H
