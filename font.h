@@ -79,9 +79,11 @@ internal Font load_fonts(const char* font_filename)
     
     
     float PIXEL_SIZE = 22.0f;
-    u8 oversample_h = 3;
-    u8 oversample_v = 1;
+    u8 oversample_h = 4;
+    u8 oversample_v = 4;
     const float scale = stbtt_ScaleForPixelHeight(&font_info, PIXEL_SIZE);
+    const int padding = 4;
+    
     int total_surface = 0;
     
     for (int glyph_i = 0; glyph_i < glyph_count; glyph_i++)
@@ -91,8 +93,8 @@ internal Font load_fonts(const char* font_filename)
         
         assert(glyph_index_in_font != 0);
         stbtt_GetGlyphBitmapBoxSubpixel(&font_info, glyph_index_in_font, scale * oversample_h, scale * oversample_v, 0, 0, &x0, &y0, &x1, &y1);
-        glyph_rects[glyph_i].w = (stbrp_coord)(x1 - x0 + oversample_h - 1);
-        glyph_rects[glyph_i].h = (stbrp_coord)(y1 - y0 + oversample_v - 1);
+        glyph_rects[glyph_i].w = (stbrp_coord)(x1 - x0 + padding + oversample_h - 1);
+        glyph_rects[glyph_i].h = (stbrp_coord)(y1 - y0 + padding + oversample_v - 1);
         total_surface += glyph_rects[glyph_i].w * glyph_rects[glyph_i].h;
     }
     
@@ -103,7 +105,7 @@ internal Font load_fonts(const char* font_filename)
     
     //4) on pack
     stbtt_pack_context spc = {};
-    stbtt_PackBegin(&spc, /* pixels */0, texture_width, TEX_HEIGHT_MAX, /*stride*/ 0, /*padding*/ 0, /* malloc ctx*/ 0);
+    stbtt_PackBegin(&spc, /* pixels */0, texture_width, TEX_HEIGHT_MAX, /*stride*/ 0, padding, /* malloc ctx*/ 0);
     
     stbrp_rect white_rect;
     white_rect.h = 2;
@@ -127,6 +129,7 @@ internal Font load_fonts(const char* font_filename)
         1.0f / texture_height
     };
     
+    printf("texture size : %d, %d\n", texture_width, texture_height);
     //5) FINALLY RENDER TO A GRAYSCALE BITMAP
     
     u8 *grayscale_pixels = (u8*)m_allocate(texture_width * texture_height);
@@ -153,7 +156,7 @@ internal Font load_fonts(const char* font_filename)
     
     // End packing
     stbtt_PackEnd(&spc);
-    m_freee(glyph_rects);
+    m_free(glyph_rects);
     glyph_rects = NULL;
     
     const float font_scale = stbtt_ScaleForPixelHeight(&font_info, PIXEL_SIZE);
@@ -194,7 +197,7 @@ internal Font load_fonts(const char* font_filename)
         */
         
         Glyph& glyph = glyphs[glyph_i];
-        glyph.codepoint = (unsigned int)codepoint;
+        glyph.codepoint = (u32)codepoint;
         glyph.X0 = q.x0 + font_off_x;
         glyph.Y0 = q.y0 + font_off_y;
         glyph.X1 = q.x1 + font_off_x;
@@ -204,6 +207,25 @@ internal Font load_fonts(const char* font_filename)
         glyph.U1 = q.s1;
         glyph.V1 = q.t1;
         glyph.advance_x = pc.xadvance;
+        
+        for(u16 x = 0; x < pc.x1 - pc.x0; x++)
+        {
+            for(u16 y = 0; y < (pc.y1 - pc.y0 + 1) / 2 ; y++)
+            {
+                u32 a_x = pc.x0 + x;
+                u32 a_y = pc.y0 + y;
+                u32 a_idx = a_x + texture_width * a_y;
+                u32 b_x = pc.x0 + x;
+                u32 b_y = pc.y1 - y;
+                u32 b_idx = b_x + texture_width * b_y;
+                
+                u8 swap = grayscale_pixels[a_idx];
+                grayscale_pixels[a_idx] = grayscale_pixels[b_idx];
+                grayscale_pixels[b_idx] = swap;
+            }
+        }
+        
+        
     }
     
     
@@ -232,15 +254,15 @@ internal Font load_fonts(const char* font_filename)
     for(u32 i = 0; i < texture_width * texture_height; i++)
     {
         u8 val = grayscale_pixels[i];
-        rgba_pixels[i] = val << 24 | val << 16 | val << 8 | 0xFF;;
+        rgba_pixels[i] = (u32)val << 24 | (u32)255 << 16 | (u32)255 << 8 | (u32)255;
     }
     
     
     
-    m_freee(font_file_buffer);
-    m_freee(codepoint_list);
-    m_freee(packedchars);
-    m_freee(grayscale_pixels);
+    m_free(font_file_buffer);
+    m_free(codepoint_list);
+    m_free(packedchars);
+    //m_free(grayscale_pixels);
     
     return {
         .font_size = PIXEL_SIZE,
@@ -250,6 +272,8 @@ internal Font load_fonts(const char* font_filename)
         .glyphs = glyphs,
         .glyph_count = (u32)glyph_count, //TODO ono
         .white_rect_pos = white_rect_pos,
+        .ascent = ascent,
+        .descent = descent,
         .atlas_pixels = rgba_pixels, 
         .atlas_texture_dim = Vec2{ (real32)texture_width, (real32)texture_height },
         .atlas_texture_id = 0

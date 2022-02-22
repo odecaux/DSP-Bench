@@ -103,8 +103,8 @@ typedef struct{
 
 //TODO types 
 typedef struct {
-    float           X0, Y0, X1, Y1;     // Glyph corners
-    float           U0, V0, U1, V1;     // Texture coordinates
+    real32 X0, Y0, X1, Y1;     // Glyph corners
+    real32 U0, V0, U1, V1;     // Texture coordinates
     i32 advance_x;
     
     u32 codepoint; 
@@ -125,6 +125,9 @@ typedef struct{
     Vec2 white_rect_pos;
     //TODO fallback
     
+    real32 ascent;
+    real32 descent;
+    
     u32* atlas_pixels;
     Vec2 atlas_texture_dim;
     u32 atlas_texture_id;
@@ -137,6 +140,10 @@ typedef struct {
     Color col;
 } Vertex;
 
+typedef struct{
+    Vec2 pos;
+    Vec2 quad_pos;
+} IR_Vertex;
 
 typedef struct {
     Vertex *draw_vertices;
@@ -148,6 +155,11 @@ typedef struct {
     Vec2 window_dim;
     
     Font* font;
+    
+    IR_Vertex ir_vertices[6];
+    real32 *IR_min_buffer;
+    real32 *IR_max_buffer;
+    u32 IR_pixel_count;
 } GraphicsContext;
 
 

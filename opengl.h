@@ -5,21 +5,33 @@
 
 #include <GL/GL.h>
 
-//TODO définir un point blanc dans la texture !!!!!
 #define DRAW_TEX_UV_FOR_WHITE	Vec{0.0f, 0.0f}
 
 typedef struct {
-    u32 shader_program;
+    u32 atlas_shader_program;
     
-    GLint uniform_mvp;
-    GLint uniform_texture;
-    GLint attribute_pos;
-    GLint attribute_uv;
-    GLint attribute_col;
+    //TODO c'est quoi les data types ? on est sûr que là haut c'est de u32 et pas des GLint (i32)
+    u32 atlas_vao;
+    u32 atlas_vertex_buffer;
+    u32 atlas_element_buffer;
     
-    u32 VAO;
-    u32 VBO; //TODO rename
-    u32 element_handle;
+    GLint atlas_uniform_mvp;
+    GLint atlas_uniform_texture;
+    GLint atlas_attribute_pos;
+    GLint atlas_attribute_uv;
+    GLint atlas_attribute_col;
+    
+    u32 ir_shader_program;
+    
+    u32 ir_vao;
+    u32 ir_vertex_buffer; //NOTE y a que 6 vertex ptdr
+    u32 ir_data_buffer;
+    u32 ir_data_texture;
+    
+    GLint ir_uniform_mvp;
+    GLint ir_attribute_pos;
+    GLint ir_attribute_quad_pos;
+    
     //u32 texture_handle; //TODO c'est chiant, ça veut dire qu'on l'a à deux endroits séparés ????
     
     HDC window_dc;
@@ -30,11 +42,25 @@ typedef struct {
 #define GL_VERTEX_SHADER                  0x8B31
 #define GL_FRAGMENT_SHADER                0x8B30
 #define GL_ARRAY_BUFFER                   0x8892
+#define GL_TEXTURE_BUFFER                 0x8C2A
 #define GL_STATIC_DRAW                    0x88E4
+#define GL_STREAM_DRAW                    0x88E0
 #define GL_COMPILE_STATUS                 0x8B81
 #define GL_LINK_STATUS                    0x8B82
 //TODO est-ce qu'on a vraiment besoin de ça ? on a pas tant de triangles que ça à priori
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
+#define GL_INFO_LOG_LENGTH                0x8B84
+#define GL_MAJOR_VERSION                  0x821B
+#define GL_MINOR_VERSION                  0x821C
+#define GL_R32F                           0x822E
+
+#define WGL_CONTEXT_MAJOR_VERSION_ARB     0x2091
+#define WGL_CONTEXT_MINOR_VERSION_ARB     0x2092
+#define WGL_CONTEXT_LAYER_PLANE_ARB       0x2093
+#define WGL_CONTEXT_FLAGS_ARB             0x2094
+#define WGL_CONTEXT_DEBUG_BIT_ARB         0x00000001
+#define WGL_CONTEXT_PROFILE_MASK_ARB      0x9126
+#define WGL_CONTEXT_CORE_PROFILE_BIT_ARB  0x00000001
 
 typedef GLuint(*glCreateProgram_t) (void);
 static glCreateProgram_t glCreateProgram = nullptr;
@@ -98,8 +124,6 @@ static glGetShaderiv_t glGetShaderiv = nullptr;
 typedef void (*glGetProgramiv_t)(GLuint program, GLenum pname, GLint *params);
 static glGetProgramiv_t glGetProgramiv = nullptr;
 
-
-
 typedef BOOL(*wglSwapIntervalEXT_t)(int interval);
 static wglSwapIntervalEXT_t wglSwapIntervalEXT = nullptr;
 
@@ -109,9 +133,23 @@ static wglGetSwapIntervalEXT_t wglGetSwapIntervalEXT = nullptr;
 typedef GLint (*glGetAttribLocation_t)(GLuint program, const char *name);
 static glGetAttribLocation_t glGetAttribLocation = nullptr;
 
-
 typedef void (*glUniform1i_t) (GLint location, GLint v0);
 static glUniform1i_t glUniform1i = nullptr; 
+
+typedef void (*glGetProgramInfoLog_t) (GLuint program, GLsizei bufSize, GLsizei *length, char*infoLog);
+static glGetProgramInfoLog_t glGetProgramInfoLog = nullptr;
+
+typedef void (*glTexBuffer_t)(GLenum target, GLenum internalformat, GLuint buffer);
+static glTexBuffer_t glTexBuffer = nullptr;
+
+typedef void (*glBufferSubData_t)(GLenum target, i32 *offset, i64 size, const void *data);
+static glBufferSubData_t glBufferSubData = nullptr;
+
+
+typedef void (*glActiveTexture_t)(GLenum texture);
+static glActiveTexture_t glActiveTexture = nullptr;
+
+typedef HGLRC (*wglCreateContextAttribsARB_t) (HDC hDC, HGLRC hShareContext, const int *attribList);
 
 #define LOAD_GL(function_name) function_name = (function_name##_t) wglGetProcAddress(#function_name); if(!function_name) { printf("failed to load" #function_name "\n"); return false; }
 
@@ -163,6 +201,10 @@ bool load_opengl_functions()
     LOAD_GL(wglGetSwapIntervalEXT);
     LOAD_GL(glGetAttribLocation);
     LOAD_GL(glUniform1i);
+    LOAD_GL(glGetProgramInfoLog);
+    LOAD_GL(glBufferSubData);
+    LOAD_GL(glTexBuffer);
+    LOAD_GL(glActiveTexture);
     
     return true;
 }
@@ -172,8 +214,7 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     
     HDC window_dc = GetDC(window);
     
-    PIXELFORMATDESCRIPTOR pixel_format =
-    {
+    const PIXELFORMATDESCRIPTOR pixel_format = {
         sizeof(PIXELFORMATDESCRIPTOR),
         1,
         PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER,
@@ -192,7 +233,7 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
         0, 0, 0
     };
     
-    int pixel_format_idx = ChoosePixelFormat(window_dc, &pixel_format);
+    const int pixel_format_idx = ChoosePixelFormat(window_dc, &pixel_format);
     if(pixel_format_idx == 0)
     {
         printf("couldn't find a valid pixel format\n");
@@ -201,13 +242,39 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     
     SetPixelFormat(window_dc, pixel_format_idx, &pixel_format);
     
-    HGLRC opengl_rc = wglCreateContext(window_dc);
-    if(wglMakeCurrent(window_dc, opengl_rc) == FALSE)
-    {
-        printf("couldn't open opengl context\n");
+    
+	const HGLRC tempContext = wglCreateContext(window_dc);
+	if(wglMakeCurrent(window_dc, tempContext) == FALSE)
+	{
+        printf("couldn't open opengl temp context\n");
         exit(1);
     }
     
+    const auto wglCreateContextAttribsARB = (wglCreateContextAttribsARB_t)wglGetProcAddress("wglCreateContextAttribsARB");
+    
+    const int attribs[] = {
+        WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+        WGL_CONTEXT_MINOR_VERSION_ARB, 3,
+        WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+        WGL_CONTEXT_FLAGS_ARB, true ? WGL_CONTEXT_DEBUG_BIT_ARB : 0, //TODO debug / release 
+        0
+    };
+    
+    const HGLRC opengl_rc = wglCreateContextAttribsARB(window_dc, 0, attribs);
+    if (opengl_rc == 0)
+    {
+        printf("couldn't create the elevated opengl context\n");
+        exit(0);
+    }
+    
+    
+    wglMakeCurrent(NULL, NULL);
+    wglDeleteContext(tempContext);
+    if(wglMakeCurrent(window_dc, opengl_rc) == FALSE)
+	{
+        printf("couldn't open opengl elevated context\n");
+        exit(1);
+    }
     
     if(!load_opengl_functions())
     {
@@ -215,6 +282,14 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
         exit(1);
     }
     
+    GLint major = 0;
+    GLint minor = 0;
+    glGetIntegerv(GL_MAJOR_VERSION, &major);
+    glGetIntegerv(GL_MINOR_VERSION, &minor);
+    
+    printf("opengl version : %d.%d\n", major, minor);
+    
+    const char* target_openg_version = "#version 330 core";
     
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -223,7 +298,11 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     printf("swap interval : %d\n", wglGetSwapIntervalEXT());
 	GLint status = GL_TRUE;
     
-    const char *vertexShaderSource = 
+    
+    
+    
+    //~ Atlas
+    const char *atlas_vertex_shader_source = 
         "#version 330 core\n"
         "uniform mat4 mvp;"
         
@@ -241,90 +320,203 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
         "   gl_Position =  mvp * vec4(pos.x, pos.y, 1.0, 1.0);\n"
         "}\0";
     
-    unsigned int vertexShader;
-    vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-    
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &status);
+    const u32 atlas_vertex_shader_handle = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(atlas_vertex_shader_handle, 1, &atlas_vertex_shader_source, NULL);
+    glCompileShader(atlas_vertex_shader_handle);
+    glGetShaderiv(atlas_vertex_shader_handle, GL_COMPILE_STATUS, &status);
 	assert(status == GL_TRUE);
     
-    const char *fragmentShaderSource =  
+    const char *atlas_fragment_shader_source =  
         "#version 330 core\n"
         "in vec2 frag_uv;\n"
         "in vec4 frag_col;\n"
+        
         "uniform sampler2D texture;\n"
         "layout (location = 0) out vec4 out_col;\n"
+        
         "void main()\n"
         "{\n"
         "    out_col = frag_col * texture(texture, frag_uv.st);\n"
         "}\n";
     
-    unsigned int fragmentShader;
-    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-    
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &status);
+    const u32 atlas_fragment_shader_handle = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(atlas_fragment_shader_handle, 1, &atlas_fragment_shader_source, NULL);
+    glCompileShader(atlas_fragment_shader_handle);
+    glGetShaderiv(atlas_fragment_shader_handle, GL_COMPILE_STATUS, &status);
 	assert(status == GL_TRUE);
     
-    unsigned int shader_program;
-    shader_program = glCreateProgram();
-    glAttachShader(shader_program, vertexShader);
-    glAttachShader(shader_program, fragmentShader);
-    glLinkProgram(shader_program);
-    
-    glGetProgramiv(shader_program, GL_LINK_STATUS, &status);
+    const u32 atlas_shader_program = glCreateProgram();
+    glAttachShader(atlas_shader_program, atlas_vertex_shader_handle);
+    glAttachShader(atlas_shader_program, atlas_fragment_shader_handle);
+    glLinkProgram(atlas_shader_program);
+    glGetProgramiv(atlas_shader_program, GL_LINK_STATUS, &status);
     assert(status == GL_TRUE);
     opengl_check_error();
     
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
+    glDeleteShader(atlas_vertex_shader_handle);
+    glDeleteShader(atlas_fragment_shader_handle);
     
-    GLint uniform_mvp = glGetUniformLocation(shader_program, "mvp");
-    GLint uniform_texture = glGetUniformLocation(shader_program, "texture");
     
-    GLint attribute_pos = glGetAttribLocation(shader_program, "pos");
-    GLint attribute_uv = glGetAttribLocation(shader_program, "uv");	
-    GLint attribute_col = (GLuint)glGetAttribLocation(shader_program, "col");
+    const GLint atlas_uniform_mvp = glGetUniformLocation(atlas_shader_program, "mvp");
+    const GLint 
+        atlas_uniform_texture = glGetUniformLocation(atlas_shader_program, "texture");
+    const GLint atlas_attribute_pos = glGetAttribLocation(atlas_shader_program, "pos");
+    const GLint atlas_attribute_uv = glGetAttribLocation(atlas_shader_program, "uv");	
+    const GLint atlas_attribute_col = (GLuint)glGetAttribLocation(atlas_shader_program, "col");
     opengl_check_error();
     
-    u32 VBO;
-    u32 VAO;
-    u32 element_handle;
-    
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-    glGenBuffers(1, &element_handle);
-    
-    //TODO dans quel sens je dois faire ça ?
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    
+    ////////////////////////////////
+    u32 atlas_vao; glGenVertexArrays(1, &atlas_vao);
+    u32 atlas_vertex_buffer; glGenBuffers(1, &atlas_vertex_buffer);
+    u32 atlas_element_buffer; glGenBuffers(1, &atlas_element_buffer);
     glGenTextures(1, &font->atlas_texture_id);
+    
+    glBindVertexArray(atlas_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, atlas_vertex_buffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, atlas_element_buffer);
     glBindTexture(GL_TEXTURE_2D, font->atlas_texture_id);
+    
+    
+    glEnableVertexAttribArray(atlas_attribute_pos);
+    glVertexAttribPointer(atlas_attribute_pos, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)OffsetOf(Vertex, pos));
+    
+    glEnableVertexAttribArray(atlas_attribute_uv);
+    glVertexAttribPointer(atlas_attribute_uv, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)OffsetOf(Vertex, uv));
+    
+    glEnableVertexAttribArray(atlas_attribute_col);
+    glVertexAttribPointer(atlas_attribute_col, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)OffsetOf(Vertex, col));
+    
+    //TODO hardcoded buffer size
+    glBufferData(GL_ARRAY_BUFFER, 4096 * 4 * sizeof(Vertex), NULL, GL_STREAM_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 4096 * 4 * sizeof(u32), NULL, GL_STREAM_DRAW);
+    
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 
                  font->atlas_texture_dim.x, font->atlas_texture_dim.y, 
                  0, GL_RGBA, GL_UNSIGNED_BYTE, font->atlas_pixels);
-    /*
-    m_freee(font->atlas_pixels);
+    
+    opengl_check_error();
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    
+    
+    //~ IR plot
+    const char *ir_vertex_shader_source = 
+        "#version 330 core\n"
+        
+        "uniform mat4 mvp;\n"
+        "layout (location = 0) in vec2 pos;\n"
+        "layout (location = 1) in vec2 quad_pos_in;\n"
+        
+        "out vec2 quad_pos;\n"
+        
+        "void main()\n"
+        "{\n"
+        "   gl_Position =  mvp * vec4(pos.x, pos.y, 1.0, 1.0);\n"
+        "   quad_pos = quad_pos_in;\n"
+        "}\0";
+    printf("%s\n", ir_vertex_shader_source);
+    const u32 ir_vertex_shader_handle = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(ir_vertex_shader_handle, 1, &ir_vertex_shader_source, NULL);
+    glCompileShader(ir_vertex_shader_handle);
+    glGetShaderiv(ir_vertex_shader_handle, GL_COMPILE_STATUS, &status);
+	assert(status == GL_TRUE);
+    
+    const char *ir_fragment_shader_source =  
+        "#version 330 core\n"
+        
+        //"uniform samplerBuffer IR_max;\n"
+        "uniform samplerBuffer IR;\n"
+        "in vec2 quad_pos;\n"
+        
+        "void main()\n"
+        "{\n"
+        "    int ir_buffer_size = textureSize(IR);\n"
+        "    float sample = texelFetch(IR, int(quad_pos.x * ir_buffer_size)).r;\n"
+        "    float value = step(quad_pos.y, sample);\n"
+        "    gl_FragColor  = vec4(value, value, value, 1.0f);\n"
+        "}\n";
+    
+    printf("%s\n", ir_fragment_shader_source);
+    
+    const u32 ir_fragment_shader_handle = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(ir_fragment_shader_handle, 1, &ir_fragment_shader_source, NULL);
+    glCompileShader(ir_fragment_shader_handle);
+    glGetShaderiv(ir_fragment_shader_handle, GL_COMPILE_STATUS, &status);
+	assert(status == GL_TRUE);
+    
+    const u32 ir_shader_program = glCreateProgram();
+    glAttachShader(ir_shader_program, ir_vertex_shader_handle);
+    glAttachShader(ir_shader_program, ir_fragment_shader_handle);
+    glLinkProgram(ir_shader_program);
+    glGetProgramiv(ir_shader_program, GL_LINK_STATUS, &status);
+    assert(status == GL_TRUE);
+    opengl_check_error();
+    
+    glDeleteShader(ir_vertex_shader_handle);
+    glDeleteShader(ir_fragment_shader_handle);
+    
+    const GLint ir_uniform_mvp = glGetUniformLocation(ir_shader_program, "mvp");
+    const GLint ir_attribute_pos = glGetAttribLocation(ir_shader_program, "pos");
+    const GLint ir_attribute_quad_pos = glGetAttribLocation(ir_shader_program, "quad_pos_in");
+    opengl_check_error();
+    
+    ////////////////////////////////
+    
+    u32 ir_vao; glGenVertexArrays(1, &ir_vao);
+    u32 ir_vertex_buffer; glGenBuffers(1, &ir_vertex_buffer);
+    
+    u32 ir_data_buffer_max; glGenBuffers(1, &ir_data_buffer_max);
+    u32 ir_data_texture_max; glGenTextures(1, &ir_data_texture_max);
+    
+    u32 ir_data_buffer; glGenBuffers(1, &ir_data_buffer);
+    u32 ir_data_texture; glGenTextures(1, &ir_data_texture);
+    
+    glBindVertexArray(ir_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, ir_vertex_buffer);
+    glBindBuffer(GL_TEXTURE_BUFFER, ir_data_buffer);
+    glBindTexture(GL_TEXTURE_BUFFER, ir_data_texture);
+    
+    glEnableVertexAttribArray(ir_attribute_pos);
+    glVertexAttribPointer(ir_attribute_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, pos));
+    glEnableVertexAttribArray(ir_attribute_quad_pos);
+    glVertexAttribPointer(ir_attribute_quad_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, quad_pos));
+    
+    
+    //TODO hardcoded IR display size
+    glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * 480, NULL, GL_STREAM_DRAW);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, ir_data_buffer);
+    
+    m_free(font->atlas_pixels);
     font->atlas_pixels = nullptr;
-    */
+    
     ReleaseDC(window, window_dc);
     
-    return {
-        .shader_program = shader_program, 
-        .uniform_mvp = uniform_mvp, 
-        .uniform_texture = uniform_texture,
-        .attribute_pos = attribute_pos,
-        .attribute_uv = attribute_uv,
-        .attribute_col = attribute_col,
-        .VAO = VAO, 
-        .VBO = VBO, 
-        .element_handle = element_handle,
+    return OpenGL_Context{
+        .atlas_shader_program = atlas_shader_program, 
+        .atlas_vao = atlas_vao, 
+        .atlas_vertex_buffer = atlas_vertex_buffer, 
+        .atlas_element_buffer= atlas_element_buffer,
+        
+        .atlas_uniform_mvp = atlas_uniform_mvp, 
+        .atlas_uniform_texture = atlas_uniform_texture,
+        .atlas_attribute_pos = atlas_attribute_pos,
+        .atlas_attribute_uv = atlas_attribute_uv,
+        .atlas_attribute_col = atlas_attribute_col,
+        
+        .ir_shader_program = ir_shader_program,
+        .ir_vao = ir_vao, 
+        .ir_vertex_buffer = ir_vertex_buffer, 
+        .ir_data_buffer = ir_data_buffer,
+        .ir_data_texture = ir_data_texture,
+        
+        .ir_uniform_mvp = ir_uniform_mvp, 
+        .ir_attribute_pos = ir_attribute_pos,
+        .ir_attribute_quad_pos = ir_attribute_quad_pos,
+        
         .window_dc = window_dc, 
         .opengl_rc = opengl_rc,
     };
@@ -342,8 +534,10 @@ void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx)
     
     glViewport(0,0, graphics_ctx->window_dim.x, graphics_ctx->window_dim.y);
     glScissor(0,0, graphics_ctx->window_dim.x, graphics_ctx->window_dim.y);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
     
-    float projection_matrix[16] = 
+    const float projection_matrix[16] = 
     {
         2.0f / graphics_ctx->window_dim.x, 0.0f, 0.0f, 0.0f,
         0.0f,- 2.0f / graphics_ctx->window_dim.y, 0.0f, 0.0f ,
@@ -351,54 +545,61 @@ void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx)
         -1.0f, 1.0f, 0.0f, 1.0f,
     };
     
+    //~ atlas
+    glUseProgram(opengl_ctx->atlas_shader_program);
+    glBindVertexArray(opengl_ctx->atlas_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->atlas_vertex_buffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, opengl_ctx->atlas_element_buffer);
+    glBindTexture(GL_TEXTURE_2D, graphics_ctx->font->atlas_texture_id);
     
-    glUseProgram(opengl_ctx->shader_program);
-    glUniform1i(opengl_ctx->uniform_texture, 0);
-    glUniformMatrix4fv(opengl_ctx->uniform_mvp, 
+    //TODO est-ce que je peux supprimer ça ?
+    //glUniform1i(opengl_ctx->atlas_uniform_texture, 0);
+    glUniformMatrix4fv(opengl_ctx->atlas_uniform_mvp, 
                        1, 
                        GL_FALSE, 
                        &projection_matrix[0]);
     
+    glBufferSubData(GL_ARRAY_BUFFER, 0, 
+                    graphics_ctx->draw_vertices_count * sizeof(Vertex), 
+                    graphics_ctx->draw_vertices);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, 
+                    graphics_ctx->draw_indices_count * sizeof(u32), 
+                    graphics_ctx->draw_indices);
     
-    glBindVertexArray(opengl_ctx->VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->VBO);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, opengl_ctx->element_handle);
-    glBindTexture(GL_TEXTURE_2D, graphics_ctx->font->atlas_texture_id);
+    glDrawElements(GL_TRIANGLES, (GLsizei)graphics_ctx->draw_indices_count, GL_UNSIGNED_INT, 0);
     
+    //~ IR
     
-    glEnableVertexAttribArray(opengl_ctx->attribute_pos);
-    glEnableVertexAttribArray(opengl_ctx->attribute_uv);
-    glEnableVertexAttribArray(opengl_ctx->attribute_col);
+    glUseProgram(opengl_ctx->ir_shader_program);
+    glBindVertexArray(opengl_ctx->ir_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->ir_vertex_buffer);
+    //NOTE pas besoin de glActivateTexture pcq on utilise qu'une seule texture à la fois
+    glBindTexture(GL_TEXTURE_BUFFER, opengl_ctx->ir_data_texture);
     
-    glVertexAttribPointer(opengl_ctx->attribute_pos, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)OffsetOf(Vertex, pos));
-    glVertexAttribPointer(opengl_ctx->attribute_uv, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)OffsetOf(Vertex, uv));
-    glVertexAttribPointer(opengl_ctx->attribute_col, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)OffsetOf(Vertex, col));
+    glUniformMatrix4fv(opengl_ctx->ir_uniform_mvp, 
+                       1, 
+                       GL_FALSE, 
+                       &projection_matrix[0]);
     
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, 
+                    6 * sizeof(IR_Vertex),
+                    graphics_ctx->ir_vertices);
+    glBufferSubData(GL_TEXTURE_BUFFER, 0, 
+                    graphics_ctx->IR_pixel_count * sizeof(real32), 
+                    graphics_ctx->IR_max_buffer);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
     
-    glDrawElements(GL_TRIANGLES, (GLsizei)graphics_ctx->draw_indices_count, GL_UNSIGNED_INT, NULL);
-    glBegin(GL_TRIANGLES);
-    glColor3f(1, 0, 0);
-    glVertex2f(-2, -1);
-    glVertex2f(1, -1);
-    glVertex2f(0, 2);
-    
-    glVertex2f(0, 0);
-    glVertex2f(100, 100);
-    glVertex2f(0, 100);
-    
-    glEnd();
-    
-    
+    glBindTexture(GL_TEXTURE_BUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
     glUseProgram(0);
     
-    SwapBuffers(opengl_ctx->window_dc);
     
+    SwapBuffers(opengl_ctx->window_dc);
+    //TODO est-ce qu'on gagne vraiment en latence avec ça ?
+    //glFinish();
 }
 
 void opengl_uninitialize(OpenGL_Context *opengl_ctx)

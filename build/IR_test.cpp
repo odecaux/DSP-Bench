@@ -47,16 +47,16 @@ void audio_callback(const Parameters& param,
     double gain = param.gain;
     
     
-    for(int sample = 1; sample < num_samples; sample++)
+    for(int sample = 0; sample < num_samples; sample++)
     {
         
         for(int channel = 0; channel < num_channels; channel++)
         {
-            out_buffer[channel][sample] = gain * 1.0f; 
+            out_buffer[channel][sample] = gain; 
         }
         
-        //gain -= step;
-        gain = gain * 0.9999f;
+        gain -= step;
+        //gain = gain * 0.9999f;
     }
 }
 

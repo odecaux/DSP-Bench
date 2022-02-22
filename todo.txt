@@ -1,7 +1,7 @@
-1 - faire fonctionner opengl
-2 - les autres fonctions de draw
-3 - inverser l'ui
-4 - le TEXTE
-5 - allocators
-
-faire un shader pour l'IR, FFT, oscillo
+merge app.cpp et main.cpp
+min/max IR : glActivateTexture
+smoothstep
+rectangle autour de l'IR
+fft
+allocators
+y a un bug dans les allocations ou load_font

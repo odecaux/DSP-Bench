@@ -26,19 +26,19 @@ void instrumented_free(void* address, const char* file, int line)
 
 #define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
 
-//#define LOG_ALLOCATIONS 1
+#define LOG_ALLOCATIONS 1
 
 #ifdef LOG_ALLOCATIONS
 
 #define m_allocate(size) instrumented_malloc(size, __FILENAME__, __LINE__)
 #define m_allocate_array(type, count) (type *)instrumented_array_malloc(count, sizeof(type), #type,__FILENAME__, __LINE__)
-#define m_freee(address) instrumented_free(address, __FILENAME__, __LINE__)
+#define m_free(address) instrumented_free(address, __FILENAME__, __LINE__)
 
 #else 
 
 #define m_allocate(size) malloc(size)
 #define m_allocate_array(type, count) (type *)malloc((count) * sizeof(type))
-#define m_freee(address) free(address)
+#define m_free(address) free(address)
 
 #endif
 
@@ -60,7 +60,7 @@ int noop_log(const char *__restrict __format, ...){
 static real32 total_width = 200.0f;
 static real32 title_height = 40.0f;
 static real32 field_height = 30.0f;
-static real32 field_title_height = 15.0f;
+static real32 field_title_height = 25.0f;
 //static real32 outer_margin = 10.0f;
 static real32 field_margin = 5.0f;
 static real32 cursor_size = 10.0f;
@@ -199,52 +199,14 @@ IO io_state_advance(const IO old_io)
     return new_io;
 }
 
-// TODO(octave): rename, what does this function actually do ? it's not really buffers
-void render_IR(real32** IR_buffer, u32 channel_count, u32 IR_length, real32* min_buffer, real32* max_buffer, u32 pixel_count)
-{
-    memset(min_buffer, 0, pixel_count * sizeof(real32));
-    memset(max_buffer, 0, pixel_count * sizeof(real32));
-    
-    for(u32 channel = 0; channel < channel_count; channel++)
-    {
-        for(u32 sample = 0; sample < IR_length; sample++)
-        {
-            u32 pixel_idx = sample * pixel_count / IR_length;
-            real32 value = IR_buffer[channel][sample];
-            if(value > max_buffer[pixel_idx])
-                max_buffer[pixel_idx] = value;
-            if(value < min_buffer[pixel_idx])
-                min_buffer[pixel_idx] = value;
-        }
-    }
-}
-
-void win32_draw_IR(Rect bounds,
-                   real32* IR_min_buffer,
-                   real32* IR_max_buffer,
-                   u32 IR_pixel_count,
-                   GraphicsContext *graphics_ctx)
-{
-    real32 middle_y = bounds.origin.y  + bounds.dim.y / 2.0f;
-    real32 half_h = bounds.dim.y / 2.0f;
-    
-    for(u32 i = 0; i < IR_pixel_count; i++)
-    {
-        Vec2 start = {bounds.origin.x + i, middle_y};
-        Vec2 end_max = {bounds.origin.x + i, middle_y - IR_max_buffer[i] * half_h};
-        Vec2 end_min = {bounds.origin.x + i, middle_y - IR_min_buffer[i] * half_h};
-        //draw_line(start, end_max, Color_Front, 1.0f, graphics_ctx);
-        //draw_line(start, end_min, Color_Front, 1.0f, graphics_ctx);
-    }
-}
-
 void compute_IR(Plugin_Handle& handle, 
                 real32** IR_buffer, 
                 u32 IR_length, 
                 Audio_Parameters& audio_parameters,
                 Plugin_Parameter_Value* current_parameters_values)
 {
-    for(u32 channel = 0; channel < audio_parameters.num_channels; channel++){
+    for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
+    {
         IR_buffer[channel][0] = 1.0f;
         for(u32 sample = 1; sample < IR_length; sample++)
         {
@@ -270,17 +232,91 @@ void compute_IR(Plugin_Handle& handle,
                             IR_length, 
                             audio_parameters.sample_rate);
     
-    delete IR_parameters_holder;
-    delete IR_state_holder;
+    m_free(IR_parameters_holder);
+    m_free(IR_state_holder);
 }
+
+// TODO(octave): rename, what does this function actually do ? it's not really buffers
+void render_IR(real32** IR_buffer, u32 channel_count, u32 IR_length, real32* min_buffer, real32* max_buffer, u32 pixel_count)
+{
+    memset(min_buffer, 0, pixel_count * sizeof(real32));
+    memset(max_buffer, 0, pixel_count * sizeof(real32));
+    
+    for(u32 channel = 0; channel < channel_count; channel++)
+    {
+        for(u32 sample = 0; sample < IR_length; sample++)
+        {
+            u32 pixel_idx = sample * pixel_count / IR_length;
+            real32 value = IR_buffer[channel][sample];
+            if(value > max_buffer[pixel_idx])
+                max_buffer[pixel_idx] = value;
+            if(value < min_buffer[pixel_idx])
+                min_buffer[pixel_idx] = value;
+        }
+    }
+}
+
+
+
+//TODO bad API, pour l'instant ça passe pcq la dimension est constante
+void draw_IR(Rect bounds,
+             /*real32* IR_min_buffer,
+             real32* IR_max_buffer,
+             u32 IR_pixel_count,*/
+             GraphicsContext *graphics_ctx)
+{
+    /*
+        real32 middle_y = bounds.origin.y  + bounds.dim.y / 2.0f;
+        real32 half_h = bounds.dim.y / 2.0f;
+        
+        for(u32 i = 0; i < IR_pixel_count; i++)
+        {
+            Vec2 start = {bounds.origin.x + i, middle_y};
+            Vec2 end_max = {bounds.origin.x + i, middle_y - IR_max_buffer[i] * half_h};
+            Vec2 end_min = {bounds.origin.x + i, middle_y - IR_min_buffer[i] * half_h};
+            //draw_line(start, end_max, Color_Front, 1.0f, graphics_ctx);
+            //draw_line(start, end_min, Color_Front, 1.0f, graphics_ctx);
+        }
+        */
+    Vec2 top_left = bounds.origin;
+    Vec2 top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
+    Vec2 bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
+    Vec2 bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
+    
+    Vec2 uv_top_left = Vec2{ 0.0f, 1.0f};
+    Vec2 uv_top_right = Vec2{ 1.0f, 1.0f};
+    Vec2 uv_bottom_left = Vec2{ 0.0f, 0.0f};
+    Vec2 uv_bottom_right = Vec2{ 1.0f, 0.0f};
+    
+    graphics_ctx->ir_vertices[0].pos = bottom_left;
+    graphics_ctx->ir_vertices[0].quad_pos = uv_bottom_left;
+    
+    graphics_ctx->ir_vertices[1].pos = top_right;
+    graphics_ctx->ir_vertices[1].quad_pos = uv_top_right;
+    
+    graphics_ctx->ir_vertices[2].pos = top_left;
+    graphics_ctx->ir_vertices[2].quad_pos = uv_top_left;
+    
+    graphics_ctx->ir_vertices[3].pos = bottom_left;
+    graphics_ctx->ir_vertices[3].quad_pos = uv_bottom_left;
+    
+    graphics_ctx->ir_vertices[4].pos = bottom_right;
+    graphics_ctx->ir_vertices[4].quad_pos = uv_bottom_right;
+    
+    graphics_ctx->ir_vertices[5].pos = top_right;
+    graphics_ctx->ir_vertices[5].quad_pos = uv_top_right;
+}
+
 
 void frame(Plugin_Descriptor& descriptor, 
            GraphicsContext *graphics_ctx, 
            UI_State& ui_state, 
            IO frame_io, 
+           /*
            real32* IR_min_buffer,
            real32* IR_max_buffer,
            u32 IR_pixel_count,
+           */
            Plugin_Parameter_Value* current_parameter_values,
            bool& parameters_were_tweaked)
 {
@@ -428,12 +464,12 @@ void frame(Plugin_Descriptor& descriptor,
         draw_text(StringLit("Impulse Response"), IR_title_bounds, Color_Front, graphics_ctx); 
         
         Rect IR_outer_bounds{
-            {total_width, 10.0f},
+            {total_width, 15.0f},
             {500.0f, 150.0f}
         };
         auto IR_inner_bounds = rect_remove_padding(IR_outer_bounds, 10.0f, 10.0f);
         draw_rectangle(IR_inner_bounds, Color_Front, graphics_ctx);
-        win32_draw_IR(IR_inner_bounds, IR_min_buffer, IR_max_buffer, IR_pixel_count, graphics_ctx);
+        draw_IR(IR_inner_bounds /*, IR_min_buffer, IR_max_buffer, IR_pixel_count*/ , graphics_ctx);
         
         
     }
@@ -483,10 +519,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
     }
     else {
         
-        GraphicsContext *graphics_ctx = (GraphicsContext*)(GetWindowLongPtrW(
-                                                                             window,
-                                                                             GWLP_USERDATA
-                                                                             ));
+        GraphicsContext *graphics_ctx = (GraphicsContext*)(GetWindowLongPtrW(window, GWLP_USERDATA));
         
         if(message == WM_SIZE)
         {
@@ -510,28 +543,12 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 
 
 
-extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
-                                                      Audio_Parameters& audio_parameters,
-                                                      Plugin_Parameter_Value *current_value,
-                                                      Plugin_Parameters_Ring_Buffer* ring)
+extern "C" __declspec(dllexport)  
+void initialize_gui(Plugin_Handle& handle,
+                    Audio_Parameters& audio_parameters,
+                    Plugin_Parameter_Value *current_value,
+                    Plugin_Parameters_Ring_Buffer* ring)
 {
-    
-    //~ IR initialization
-    Plugin_Descriptor& descriptor = handle.descriptor;
-    
-    const u32 IR_length = 44100;
-    real32** IR_buffer = m_allocate_array(real32*, audio_parameters.num_channels);
-    for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
-    {
-        IR_buffer[channel] = m_allocate_array(real32, IR_length);
-    }
-    
-    compute_IR(handle, IR_buffer, IR_length, audio_parameters, current_value);
-    
-    real32* IR_max_buffer = m_allocate_array(real32, 480);
-    real32* IR_min_buffer = m_allocate_array(real32, 480);
-    
-    render_IR(IR_buffer, audio_parameters.num_channels, 44100, IR_min_buffer, IR_max_buffer, 480);
     
     //~ Win32 initialization
     HINSTANCE instance = GetModuleHandle(0);
@@ -553,8 +570,10 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
     
     
     GraphicsContext graphics_ctx = { 
-        m_allocate_array(Vertex, 4096 * 4), 0,
-        m_allocate_array(u32, 4096 * 4), 0
+        .draw_vertices = m_allocate_array(Vertex, 4096 * 4),
+        .draw_vertices_count = 0,
+        .draw_indices = m_allocate_array(u32, 4096 * 4), 
+        .draw_indices_count = 0
     };
     
     graphics_ctx.window_dim = { 600.0f + total_width, 400.0f};
@@ -572,6 +591,27 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
     Font jetbrains_mono = load_fonts("JetBrainsMono-Regular.ttf");
     OpenGL_Context opengl_ctx = opengl_initialize(window, &jetbrains_mono);
     graphics_ctx.font = &jetbrains_mono;
+    
+    //~ IR initialization
+    Plugin_Descriptor& descriptor = handle.descriptor;
+    
+    const u32 IR_length = 44100;
+    real32** IR_buffer = m_allocate_array(real32*, audio_parameters.num_channels);
+    for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
+    {
+        IR_buffer[channel] = m_allocate_array(real32, IR_length);
+    }
+    
+    compute_IR(handle, IR_buffer, IR_length, audio_parameters, current_value);
+    
+    
+    graphics_ctx.IR_max_buffer = m_allocate_array(real32, 480);
+    graphics_ctx.IR_min_buffer = m_allocate_array(real32, 480);
+    graphics_ctx.IR_pixel_count = 480;
+    render_IR(IR_buffer, audio_parameters.num_channels, 44100, graphics_ctx.IR_min_buffer, graphics_ctx.IR_max_buffer, 480);
+    
+    
+    //~ 
     
     ShowWindow(window, 1);
     UpdateWindow(window);
@@ -680,13 +720,16 @@ extern "C" __declspec(dllexport)  void initialize_gui(Plugin_Handle& handle,
         
         bool parameters_were_tweaked = false;
         
-        frame(descriptor, &graphics_ctx, ui_state, frame_io, IR_min_buffer, IR_max_buffer, 480, current_value, parameters_were_tweaked);
+        frame(descriptor, &graphics_ctx, ui_state, frame_io, 
+              /*IR_min_buffer, IR_max_buffer, 480,*/ 
+              current_value, parameters_were_tweaked);
+        
         
         if(parameters_were_tweaked)
         {
             plugin_parameters_buffer_push(*ring, current_value);
             compute_IR(handle, IR_buffer, IR_length, audio_parameters, current_value);
-            render_IR(IR_buffer, audio_parameters.num_channels, 44100, IR_min_buffer, IR_max_buffer, 480);
+            render_IR(IR_buffer, audio_parameters.num_channels, 44100, graphics_ctx.IR_min_buffer, graphics_ctx.IR_max_buffer, 480);
         }
         
         opengl_render_ui(&opengl_ctx, &graphics_ctx);

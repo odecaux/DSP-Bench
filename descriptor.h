@@ -88,7 +88,7 @@ void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_P
 
 Plugin_Parameter_Value* plugin_parameters_buffer_pull(Plugin_Parameters_Ring_Buffer& ring);
 
-
+//TODO trouver un meilleur nom
 internal void update_parameters_holder(Plugin_Descriptor* descriptor, 
                                        Plugin_Parameter_Value* new_values,
                                        char* plugin_parameters_holder)
