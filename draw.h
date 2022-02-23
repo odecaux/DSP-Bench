@@ -272,7 +272,7 @@ void draw_slider(Rect slider_bounds,
     real32 slider_x = slider_bounds.origin.x + normalized_value * slider_bounds.dim.x; 
     Rect slider_rect = {
         Vec2{slider_x, slider_bounds.origin.y},
-        Vec2{5.0f, slider_bounds.dim.y}
+        Vec2{SLIDER_WIDTH, slider_bounds.dim.y}
     };
     fill_rectangle(slider_rect, Color_Front, graphics_ctx);
 }

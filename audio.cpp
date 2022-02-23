@@ -1,14 +1,14 @@
-
-#include "audio.h"
-#include "base.h"
-#include "structs.h"
 #include "string.h"
-
 #include "math.h"
 #include "windows.h"
 #include "stdio.h"
 
-#define M_2I (3.1415926535897932384626433 * 2.0)
+#include "base.h"
+#include "descriptor.h"
+#include "structs.h"
+#include "audio.h"
+
+
 
 
 void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Context* ctx)
@@ -39,7 +39,6 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
         copy(audio_file_buffer[channel] + *read_cursor, output_buffer[channel], samples_to_write);
     }
     
-    
     for(auto channel = 0; channel < channels_to_write; channel++)
     {
         for(auto sample = samples_to_write; sample < parameters.num_samples; sample++)
@@ -55,8 +54,6 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
     
     *read_cursor += samples_to_write;
     
-    
-    
     if(plugin_is_valid)
     {
         ctx->audio_callback_f(ctx->plugin_parameters_holder,
@@ -66,7 +63,6 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
                               parameters.num_samples,
                               parameters.sample_rate);
     }
-    
 }
 
 

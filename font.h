@@ -3,7 +3,6 @@
 #ifndef FONT_H
 #define FONT_H
 
-#include "string.h"
 
 #define STB_RECT_PACK_IMPLEMENTATION 1
 #include "include/stb_rect_pack.h"

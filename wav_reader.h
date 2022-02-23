@@ -5,20 +5,20 @@
 
 
 
-typedef struct  WAV_HEADER{
+typedef struct {
     /*char                RIFF[4];        // RIFF Header      Magic header
     unsigned long       chunk_size;      // RIFF Chunk Size  
     char                WAVE[4];        // WAVE Header      
     char                format_chunk_id[4];         // FMT header       
     unsigned long       format_chunk_size;  // Size of the format_chunk_id chunk                                
-    */unsigned short      AudioFormat;    // Audio format 1=CM,6=mulaw,7=alaw, 257=IBM Mu-Law, 258=IBM A-Law, 259=ADCM 
+    */unsigned short      format;    // Audio format 1=CM,6=mulaw,7=alaw, 257=IBM Mu-Law, 258=IBM A-Law, 259=ADCM 
     unsigned short      num_channels;      // Number of channels 1=Mono 2=Sterio                   
     unsigned long       sample_rate;  // Sampling Frequency in Hz                             
-    unsigned long       byteserSec;    // bytes per second 
-    unsigned short      blockAlign;     // 2=16-bit mono, 4=16-bit stereo 
+    unsigned long       bytes_per_sec;    // bytes per second 
+    unsigned short      block_align;     // 2=16-bit mono, 4=16-bit stereo 
     unsigned short      bit_depth;  // Number of bits per sample      
     
-}Wav_Format; 
+} Wav_Format; 
 
 
 
@@ -81,16 +81,15 @@ internal void debug_header(Wav_Format *header)
     //std::cout << "File is                    :" << file_length<< " bytes." << "\n";
     
     
-    // Display the sampling Rate form the header
-    std::cout << "Sampling Rate              :" << header->sample_rate << "\n";
-    std::cout << "Number of bits used        :" << header->bit_depth << "\n";
-    std::cout << "Number of channels         :" << header->num_channels << "\n";
-    std::cout << "Number of bytes per second :" << header->byteserSec << "\n";
-    std::cout << "Audio Format               :" << header->AudioFormat << "\n";
+    printf("Audio Format               : %hu\n", header->format);
     // Audio format 1=CM,6=mulaw,7=alaw, 257=IBM Mu-Law, 258=IBM A-Law, 259=ADCM 
+    printf("Number of channels         : %hu\n", header->num_channels);
+    printf("Sampling Rate              : %hu\n", header->sample_rate);
+    printf("Number of bytes per second : %lu\n", header->bytes_per_sec);
+    printf("Block align                : %hu\n", header->block_align);
+    printf("Number of bits used        : %lu\n", header->bit_depth);
     
     
-    std::cout << "Block align                :" << header->blockAlign << "\n";
     
     
 }

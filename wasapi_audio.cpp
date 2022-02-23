@@ -1,14 +1,19 @@
 
-#include "audio.h"
-
+#include "stdlib.h"
 #include "stdio.h"
 #include "assert.h"
-
+#include "math.h"
+#include "string.h"
 
 #include <initguid.h>
 #include "mmdeviceapi.h"
 #include "audioclient.h"
 #include "winuser.h"
+
+#include "base.h"
+#include "descriptor.h"
+#include "structs.h"
+#include "audio.h"
 
 const IID IID_IAudioClient  = __uuidof(IAudioClient);
 const IID IID_IAudioRenderClient = __uuidof(IAudioRenderClient);

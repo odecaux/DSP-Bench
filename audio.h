@@ -3,14 +3,6 @@
 #ifndef AUDIO_H
 #define AUDIO_H
 
-#include "assert.h"
-#include "math.h"
-#include "string.h"
-
-#include "base.h"
-#include "structs.h"
-
-#define M_2I (3.1415926535897932384626433 * 2.0)
 
 internal u64 next_power_of_two(u64 in)
 {

@@ -1,21 +1,21 @@
+#include "hardcoded_values.h"
 
 #include "stdio.h"
-#include <iostream>
+#include "math.h"
 #include "assert.h"
-
-#include "base.h"
-
 #include "windows.h"
 
+#include "base.h"
+#include "descriptor.h"
+#include "structs.h"
 #include "wav_reader.h"
 #include "audio.h"
+#include "app.h"
 
-
-
-i32 main(i32 argc, char** argv)
+int WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR lpCmdLine, i32 show_cmd)
 {
-    
-    *(char*)0;
+    i32 argc = __argc;
+    char **argv = __argv;
     if(argc != 3)
     {
         printf("wrong argument count\n");
@@ -41,7 +41,7 @@ i32 main(i32 argc, char** argv)
     
     auto wav_data = windows_load_wav(audio_filename);
     
-    if(wav_data.header.AudioFormat != 1)
+    if(wav_data.header.format != 1)
     {
         printf("wrong audio format\n");
         return -1;
@@ -97,13 +97,6 @@ i32 main(i32 argc, char** argv)
     //~
     //compiler stuff
     
-    
-    HMODULE gui_dll = LoadLibraryA("gui.dll");
-    if(gui_dll == NULL)
-    {
-        printf("couldn't find gui.dll\n");
-        return -1;
-    }
     
     HMODULE compiler_dll = LoadLibraryA("compiler.dll");
     if(compiler_dll == NULL)
@@ -171,7 +164,7 @@ i32 main(i32 argc, char** argv)
                 }break;
             }
         }
-        Plugin_Parameters_Ring_Buffer ring = plugin_parameters_ring_buffer_initialize(handle.descriptor.num_parameters,4096);
+        Plugin_Parameters_Ring_Buffer ring = plugin_parameters_ring_buffer_initialize(handle.descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
         
         audio_context.ring = &ring;
         audio_context.audio_callback_f = handle.audio_callback_f;
@@ -182,20 +175,7 @@ i32 main(i32 argc, char** argv)
         InterlockedExchange8(&audio_context.plugin_is_valid, 1);
         
         
-        
-        typedef void(*initialize_gui_t)(Plugin_Handle&,
-                                        Audio_Parameters&,
-                                        Plugin_Parameter_Value*,
-                                        Plugin_Parameters_Ring_Buffer*);
-        
-        auto initialize_gui_f  = (initialize_gui_t)GetProcAddress(gui_dll, "initialize_gui");
-        if(initialize_gui_f == NULL)
-        {
-            printf("couldnt find initialize_gui()\n");
-            return -1;
-        }
-        
-        initialize_gui_f(handle, audio_parameters, parameter_values_ui_side, &ring);
+        initialize_gui(handle, audio_parameters, parameter_values_ui_side, &ring);
         
     }
     else

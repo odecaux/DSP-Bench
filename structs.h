@@ -3,8 +3,6 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
 
-#include "base.h"
-#include "descriptor.h"
 
 typedef void*(*buffer_allocator_t)(unsigned int);
 

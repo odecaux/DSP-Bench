@@ -1,4 +1,3 @@
-merge app.cpp et main.cpp
 min/max IR : glActivateTexture
 smoothstep
 rectangle autour de l'IR

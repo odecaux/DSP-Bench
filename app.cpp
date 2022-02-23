@@ -1,70 +1,33 @@
-//#include "stdlib.h"
+#include "hardcoded_values.h"
+
+#include "stdlib.h"
 #include "assert.h"
 #include "stdio.h"
 #include "math.h"
+#include "string.h"
 
 #include "windows.h"
 
-void* instrumented_malloc(size_t size, const char* file, int line)
-{
-    printf("malloc : %llu bytes at %s:%d\n", size, file, line);
-    return malloc(size);
-}
-
-
-void* instrumented_array_malloc(size_t count, size_t size, const char* type, const char* file, int line)
-{
-    printf("malloc : %llu * %s at %s:%d\n", count, type, file, line);
-    return malloc(count * size);
-}
-
-void instrumented_free(void* address, const char* file, int line)
-{
-    printf("free : %s:%d\n", file, line);
-    free(address);
-}
-
-#define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
-
-#define LOG_ALLOCATIONS 1
-
-#ifdef LOG_ALLOCATIONS
-
-#define m_allocate(size) instrumented_malloc(size, __FILENAME__, __LINE__)
-#define m_allocate_array(type, count) (type *)instrumented_array_malloc(count, sizeof(type), #type,__FILENAME__, __LINE__)
-#define m_free(address) instrumented_free(address, __FILENAME__, __LINE__)
-
-#else 
-
-#define m_allocate(size) malloc(size)
-#define m_allocate_array(type, count) (type *)malloc((count) * sizeof(type))
-#define m_free(address) free(address)
-
-#endif
-
+#include "memory.h"
 
 #include "base.h"
+#include "descriptor.h"
 #include "structs.h"
 #include "opengl.h"
 #include "os_helpers.h"
 #include "font.h"
 #include "draw.h"
+#include "app.h"
 
+#include <ippdefs.h>
+
+#include "fft.h"
 //#define log printf
 #define log noop_log
 
 int noop_log(const char *__restrict __format, ...){
     return 1;
 }
-
-static real32 total_width = 200.0f;
-static real32 title_height = 40.0f;
-static real32 field_height = 30.0f;
-static real32 field_title_height = 25.0f;
-//static real32 outer_margin = 10.0f;
-static real32 field_margin = 5.0f;
-static real32 cursor_size = 10.0f;
-static real32 min_max_label_width = 40.0f;
 
 Vec2 win32_get_mouse_position(HWND window)
 {
@@ -88,7 +51,7 @@ i64 win32_init_timer()
     return (i64) time.QuadPart;
 }
 
-i64 win32_pace_60_fps(i64 last_time, LARGE_INTEGER counter_frequency, real32* delta_time) // TODO(octave): refactor variable names
+i64 win32_pace_60_fps(i64 last_time, i64 *current_time, real32 *delta_time) // TODO(octave): refactor variable names
 {
     
     //manual framerate management
@@ -107,6 +70,10 @@ i64 win32_pace_60_fps(i64 last_time, LARGE_INTEGER counter_frequency, real32* de
     }
     
 #endif
+    
+    LARGE_INTEGER counter_frequency;
+    QueryPerformanceFrequency(&counter_frequency);
+    
     LARGE_INTEGER frame_end;
     QueryPerformanceCounter(&frame_end);
     auto frame_elapsed  = frame_end.QuadPart - last_time;
@@ -265,19 +232,8 @@ void draw_IR(Rect bounds,
              u32 IR_pixel_count,*/
              GraphicsContext *graphics_ctx)
 {
-    /*
-        real32 middle_y = bounds.origin.y  + bounds.dim.y / 2.0f;
-        real32 half_h = bounds.dim.y / 2.0f;
-        
-        for(u32 i = 0; i < IR_pixel_count; i++)
-        {
-            Vec2 start = {bounds.origin.x + i, middle_y};
-            Vec2 end_max = {bounds.origin.x + i, middle_y - IR_max_buffer[i] * half_h};
-            Vec2 end_min = {bounds.origin.x + i, middle_y - IR_min_buffer[i] * half_h};
-            //draw_line(start, end_max, Color_Front, 1.0f, graphics_ctx);
-            //draw_line(start, end_min, Color_Front, 1.0f, graphics_ctx);
-        }
-        */
+    bounds.dim.x -= 2.0f;
+    bounds.dim.y -= 2.0f;
     Vec2 top_left = bounds.origin;
     Vec2 top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
     Vec2 bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
@@ -328,45 +284,45 @@ void frame(Plugin_Descriptor& descriptor,
     
     Rect title_bounds = { 
         Vec2{0.0f, 0.0f}, 
-        Vec2{total_width, title_height}
+        Vec2{TOTAL_WIDTH, TITLE_HEIGHT}
     };
     draw_rectangle(title_bounds, Color_Front, graphics_ctx);
     draw_text(StringLit("gain.cpp"), title_bounds, Color_Front, graphics_ctx);
     
-    Vec2 position = {0.0f, title_height};
+    Vec2 position = {0.0f, TITLE_HEIGHT};
     
     
     for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters; parameter_idx++)
     {
-        position.y += field_margin * 2;
+        position.y += FIELD_MARGIN * 2;
         
         auto& current_parameter_value = current_parameter_values[parameter_idx];
         auto& parameter_descriptor = descriptor.parameters[parameter_idx];
         
         Rect field_title_bounds = {
-            position, {total_width, field_title_height}
+            position, {TOTAL_WIDTH, FIELD_TITLE_HEIGHT}
         };
         
         draw_text(parameter_descriptor.name, field_title_bounds, Color_Front, graphics_ctx);
-        //draw_rectangle(field_title_bounds, Color_Front, graphics_ctx);
-        position.y += field_title_height + field_margin;
+        draw_rectangle(field_title_bounds, Color_Front, graphics_ctx);
+        position.y += FIELD_TITLE_HEIGHT + FIELD_MARGIN;
         
         Rect field_bounds = {
             position,
-            {total_width, field_height}
+            {TOTAL_WIDTH, FIELD_HEIGHT}
         };
         
-        Rect slider_bounds = rect_remove_padding(field_bounds, min_max_label_width, 0.0f);
+        Rect slider_bounds = rect_remove_padding(field_bounds, MIN_MAX_LABEL_WIDTH, 0.0f);
         
         Rect min_label_bounds = {
             {0.0f, position.y},
-            {min_max_label_width, field_height}
+            {MIN_MAX_LABEL_WIDTH, FIELD_HEIGHT}
         };
         
         
         Rect max_label_bounds = {
-            {0.0f + total_width - min_max_label_width, position.y},
-            {min_max_label_width, field_height}
+            {0.0f + TOTAL_WIDTH - MIN_MAX_LABEL_WIDTH, position.y},
+            {MIN_MAX_LABEL_WIDTH, FIELD_HEIGHT}
         };
         
         draw_rectangle(min_label_bounds, Color_Front, graphics_ctx);
@@ -447,16 +403,17 @@ void frame(Plugin_Descriptor& descriptor,
             }break;
         }
         
-        position.y += field_height;
+        position.y += FIELD_HEIGHT;
     }
     
     
+    //TODO hardcoded
     
     //~ 
     //IR
     {
         Rect IR_title_bounds = {
-            {total_width + 10.0f, 5.0f},
+            {TOTAL_WIDTH + 10.0f, 5.0f},
             {200.0f, 10.0f}
         };
         
@@ -464,7 +421,7 @@ void frame(Plugin_Descriptor& descriptor,
         draw_text(StringLit("Impulse Response"), IR_title_bounds, Color_Front, graphics_ctx); 
         
         Rect IR_outer_bounds{
-            {total_width, 15.0f},
+            {TOTAL_WIDTH, 15.0f},
             {500.0f, 150.0f}
         };
         auto IR_inner_bounds = rect_remove_padding(IR_outer_bounds, 10.0f, 10.0f);
@@ -480,7 +437,7 @@ void frame(Plugin_Descriptor& descriptor,
     {
         
         Rect IR_title_bounds = {
-            {total_width + 10.0f, 160.0f},
+            {TOTAL_WIDTH + 10.0f, 160.0f},
             {200.0f, 10.0f}
         };
         
@@ -488,7 +445,7 @@ void frame(Plugin_Descriptor& descriptor,
         draw_text(StringLit("Frequency Response"), IR_title_bounds, Color_Front, graphics_ctx); 
         
         Rect IR_outer_bounds{
-            {total_width, 170.0f},
+            {TOTAL_WIDTH, 170.0f},
             {500.0f, 150.0f}
         };
         auto IR_inner_bounds = rect_remove_padding(IR_outer_bounds, 10.0f, 10.0f);
@@ -543,7 +500,6 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 
 
 
-extern "C" __declspec(dllexport)  
 void initialize_gui(Plugin_Handle& handle,
                     Audio_Parameters& audio_parameters,
                     Plugin_Parameter_Value *current_value,
@@ -554,9 +510,6 @@ void initialize_gui(Plugin_Handle& handle,
     HINSTANCE instance = GetModuleHandle(0);
     
     CoInitializeEx(NULL, COINIT_MULTITHREADED); 
-    
-    LARGE_INTEGER counter_frequency;
-    QueryPerformanceFrequency(&counter_frequency);
     
     WNDCLASSEX main_class{
         .cbSize        = sizeof main_class,
@@ -570,13 +523,14 @@ void initialize_gui(Plugin_Handle& handle,
     
     
     GraphicsContext graphics_ctx = { 
-        .draw_vertices = m_allocate_array(Vertex, 4096 * 4),
+        .draw_vertices = m_allocate_array(Vertex, ATLAS_MAX_VERTEX_COUNT),
         .draw_vertices_count = 0,
-        .draw_indices = m_allocate_array(u32, 4096 * 4), 
+        .draw_indices = m_allocate_array(u32, ATLAS_MAX_VERTEX_COUNT), 
         .draw_indices_count = 0
     };
     
-    graphics_ctx.window_dim = { 600.0f + total_width, 400.0f};
+    //TODO Hardcoded
+    graphics_ctx.window_dim = { 600.0f + TOTAL_WIDTH, 400.0f};
     HWND window = CreateWindow("Main Class", "Test", 
                                WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, 
@@ -588,31 +542,37 @@ void initialize_gui(Plugin_Handle& handle,
     
     
     //TODO c'est un peu nul comme interface en vrai
-    Font jetbrains_mono = load_fonts("JetBrainsMono-Regular.ttf");
+    Font jetbrains_mono = load_fonts(DEFAULT_FONT_FILENAME);
     OpenGL_Context opengl_ctx = opengl_initialize(window, &jetbrains_mono);
     graphics_ctx.font = &jetbrains_mono;
     
     //~ IR initialization
     Plugin_Descriptor& descriptor = handle.descriptor;
     
-    const u32 IR_length = 44100;
     real32** IR_buffer = m_allocate_array(real32*, audio_parameters.num_channels);
     for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
     {
-        IR_buffer[channel] = m_allocate_array(real32, IR_length);
+        IR_buffer[channel] = m_allocate_array(real32, IR_BUFFER_LENGTH);
     }
     
-    compute_IR(handle, IR_buffer, IR_length, audio_parameters, current_value);
+    compute_IR(handle, IR_buffer, IR_BUFFER_LENGTH, audio_parameters, current_value);
     
+    Ipp_Context ipp_ctx = ipp_initialize();
     
-    graphics_ctx.IR_max_buffer = m_allocate_array(real32, 480);
-    graphics_ctx.IR_min_buffer = m_allocate_array(real32, 480);
-    graphics_ctx.IR_pixel_count = 480;
-    render_IR(IR_buffer, audio_parameters.num_channels, 44100, graphics_ctx.IR_min_buffer, graphics_ctx.IR_max_buffer, 480);
+    Vec2* fft_out = m_allocate_array(Vec2, IR_BUFFER_LENGTH);
+    forward_fft(IR_buffer[0], fft_out, IR_BUFFER_LENGTH, &ipp_ctx);
     
+    real32 *magnitudes  = m_allocate_array(real32, IR_BUFFER_LENGTH);
+    for(i32 i = 0; i < IR_BUFFER_LENGTH; i++)
+        magnitudes[i] = sqrt(fft_out[i].x * fft_out[i].x + fft_out[i].y * fft_out[i].y);
+    
+    graphics_ctx.IR_max_buffer = m_allocate_array(real32, IR_PIXEL_LENGTH);
+    graphics_ctx.IR_min_buffer = m_allocate_array(real32, IR_PIXEL_LENGTH);
+    graphics_ctx.IR_pixel_count = IR_PIXEL_LENGTH;
+    
+    render_IR(&magnitudes, /*audio_parameters.num_channels*/ 1, IR_BUFFER_LENGTH, graphics_ctx.IR_min_buffer, graphics_ctx.IR_max_buffer, IR_PIXEL_LENGTH);
     
     //~ 
-    
     ShowWindow(window, 1);
     UpdateWindow(window);
     
@@ -721,20 +681,22 @@ void initialize_gui(Plugin_Handle& handle,
         bool parameters_were_tweaked = false;
         
         frame(descriptor, &graphics_ctx, ui_state, frame_io, 
-              /*IR_min_buffer, IR_max_buffer, 480,*/ 
+              /*IR_min_buffer, IR_max_buffer, IR_PIXEL_LENGTH,*/ 
               current_value, parameters_were_tweaked);
         
         
         if(parameters_were_tweaked)
         {
             plugin_parameters_buffer_push(*ring, current_value);
-            compute_IR(handle, IR_buffer, IR_length, audio_parameters, current_value);
-            render_IR(IR_buffer, audio_parameters.num_channels, 44100, graphics_ctx.IR_min_buffer, graphics_ctx.IR_max_buffer, 480);
+            compute_IR(handle, IR_buffer, IR_BUFFER_LENGTH, audio_parameters, current_value);
+            render_IR(IR_buffer, audio_parameters.num_channels, IR_BUFFER_LENGTH, graphics_ctx.IR_min_buffer, graphics_ctx.IR_max_buffer, IR_PIXEL_LENGTH);
         }
         
         opengl_render_ui(&opengl_ctx, &graphics_ctx);
         
-        last_time = win32_pace_60_fps(last_time, counter_frequency, &frame_io.delta_time);
+        i64 current_time;
+        win32_pace_60_fps(last_time, &current_time, &frame_io.delta_time);
+        last_time = current_time;
     }
     
     opengl_uninitialize(&opengl_ctx);

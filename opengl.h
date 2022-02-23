@@ -387,8 +387,8 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     glVertexAttribPointer(atlas_attribute_col, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)OffsetOf(Vertex, col));
     
     //TODO hardcoded buffer size
-    glBufferData(GL_ARRAY_BUFFER, 4096 * 4 * sizeof(Vertex), NULL, GL_STREAM_DRAW);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 4096 * 4 * sizeof(u32), NULL, GL_STREAM_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, ATLAS_MAX_VERTEX_COUNT* sizeof(Vertex), NULL, GL_STREAM_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, ATLAS_MAX_VERTEX_COUNT * sizeof(u32), NULL, GL_STREAM_DRAW);
     
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -435,7 +435,7 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
         "{\n"
         "    int ir_buffer_size = textureSize(IR);\n"
         "    float sample = texelFetch(IR, int(quad_pos.x * ir_buffer_size)).r;\n"
-        "    float value = step(quad_pos.y, sample);\n"
+        "    float value = step(abs(sample - quad_pos.y) - 0.01f, 0.0f);\n"
         "    gl_FragColor  = vec4(value, value, value, 1.0f);\n"
         "}\n";
     
@@ -487,7 +487,7 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     
     //TODO hardcoded IR display size
     glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * 480, NULL, GL_STREAM_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_PIXEL_LENGTH, NULL, GL_STREAM_DRAW);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, ir_data_buffer);
     
     m_free(font->atlas_pixels);

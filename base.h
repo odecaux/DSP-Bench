@@ -27,6 +27,8 @@ typedef double real64;
 
 #define COMMIT_BLOCK_SIZE (Kilobytes(4))
 
+#define M_2I (3.1415926535897932384626433 * 2.0)
+
 #define internal static
 
 #define octave_max(x, y) (((x) > (y)) ? (x) : (y))
