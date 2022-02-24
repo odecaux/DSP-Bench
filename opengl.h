@@ -32,6 +32,17 @@ typedef struct {
     GLint ir_attribute_pos;
     GLint ir_attribute_quad_pos;
     
+    u32 fft_shader_program;
+    
+    u32 fft_vao;
+    u32 fft_vertex_buffer; //NOTE y a que 6 vertex ptdr
+    u32 fft_data_buffer;
+    u32 fft_data_texture;
+    
+    GLint fft_uniform_mvp;
+    GLint fft_attribute_pos;
+    GLint fft_attribute_quad_pos;
+    
     //u32 texture_handle; //TODO c'est chiant, ça veut dire qu'on l'a à deux endroits séparés ????
     
     HDC window_dc;
@@ -435,7 +446,7 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
         "{\n"
         "    int ir_buffer_size = textureSize(IR);\n"
         "    float sample = texelFetch(IR, int(quad_pos.x * ir_buffer_size)).r;\n"
-        "    float value = step(abs(sample - quad_pos.y) - 0.01f, 0.0f);\n"
+        "    float value = step(abs(sample - quad_pos.y) - 0.05f, 0.0f);\n"
         "    gl_FragColor  = vec4(value, value, value, 1.0f);\n"
         "}\n";
     
@@ -490,6 +501,99 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_PIXEL_LENGTH, NULL, GL_STREAM_DRAW);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, ir_data_buffer);
     
+    
+    
+    //~ fft plot
+    const char *fft_vertex_shader_source = 
+        "#version 330 core\n"
+        
+        "uniform mat4 mvp;\n"
+        "layout (location = 0) in vec2 pos;\n"
+        "layout (location = 1) in vec2 quad_pos_in;\n"
+        
+        "out vec2 quad_pos;\n"
+        
+        "void main()\n"
+        "{\n"
+        "   gl_Position =  mvp * vec4(pos.x, pos.y, 1.0, 1.0);\n"
+        "   quad_pos = quad_pos_in;\n"
+        "}\0";
+    
+    printf("%s\n", fft_vertex_shader_source);
+    const u32 fft_vertex_shader_handle = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(fft_vertex_shader_handle, 1, &fft_vertex_shader_source, NULL);
+    glCompileShader(fft_vertex_shader_handle);
+    glGetShaderiv(fft_vertex_shader_handle, GL_COMPILE_STATUS, &status);
+	assert(status == GL_TRUE);
+    
+    const char *fft_fragment_shader_source =  
+        "#version 330 core\n"
+        
+        //"uniform samplerBuffer IR_max;\n"
+        "uniform samplerBuffer IR;\n"
+        "in vec2 quad_pos;\n"
+        
+        "void main()\n"
+        "{\n"
+        "    int fft_buffer_size = textureSize(IR);\n"
+        "    float sample = texelFetch(IR, int(quad_pos.x * fft_buffer_size)).r;\n"
+        "    float value = step(abs(sample - quad_pos.y) - 0.01f, 0.0f);\n"
+        "    gl_FragColor  = vec4(value, value, value, 1.0f);\n"
+        "}\n";
+    
+    printf("%s\n", fft_fragment_shader_source);
+    
+    const u32 fft_fragment_shader_handle = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fft_fragment_shader_handle, 1, &fft_fragment_shader_source, NULL);
+    glCompileShader(fft_fragment_shader_handle);
+    glGetShaderiv(fft_fragment_shader_handle, GL_COMPILE_STATUS, &status);
+	assert(status == GL_TRUE);
+    
+    const u32 fft_shader_program = glCreateProgram();
+    glAttachShader(fft_shader_program, fft_vertex_shader_handle);
+    glAttachShader(fft_shader_program, fft_fragment_shader_handle);
+    glLinkProgram(fft_shader_program);
+    glGetProgramiv(fft_shader_program, GL_LINK_STATUS, &status);
+    assert(status == GL_TRUE);
+    opengl_check_error();
+    
+    glDeleteShader(fft_vertex_shader_handle);
+    glDeleteShader(fft_fragment_shader_handle);
+    
+    const GLint fft_uniform_mvp = glGetUniformLocation(fft_shader_program, "mvp");
+    const GLint fft_attribute_pos = glGetAttribLocation(fft_shader_program, "pos");
+    const GLint fft_attribute_quad_pos = glGetAttribLocation(fft_shader_program, "quad_pos_in");
+    opengl_check_error();
+    
+    ////////////////////////////////
+    
+    u32 fft_vao; glGenVertexArrays(1, &fft_vao);
+    u32 fft_vertex_buffer; glGenBuffers(1, &fft_vertex_buffer);
+    
+    u32 fft_data_buffer_max; glGenBuffers(1, &fft_data_buffer_max);
+    u32 fft_data_texture_max; glGenTextures(1, &fft_data_texture_max);
+    
+    u32 fft_data_buffer; glGenBuffers(1, &fft_data_buffer);
+    u32 fft_data_texture; glGenTextures(1, &fft_data_texture);
+    
+    glBindVertexArray(fft_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, fft_vertex_buffer);
+    glBindBuffer(GL_TEXTURE_BUFFER, fft_data_buffer);
+    glBindTexture(GL_TEXTURE_BUFFER, fft_data_texture);
+    
+    glEnableVertexAttribArray(fft_attribute_pos);
+    glVertexAttribPointer(fft_attribute_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, pos));
+    glEnableVertexAttribArray(fft_attribute_quad_pos);
+    glVertexAttribPointer(fft_attribute_quad_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, quad_pos));
+    
+    
+    //TODO hardcoded IR display size
+    glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_PIXEL_LENGTH, NULL, GL_STREAM_DRAW);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, fft_data_buffer);
+    
+    
+    
     m_free(font->atlas_pixels);
     font->atlas_pixels = nullptr;
     
@@ -516,6 +620,16 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
         .ir_uniform_mvp = ir_uniform_mvp, 
         .ir_attribute_pos = ir_attribute_pos,
         .ir_attribute_quad_pos = ir_attribute_quad_pos,
+        
+        .fft_shader_program = fft_shader_program,
+        .fft_vao = fft_vao, 
+        .fft_vertex_buffer = fft_vertex_buffer, 
+        .fft_data_buffer = fft_data_buffer,
+        .fft_data_texture = fft_data_texture,
+        
+        .fft_uniform_mvp = fft_uniform_mvp, 
+        .fft_attribute_pos = fft_attribute_pos,
+        .fft_attribute_quad_pos = fft_attribute_quad_pos,
         
         .window_dc = window_dc, 
         .opengl_rc = opengl_rc,
@@ -588,6 +702,30 @@ void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx)
                     graphics_ctx->IR_pixel_count * sizeof(real32), 
                     graphics_ctx->IR_max_buffer);
     glDrawArrays(GL_TRIANGLES, 0, 6);
+    
+    
+    //~ FFT
+    
+    glUseProgram(opengl_ctx->fft_shader_program);
+    glBindVertexArray(opengl_ctx->fft_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->fft_vertex_buffer);
+    glBindTexture(GL_TEXTURE_BUFFER, opengl_ctx->fft_data_texture);
+    
+    glUniformMatrix4fv(opengl_ctx->fft_uniform_mvp, 
+                       1, 
+                       GL_FALSE, 
+                       &projection_matrix[0]);
+    
+    glBufferSubData(GL_ARRAY_BUFFER, 0, 
+                    6 * sizeof(IR_Vertex),
+                    graphics_ctx->fft_vertices);
+    glBufferSubData(GL_TEXTURE_BUFFER, 0, 
+                    graphics_ctx->fft_pixel_count * sizeof(real32), 
+                    graphics_ctx->fft_buffer);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    
+    
+    ////////////////////////////
     
     glBindTexture(GL_TEXTURE_BUFFER, 0);
     glBindTexture(GL_TEXTURE_2D, 0);

@@ -203,11 +203,10 @@ void compute_IR(Plugin_Handle& handle,
     m_free(IR_state_holder);
 }
 
-// TODO(octave): rename, what does this function actually do ? it's not really buffers
-void render_IR(real32** IR_buffer, u32 channel_count, u32 IR_length, real32* min_buffer, real32* max_buffer, u32 pixel_count)
+void render_IR(real32** IR_buffer, u32 channel_count, u32 IR_length, real32* min_pixel_buffer, real32* max_pixel_buffer, u32 pixel_count)
 {
-    memset(min_buffer, 0, pixel_count * sizeof(real32));
-    memset(max_buffer, 0, pixel_count * sizeof(real32));
+    memset(min_pixel_buffer, 0, pixel_count * sizeof(real32));
+    memset(max_pixel_buffer, 0, pixel_count * sizeof(real32));
     
     for(u32 channel = 0; channel < channel_count; channel++)
     {
@@ -215,11 +214,28 @@ void render_IR(real32** IR_buffer, u32 channel_count, u32 IR_length, real32* min
         {
             u32 pixel_idx = sample * pixel_count / IR_length;
             real32 value = IR_buffer[channel][sample];
-            if(value > max_buffer[pixel_idx])
-                max_buffer[pixel_idx] = value;
-            if(value < min_buffer[pixel_idx])
-                min_buffer[pixel_idx] = value;
+            
+            if(value > max_pixel_buffer[pixel_idx])
+                max_pixel_buffer[pixel_idx] = value;
+            
+            if(value < min_pixel_buffer[pixel_idx])
+                min_pixel_buffer[pixel_idx] = value;
         }
+    }
+}
+
+
+//TODO stereo 
+void render_fft(real32* magnitude_buffer, u32 fft_length, real32* pixel_buffer, u32 pixel_count)
+{
+    memset(pixel_buffer, 0, pixel_count * sizeof(real32));
+    
+    for(u32 sample = 0; sample < fft_length; sample++)
+    {
+        u32 pixel_idx = sample * pixel_count / fft_length;
+        real32 value = magnitude_buffer[sample];
+        if(value > pixel_buffer[pixel_idx])
+            pixel_buffer[pixel_idx] = value;
     }
 }
 
@@ -261,6 +277,41 @@ void draw_IR(Rect bounds,
     
     graphics_ctx->ir_vertices[5].pos = top_right;
     graphics_ctx->ir_vertices[5].quad_pos = uv_top_right;
+}
+
+//TODO bad API, pour l'instant ça passe pcq la dimension est constante
+void draw_fft(Rect bounds,
+              GraphicsContext *graphics_ctx)
+{
+    bounds.dim.x -= 2.0f;
+    bounds.dim.y -= 2.0f;
+    Vec2 top_left = bounds.origin;
+    Vec2 top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
+    Vec2 bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
+    Vec2 bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
+    
+    Vec2 uv_top_left = Vec2{ 0.0f, 1.0f};
+    Vec2 uv_top_right = Vec2{ 1.0f, 1.0f};
+    Vec2 uv_bottom_left = Vec2{ 0.0f, 0.0f};
+    Vec2 uv_bottom_right = Vec2{ 1.0f, 0.0f};
+    
+    graphics_ctx->fft_vertices[0].pos = bottom_left;
+    graphics_ctx->fft_vertices[0].quad_pos = uv_bottom_left;
+    
+    graphics_ctx->fft_vertices[1].pos = top_right;
+    graphics_ctx->fft_vertices[1].quad_pos = uv_top_right;
+    
+    graphics_ctx->fft_vertices[2].pos = top_left;
+    graphics_ctx->fft_vertices[2].quad_pos = uv_top_left;
+    
+    graphics_ctx->fft_vertices[3].pos = bottom_left;
+    graphics_ctx->fft_vertices[3].quad_pos = uv_bottom_left;
+    
+    graphics_ctx->fft_vertices[4].pos = bottom_right;
+    graphics_ctx->fft_vertices[4].quad_pos = uv_bottom_right;
+    
+    graphics_ctx->fft_vertices[5].pos = top_right;
+    graphics_ctx->fft_vertices[5].quad_pos = uv_top_right;
 }
 
 
@@ -450,7 +501,7 @@ void frame(Plugin_Descriptor& descriptor,
         };
         auto IR_inner_bounds = rect_remove_padding(IR_outer_bounds, 10.0f, 10.0f);
         draw_rectangle(IR_inner_bounds, Color_Front, graphics_ctx);
-        
+        draw_fft(IR_inner_bounds, graphics_ctx);
         
     }
 }
@@ -500,12 +551,12 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
 
 
 
+
 void initialize_gui(Plugin_Handle& handle,
                     Audio_Parameters& audio_parameters,
                     Plugin_Parameter_Value *current_value,
                     Plugin_Parameters_Ring_Buffer* ring)
 {
-    
     //~ Win32 initialization
     HINSTANCE instance = GetModuleHandle(0);
     
@@ -522,15 +573,16 @@ void initialize_gui(Plugin_Handle& handle,
     RegisterClassEx(&main_class);
     
     
-    GraphicsContext graphics_ctx = { 
+    GraphicsContext graphics_ctx = {
+        .font = nullptr,
+        //TODO hardcoded
+        .window_dim = { 600.0f + TOTAL_WIDTH, 400.0f},
         .draw_vertices = m_allocate_array(Vertex, ATLAS_MAX_VERTEX_COUNT),
         .draw_vertices_count = 0,
         .draw_indices = m_allocate_array(u32, ATLAS_MAX_VERTEX_COUNT), 
         .draw_indices_count = 0
     };
     
-    //TODO Hardcoded
-    graphics_ctx.window_dim = { 600.0f + TOTAL_WIDTH, 400.0f};
     HWND window = CreateWindow("Main Class", "Test", 
                                WS_OVERLAPPEDWINDOW,
                                CW_USEDEFAULT, 
@@ -543,8 +595,10 @@ void initialize_gui(Plugin_Handle& handle,
     
     //TODO c'est un peu nul comme interface en vrai
     Font jetbrains_mono = load_fonts(DEFAULT_FONT_FILENAME);
+    
     OpenGL_Context opengl_ctx = opengl_initialize(window, &jetbrains_mono);
     graphics_ctx.font = &jetbrains_mono;
+    
     
     //~ IR initialization
     Plugin_Descriptor& descriptor = handle.descriptor;
@@ -557,6 +611,7 @@ void initialize_gui(Plugin_Handle& handle,
     
     compute_IR(handle, IR_buffer, IR_BUFFER_LENGTH, audio_parameters, current_value);
     
+    
     Ipp_Context ipp_ctx = ipp_initialize();
     
     Vec2* fft_out = m_allocate_array(Vec2, IR_BUFFER_LENGTH);
@@ -566,11 +621,17 @@ void initialize_gui(Plugin_Handle& handle,
     for(i32 i = 0; i < IR_BUFFER_LENGTH; i++)
         magnitudes[i] = sqrt(fft_out[i].x * fft_out[i].x + fft_out[i].y * fft_out[i].y);
     
+    
     graphics_ctx.IR_max_buffer = m_allocate_array(real32, IR_PIXEL_LENGTH);
     graphics_ctx.IR_min_buffer = m_allocate_array(real32, IR_PIXEL_LENGTH);
     graphics_ctx.IR_pixel_count = IR_PIXEL_LENGTH;
     
-    render_IR(&magnitudes, /*audio_parameters.num_channels*/ 1, IR_BUFFER_LENGTH, graphics_ctx.IR_min_buffer, graphics_ctx.IR_max_buffer, IR_PIXEL_LENGTH);
+    graphics_ctx.fft_buffer = m_allocate_array(real32, IR_PIXEL_LENGTH);
+    graphics_ctx.fft_pixel_count = IR_PIXEL_LENGTH;
+    
+    render_fft(magnitudes, IR_BUFFER_LENGTH / 2, graphics_ctx.fft_buffer, IR_PIXEL_LENGTH);
+    
+    render_IR(IR_buffer, audio_parameters.num_channels, IR_BUFFER_LENGTH, graphics_ctx.IR_min_buffer, graphics_ctx.IR_max_buffer, IR_PIXEL_LENGTH);
     
     //~ 
     ShowWindow(window, 1);
@@ -689,7 +750,17 @@ void initialize_gui(Plugin_Handle& handle,
         {
             plugin_parameters_buffer_push(*ring, current_value);
             compute_IR(handle, IR_buffer, IR_BUFFER_LENGTH, audio_parameters, current_value);
+            
+            Vec2* fft_out = m_allocate_array(Vec2, IR_BUFFER_LENGTH);
+            forward_fft(IR_buffer[0], fft_out, IR_BUFFER_LENGTH, &ipp_ctx);
+            
+            real32 *magnitudes  = m_allocate_array(real32, IR_BUFFER_LENGTH);
+            for(i32 i = 0; i < IR_BUFFER_LENGTH; i++)
+                magnitudes[i] = sqrt(fft_out[i].x * fft_out[i].x + fft_out[i].y * fft_out[i].y);
+            
             render_IR(IR_buffer, audio_parameters.num_channels, IR_BUFFER_LENGTH, graphics_ctx.IR_min_buffer, graphics_ctx.IR_max_buffer, IR_PIXEL_LENGTH);
+            render_fft(magnitudes, IR_BUFFER_LENGTH / 2, graphics_ctx.fft_buffer, IR_PIXEL_LENGTH);
+            
         }
         
         opengl_render_ui(&opengl_ctx, &graphics_ctx);

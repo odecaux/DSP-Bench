@@ -1,6 +1,6 @@
 min/max IR : glActivateTexture
-smoothstep
-rectangle autour de l'IR
-fft
 allocators
-y a un bug dans les allocations ou load_font
+
+y a un bug dans la fft, seulement un sample sur deux est != 0
+
+faire un main de test pour identifier le bug dans load_font

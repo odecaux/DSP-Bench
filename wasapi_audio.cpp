@@ -466,9 +466,9 @@ void audio_uninitialize(void *ctx)
     WasapiContext *audio_context = (WasapiContext*)ctx;
     SetEvent(audio_context->shutdown_event); 
     WaitForSingleObject(audio_context->audio_thread, INFINITE); //on attend sa rÃ©ponse
+    audio_context->audio_client->Stop();
     CloseHandle(audio_context->audio_client);
     
-    audio_context->audio_client->Stop();
-    delete audio_context;
+    //delete audio_context;
     
 }

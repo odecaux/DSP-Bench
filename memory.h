@@ -41,7 +41,7 @@ void instrumented_free(void* address, const char* file, int line)
 
 #define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
 
-#define LOG_ALLOCATIONS 1
+//#define LOG_ALLOCATIONS 1
 
 #ifdef LOG_ALLOCATIONS
 

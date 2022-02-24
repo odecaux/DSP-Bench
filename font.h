@@ -62,8 +62,6 @@ internal Font load_fonts(const char* font_filename)
     
     if(glyph_count == 0)
     {
-        //free(font_file_buffer);
-        //free(codepoint_list);
         printf("empty font ???\n");
         exit(0);
     }
@@ -250,6 +248,7 @@ internal Font load_fonts(const char* font_filename)
     
     u32 *rgba_pixels = m_allocate_array(u32, texture_width * texture_height);
     
+    
     for(u32 i = 0; i < texture_width * texture_height; i++)
     {
         u8 val = grayscale_pixels[i];
@@ -261,7 +260,7 @@ internal Font load_fonts(const char* font_filename)
     m_free(font_file_buffer);
     m_free(codepoint_list);
     m_free(packedchars);
-    //m_free(grayscale_pixels);
+    m_free(grayscale_pixels);
     
     return {
         .font_size = PIXEL_SIZE,

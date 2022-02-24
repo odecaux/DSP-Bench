@@ -144,20 +144,23 @@ typedef struct{
 } IR_Vertex;
 
 typedef struct {
-    Vertex *draw_vertices;
-    u32 draw_vertices_count;
-    
-    u32 *draw_indices;
-    u32 draw_indices_count;
-    
+    Font* font;
     Vec2 window_dim;
     
-    Font* font;
+    Vertex *draw_vertices;
+    u32 draw_vertices_count;
+    u32 *draw_indices;
+    u32 draw_indices_count;
     
     IR_Vertex ir_vertices[6];
     real32 *IR_min_buffer;
     real32 *IR_max_buffer;
     u32 IR_pixel_count;
+    
+    IR_Vertex fft_vertices[6];
+    real32 *fft_buffer;
+    u32 fft_pixel_count;
+    
 } GraphicsContext;
 
 

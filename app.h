@@ -7,5 +7,4 @@ void initialize_gui(Plugin_Handle&,
                     Audio_Parameters&,
                     Plugin_Parameter_Value*,
                     Plugin_Parameters_Ring_Buffer*);
-
 #endif //APP_H

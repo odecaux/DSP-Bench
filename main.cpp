@@ -14,6 +14,8 @@
 
 int WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR lpCmdLine, i32 show_cmd)
 {
+    
+    
     i32 argc = __argc;
     char **argv = __argv;
     if(argc != 3)
