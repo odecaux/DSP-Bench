@@ -5,33 +5,34 @@
 
 #include <GL/GL.h>
 
-#define DRAW_TEX_UV_FOR_WHITE	Vec{0.0f, 0.0f}
-
-typedef struct {
+typedef struct{
     u32 atlas_shader_program;
-    
-    //TODO c'est quoi les data types ? on est sûr que là haut c'est de u32 et pas des GLint (i32)
     u32 atlas_vao;
     u32 atlas_vertex_buffer;
-    u32 atlas_element_buffer;
+    u32 atlas_index_buffer;
     
     GLint atlas_uniform_mvp;
     GLint atlas_uniform_texture;
     GLint atlas_attribute_pos;
     GLint atlas_attribute_uv;
     GLint atlas_attribute_col;
-    
+    //u32 texture_handle; //TODO c'est chiant, ça veut dire qu'on l'a à deux endroits séparés ????
+} OpenGL_Context_Atlas;
+
+typedef struct{
     u32 ir_shader_program;
     
     u32 ir_vao;
     u32 ir_vertex_buffer; //NOTE y a que 6 vertex ptdr
-    u32 ir_data_buffer;
-    u32 ir_data_texture;
+    u32 ir_min_max_buffer;
+    u32 ir_min_max_texture;
     
     GLint ir_uniform_mvp;
     GLint ir_attribute_pos;
     GLint ir_attribute_quad_pos;
-    
+} OpenGL_Context_IR;
+
+typedef struct {
     u32 fft_shader_program;
     
     u32 fft_vao;
@@ -43,10 +44,19 @@ typedef struct {
     GLint fft_attribute_pos;
     GLint fft_attribute_quad_pos;
     
-    //u32 texture_handle; //TODO c'est chiant, ça veut dire qu'on l'a à deux endroits séparés ????
-    
+} OpenGL_Context_FFT;
+
+typedef struct 
+{
     HDC window_dc;
     HGLRC opengl_rc;
+} OpenGL_Context_Win32;
+
+typedef struct {
+    OpenGL_Context_Win32 win32;
+    OpenGL_Context_Atlas atlas;
+    OpenGL_Context_IR ir;
+    OpenGL_Context_FFT fft;
 } OpenGL_Context;
 
 //~ OpenGL defines
@@ -64,6 +74,7 @@ typedef struct {
 #define GL_MAJOR_VERSION                  0x821B
 #define GL_MINOR_VERSION                  0x821C
 #define GL_R32F                           0x822E
+#define GL_RG32F                          0x8230
 
 #define WGL_CONTEXT_MAJOR_VERSION_ARB     0x2091
 #define WGL_CONTEXT_MINOR_VERSION_ARB     0x2092
@@ -220,7 +231,7 @@ bool load_opengl_functions()
     return true;
 }
 
-OpenGL_Context opengl_initialize(HWND window, Font* font)
+OpenGL_Context_Win32 opengl_initialize_win32(HWND window)
 {
     
     HDC window_dc = GetDC(window);
@@ -254,9 +265,9 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     SetPixelFormat(window_dc, pixel_format_idx, &pixel_format);
     
     
-	const HGLRC tempContext = wglCreateContext(window_dc);
-	if(wglMakeCurrent(window_dc, tempContext) == FALSE)
-	{
+    const HGLRC tempContext = wglCreateContext(window_dc);
+    if(wglMakeCurrent(window_dc, tempContext) == FALSE)
+    {
         printf("couldn't open opengl temp context\n");
         exit(1);
     }
@@ -282,7 +293,7 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     wglMakeCurrent(NULL, NULL);
     wglDeleteContext(tempContext);
     if(wglMakeCurrent(window_dc, opengl_rc) == FALSE)
-	{
+    {
         printf("couldn't open opengl elevated context\n");
         exit(1);
     }
@@ -306,13 +317,16 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
     wglSwapIntervalEXT(1);
-    printf("swap interval : %d\n", wglGetSwapIntervalEXT());
-	GLint status = GL_TRUE;
+    return {
+        .window_dc = window_dc,
+        .opengl_rc = opengl_rc
+    };
+}
+
+OpenGL_Context_Atlas opengl_initialize_atlas(Font* font)
+{
+    GLint status = GL_TRUE;
     
-    
-    
-    
-    //~ Atlas
     const char *atlas_vertex_shader_source = 
         "#version 330 core\n"
         "uniform mat4 mvp;"
@@ -335,7 +349,7 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     glShaderSource(atlas_vertex_shader_handle, 1, &atlas_vertex_shader_source, NULL);
     glCompileShader(atlas_vertex_shader_handle);
     glGetShaderiv(atlas_vertex_shader_handle, GL_COMPILE_STATUS, &status);
-	assert(status == GL_TRUE);
+    assert(status == GL_TRUE);
     
     const char *atlas_fragment_shader_source =  
         "#version 330 core\n"
@@ -354,7 +368,7 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     glShaderSource(atlas_fragment_shader_handle, 1, &atlas_fragment_shader_source, NULL);
     glCompileShader(atlas_fragment_shader_handle);
     glGetShaderiv(atlas_fragment_shader_handle, GL_COMPILE_STATUS, &status);
-	assert(status == GL_TRUE);
+    assert(status == GL_TRUE);
     
     const u32 atlas_shader_program = glCreateProgram();
     glAttachShader(atlas_shader_program, atlas_vertex_shader_handle);
@@ -379,12 +393,12 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     ////////////////////////////////
     u32 atlas_vao; glGenVertexArrays(1, &atlas_vao);
     u32 atlas_vertex_buffer; glGenBuffers(1, &atlas_vertex_buffer);
-    u32 atlas_element_buffer; glGenBuffers(1, &atlas_element_buffer);
+    u32 atlas_index_buffer; glGenBuffers(1, &atlas_index_buffer);
     glGenTextures(1, &font->atlas_texture_id);
     
     glBindVertexArray(atlas_vao);
     glBindBuffer(GL_ARRAY_BUFFER, atlas_vertex_buffer);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, atlas_element_buffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, atlas_index_buffer);
     glBindTexture(GL_TEXTURE_2D, font->atlas_texture_id);
     
     
@@ -412,8 +426,24 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     
+    return {
+        .atlas_shader_program = atlas_shader_program, 
+        .atlas_vao = atlas_vao, 
+        .atlas_vertex_buffer = atlas_vertex_buffer, 
+        .atlas_index_buffer= atlas_index_buffer,
+        
+        .atlas_uniform_mvp = atlas_uniform_mvp, 
+        .atlas_uniform_texture = atlas_uniform_texture,
+        .atlas_attribute_pos = atlas_attribute_pos,
+        .atlas_attribute_uv = atlas_attribute_uv,
+        .atlas_attribute_col = atlas_attribute_col,
+    };
+}
+
+OpenGL_Context_IR opengl_initialize_ir()
+{
+    GLint status = GL_TRUE;
     
-    //~ IR plot
     const char *ir_vertex_shader_source = 
         "#version 330 core\n"
         
@@ -428,12 +458,12 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
         "   gl_Position =  mvp * vec4(pos.x, pos.y, 1.0, 1.0);\n"
         "   quad_pos = quad_pos_in;\n"
         "}\0";
-    printf("%s\n", ir_vertex_shader_source);
+    //printf("%s\n", ir_vertex_shader_source);
     const u32 ir_vertex_shader_handle = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(ir_vertex_shader_handle, 1, &ir_vertex_shader_source, NULL);
     glCompileShader(ir_vertex_shader_handle);
     glGetShaderiv(ir_vertex_shader_handle, GL_COMPILE_STATUS, &status);
-	assert(status == GL_TRUE);
+    assert(status == GL_TRUE);
     
     const char *ir_fragment_shader_source =  
         "#version 330 core\n"
@@ -445,8 +475,12 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
         "void main()\n"
         "{\n"
         "    int ir_buffer_size = textureSize(IR);\n"
-        "    float sample = texelFetch(IR, int(quad_pos.x * ir_buffer_size)).r;\n"
-        "    float value = step(abs(sample - quad_pos.y) - 0.05f, 0.0f);\n"
+        "    vec4 sample = texelFetch(IR, int(quad_pos.x * ir_buffer_size));\n"
+        "    float value_min = step(abs(sample.r - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
+        "    float value_max = step(abs(sample.g - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
+        "    float when_min = max(sign(quad_pos.y - 0.5f), 0.0f);\n"
+        "    float when_max = max(sign(0.5f - quad_pos.y), 0.0f);\n"
+        "    float value = value_min * when_min + value_max * when_max;\n"
         "    gl_FragColor  = vec4(value, value, value, 1.0f);\n"
         "}\n";
     
@@ -479,16 +513,13 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     u32 ir_vao; glGenVertexArrays(1, &ir_vao);
     u32 ir_vertex_buffer; glGenBuffers(1, &ir_vertex_buffer);
     
-    u32 ir_data_buffer_max; glGenBuffers(1, &ir_data_buffer_max);
-    u32 ir_data_texture_max; glGenTextures(1, &ir_data_texture_max);
-    
-    u32 ir_data_buffer; glGenBuffers(1, &ir_data_buffer);
-    u32 ir_data_texture; glGenTextures(1, &ir_data_texture);
+    u32 ir_min_max_buffer; glGenBuffers(1, &ir_min_max_buffer);
+    u32 ir_min_max_texture; glGenTextures(1, &ir_min_max_texture);
     
     glBindVertexArray(ir_vao);
     glBindBuffer(GL_ARRAY_BUFFER, ir_vertex_buffer);
-    glBindBuffer(GL_TEXTURE_BUFFER, ir_data_buffer);
-    glBindTexture(GL_TEXTURE_BUFFER, ir_data_texture);
+    glBindBuffer(GL_TEXTURE_BUFFER, ir_min_max_buffer);
+    glBindTexture(GL_TEXTURE_BUFFER, ir_min_max_texture);
     
     glEnableVertexAttribArray(ir_attribute_pos);
     glVertexAttribPointer(ir_attribute_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, pos));
@@ -496,14 +527,29 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     glVertexAttribPointer(ir_attribute_quad_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, quad_pos));
     
     
-    //TODO hardcoded IR display size
     glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_PIXEL_LENGTH, NULL, GL_STREAM_DRAW);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, ir_data_buffer);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * 2 * IR_PIXEL_LENGTH, NULL, GL_STREAM_DRAW);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, ir_min_max_buffer);
     
     
+    return {
+        
+        .ir_shader_program = ir_shader_program,
+        .ir_vao = ir_vao, 
+        .ir_vertex_buffer = ir_vertex_buffer, 
+        .ir_min_max_buffer = ir_min_max_buffer,
+        .ir_min_max_texture = ir_min_max_texture,
+        
+        .ir_uniform_mvp = ir_uniform_mvp, 
+        .ir_attribute_pos = ir_attribute_pos,
+        .ir_attribute_quad_pos = ir_attribute_quad_pos,
+    };
+}
+
+OpenGL_Context_FFT opengl_initialize_fft()
+{
+    GLint status = GL_TRUE;
     
-    //~ fft plot
     const char *fft_vertex_shader_source = 
         "#version 330 core\n"
         
@@ -570,9 +616,6 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     u32 fft_vao; glGenVertexArrays(1, &fft_vao);
     u32 fft_vertex_buffer; glGenBuffers(1, &fft_vertex_buffer);
     
-    u32 fft_data_buffer_max; glGenBuffers(1, &fft_data_buffer_max);
-    u32 fft_data_texture_max; glGenTextures(1, &fft_data_texture_max);
-    
     u32 fft_data_buffer; glGenBuffers(1, &fft_data_buffer);
     u32 fft_data_texture; glGenTextures(1, &fft_data_texture);
     
@@ -587,40 +630,11 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
     glVertexAttribPointer(fft_attribute_quad_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, quad_pos));
     
     
-    //TODO hardcoded IR display size
     glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
     glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_PIXEL_LENGTH, NULL, GL_STREAM_DRAW);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, fft_data_buffer);
     
-    
-    
-    m_free(font->atlas_pixels);
-    font->atlas_pixels = nullptr;
-    
-    ReleaseDC(window, window_dc);
-    
-    return OpenGL_Context{
-        .atlas_shader_program = atlas_shader_program, 
-        .atlas_vao = atlas_vao, 
-        .atlas_vertex_buffer = atlas_vertex_buffer, 
-        .atlas_element_buffer= atlas_element_buffer,
-        
-        .atlas_uniform_mvp = atlas_uniform_mvp, 
-        .atlas_uniform_texture = atlas_uniform_texture,
-        .atlas_attribute_pos = atlas_attribute_pos,
-        .atlas_attribute_uv = atlas_attribute_uv,
-        .atlas_attribute_col = atlas_attribute_col,
-        
-        .ir_shader_program = ir_shader_program,
-        .ir_vao = ir_vao, 
-        .ir_vertex_buffer = ir_vertex_buffer, 
-        .ir_data_buffer = ir_data_buffer,
-        .ir_data_texture = ir_data_texture,
-        
-        .ir_uniform_mvp = ir_uniform_mvp, 
-        .ir_attribute_pos = ir_attribute_pos,
-        .ir_attribute_quad_pos = ir_attribute_quad_pos,
-        
+    return{
         .fft_shader_program = fft_shader_program,
         .fft_vao = fft_vao, 
         .fft_vertex_buffer = fft_vertex_buffer, 
@@ -630,13 +644,103 @@ OpenGL_Context opengl_initialize(HWND window, Font* font)
         .fft_uniform_mvp = fft_uniform_mvp, 
         .fft_attribute_pos = fft_attribute_pos,
         .fft_attribute_quad_pos = fft_attribute_quad_pos,
-        
-        .window_dc = window_dc, 
-        .opengl_rc = opengl_rc,
     };
 }
 
-void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx)
+OpenGL_Context opengl_initialize(Window_Context *window, Font* font)
+{
+    
+    OpenGL_Context_Win32 ctx_win32 = opengl_initialize_win32(window->window);
+    OpenGL_Context_Atlas ctx_atlas = opengl_initialize_atlas(font);
+    OpenGL_Context_IR ctx_ir = opengl_initialize_ir();
+    OpenGL_Context_FFT ctx_fft = opengl_initialize_fft();
+    
+    
+    m_free(font->atlas_pixels);
+    font->atlas_pixels = nullptr;
+    
+    ReleaseDC(window->window, ctx_win32.window_dc);
+    
+    return OpenGL_Context{
+        .win32 = ctx_win32,
+        .atlas = ctx_atlas,
+        .ir = ctx_ir,
+        .fft = ctx_fft
+    };
+}
+
+void opengl_render_atlas(OpenGL_Context_Atlas* opengl_ctx,
+                         Graphics_Context_Atlas* graphics_ctx, real32 *projection_matrix)
+{
+    glUseProgram(opengl_ctx->atlas_shader_program);
+    glBindVertexArray(opengl_ctx->atlas_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->atlas_vertex_buffer);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, opengl_ctx->atlas_index_buffer);
+    glBindTexture(GL_TEXTURE_2D, graphics_ctx->font.atlas_texture_id);
+    
+    //TODO est-ce que je peux supprimer ça ?
+    //glUniform1i(opengl_ctx->atlas_uniform_texture, 0);
+    glUniformMatrix4fv(opengl_ctx->atlas_uniform_mvp, 
+                       1, 
+                       GL_FALSE, 
+                       projection_matrix);
+    
+    glBufferSubData(GL_ARRAY_BUFFER, 0, 
+                    graphics_ctx->draw_vertices_count * sizeof(Vertex), 
+                    graphics_ctx->draw_vertices);
+    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, 
+                    graphics_ctx->draw_indices_count * sizeof(u32), 
+                    graphics_ctx->draw_indices);
+    
+    glDrawElements(GL_TRIANGLES, (GLsizei)graphics_ctx->draw_indices_count, GL_UNSIGNED_INT, 0);
+}
+
+void opengl_render_ir(OpenGL_Context_IR* opengl_ctx, Graphics_Context_IR* graphics_ctx, real32 *projection_matrix)
+{
+    glUseProgram(opengl_ctx->ir_shader_program);
+    glBindVertexArray(opengl_ctx->ir_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->ir_vertex_buffer);
+    glBindBuffer(GL_TEXTURE_BUFFER, opengl_ctx->ir_min_max_buffer);
+    glBindTexture(GL_TEXTURE_BUFFER, opengl_ctx->ir_min_max_texture);
+    
+    glUniformMatrix4fv(opengl_ctx->ir_uniform_mvp, 
+                       1, 
+                       GL_FALSE, 
+                       projection_matrix);
+    
+    glBufferSubData(GL_ARRAY_BUFFER, 0, 
+                    6 * sizeof(IR_Vertex),
+                    graphics_ctx->ir_vertices);
+    glBufferSubData(GL_TEXTURE_BUFFER, 0, 
+                    graphics_ctx->IR_pixel_count * sizeof(Vec2), 
+                    graphics_ctx->IR_min_max_buffer);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+
+void opengl_render_fft(OpenGL_Context_FFT* opengl_ctx, Graphics_Context_FFT* graphics_ctx, real32 *projection_matrix)
+{
+    //~ FFT
+    glUseProgram(opengl_ctx->fft_shader_program);
+    glBindVertexArray(opengl_ctx->fft_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->fft_vertex_buffer);
+    glBindBuffer(GL_TEXTURE_BUFFER, opengl_ctx->fft_data_buffer);
+    glBindTexture(GL_TEXTURE_BUFFER, opengl_ctx->fft_data_texture);
+    
+    glUniformMatrix4fv(opengl_ctx->fft_uniform_mvp, 
+                       1, 
+                       GL_FALSE, 
+                       projection_matrix);
+    
+    glBufferSubData(GL_ARRAY_BUFFER, 0, 
+                    6 * sizeof(IR_Vertex),
+                    graphics_ctx->fft_vertices);
+    glBufferSubData(GL_TEXTURE_BUFFER, 0, 
+                    graphics_ctx->fft_pixel_count * sizeof(real32), 
+                    graphics_ctx->fft_buffer);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+}
+
+void opengl_render_ui(OpenGL_Context *opengl_ctx, Graphics_Context *graphics_ctx)
 {
     
     glEnable(GL_BLEND);
@@ -651,7 +755,7 @@ void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx)
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     
-    const float projection_matrix[16] = 
+    real32 projection_matrix[16] = 
     {
         2.0f / graphics_ctx->window_dim.x, 0.0f, 0.0f, 0.0f,
         0.0f,- 2.0f / graphics_ctx->window_dim.y, 0.0f, 0.0f ,
@@ -659,83 +763,11 @@ void opengl_render_ui(OpenGL_Context *opengl_ctx, GraphicsContext *graphics_ctx)
         -1.0f, 1.0f, 0.0f, 1.0f,
     };
     
-    //~ atlas
-    glUseProgram(opengl_ctx->atlas_shader_program);
-    glBindVertexArray(opengl_ctx->atlas_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->atlas_vertex_buffer);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, opengl_ctx->atlas_element_buffer);
-    glBindTexture(GL_TEXTURE_2D, graphics_ctx->font->atlas_texture_id);
+    opengl_render_atlas(&opengl_ctx->atlas, &graphics_ctx->atlas, projection_matrix);
+    opengl_render_ir(&opengl_ctx->ir, &graphics_ctx->ir, projection_matrix);
+    opengl_render_fft(&opengl_ctx->fft, &graphics_ctx->fft, projection_matrix);
     
-    //TODO est-ce que je peux supprimer ça ?
-    //glUniform1i(opengl_ctx->atlas_uniform_texture, 0);
-    glUniformMatrix4fv(opengl_ctx->atlas_uniform_mvp, 
-                       1, 
-                       GL_FALSE, 
-                       &projection_matrix[0]);
-    
-    glBufferSubData(GL_ARRAY_BUFFER, 0, 
-                    graphics_ctx->draw_vertices_count * sizeof(Vertex), 
-                    graphics_ctx->draw_vertices);
-    glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, 
-                    graphics_ctx->draw_indices_count * sizeof(u32), 
-                    graphics_ctx->draw_indices);
-    
-    glDrawElements(GL_TRIANGLES, (GLsizei)graphics_ctx->draw_indices_count, GL_UNSIGNED_INT, 0);
-    
-    //~ IR
-    
-    glUseProgram(opengl_ctx->ir_shader_program);
-    glBindVertexArray(opengl_ctx->ir_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->ir_vertex_buffer);
-    //NOTE pas besoin de glActivateTexture pcq on utilise qu'une seule texture à la fois
-    glBindTexture(GL_TEXTURE_BUFFER, opengl_ctx->ir_data_texture);
-    
-    glUniformMatrix4fv(opengl_ctx->ir_uniform_mvp, 
-                       1, 
-                       GL_FALSE, 
-                       &projection_matrix[0]);
-    
-    glBufferSubData(GL_ARRAY_BUFFER, 0, 
-                    6 * sizeof(IR_Vertex),
-                    graphics_ctx->ir_vertices);
-    glBufferSubData(GL_TEXTURE_BUFFER, 0, 
-                    graphics_ctx->IR_pixel_count * sizeof(real32), 
-                    graphics_ctx->IR_max_buffer);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    
-    
-    //~ FFT
-    
-    glUseProgram(opengl_ctx->fft_shader_program);
-    glBindVertexArray(opengl_ctx->fft_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->fft_vertex_buffer);
-    glBindTexture(GL_TEXTURE_BUFFER, opengl_ctx->fft_data_texture);
-    
-    glUniformMatrix4fv(opengl_ctx->fft_uniform_mvp, 
-                       1, 
-                       GL_FALSE, 
-                       &projection_matrix[0]);
-    
-    glBufferSubData(GL_ARRAY_BUFFER, 0, 
-                    6 * sizeof(IR_Vertex),
-                    graphics_ctx->fft_vertices);
-    glBufferSubData(GL_TEXTURE_BUFFER, 0, 
-                    graphics_ctx->fft_pixel_count * sizeof(real32), 
-                    graphics_ctx->fft_buffer);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
-    
-    
-    ////////////////////////////
-    
-    glBindTexture(GL_TEXTURE_BUFFER, 0);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    glUseProgram(0);
-    
-    
-    SwapBuffers(opengl_ctx->window_dc);
+    SwapBuffers(opengl_ctx->win32.window_dc);
     //TODO est-ce qu'on gagne vraiment en latence avec ça ?
     //glFinish();
 }
@@ -752,6 +784,6 @@ void opengl_uninitialize(OpenGL_Context *opengl_ctx)
     */
     
     wglMakeCurrent (NULL, NULL) ; 
-    wglDeleteContext (opengl_ctx->opengl_rc);
+    wglDeleteContext (opengl_ctx->win32.opengl_rc);
 }
 #endif //OPENGL_H

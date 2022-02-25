@@ -1,6 +1,7 @@
 #include "windows.h"
 #include "math.h"
 #include "base.h"
+#include "structs.h"
 #include "descriptor.h"
 
 Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_fields_by_plugin, u32 buffer_slot_count)

@@ -9,7 +9,7 @@
 #include "base.h"
 #include "descriptor.h"
 #include "structs.h"
-#include "os_helpers.h"
+#include "win32_helpers.h"
 #include "font.h"
 
 int main()

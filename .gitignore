@@ -36,6 +36,5 @@
 *.ilk
 *.exp
 *.pdb
-build/JetBrainsMono-Regular.fnt
-build/JetBrainsMono-Regular.ttf
 *.ngfx-proj
+/build/.vs/

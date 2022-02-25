@@ -22,29 +22,22 @@ void ipp_assert_impl(IppStatus status, const char* file, u32 line)
 
 #define ipp_assert(status) ipp_assert_impl(status, __FILE__, __LINE__); 
 
-
-inline void ipp_fft_fwd_r2ccs(const real32 *source, real32 *dest,
-                              const IppsFFTSpec_R_32f *spec, u8 *work_buffer)
+void fft_test_generate_tone(real32 frequency, real32 magnitude, real32 *buffer, i32 sample_count)
 {
-    ipp_assert(ippsFFTFwd_RToCCS_32f(source, dest, spec, work_buffer));
+    real32 phase = 0.0f;
+    ippsTone_32f(buffer, sample_count, magnitude, frequency, &phase, ippAlgHintFast);
 }
 
-inline void ipp_fft_inv_ccs2r(const real32 *source, real32 *dest,
-                              const IppsFFTSpec_R_32f *spec, u8 *work_buffer)
-{
-    ipp_assert(ippsFFTInv_CCSToR_32f(source, dest, spec, work_buffer));
-}
-
-void forward_fft(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp_ctx)
+void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp_ctx)
 {
     assert((input_sample_count & (input_sample_count - 1)) == 0);
     i32 order = (i32)log((real32)input_sample_count)/log(2.0);
     
     Ipp_Order_Context *ctx = &ipp_ctx->order_to_ctx[order];
-    ipp_assert(ippsFFTFwd_RToPerm_32f(in, ctx->temp_perm_buffer, ctx->spec, ctx->work_buffer));
+    ipp_assert(ippsFFTFwd_RToCCS_32f(in, ctx->temp_perm_buffer, ctx->spec, ctx->work_buffer));
     
     //NOTE il faut que Ipp32fc et Vec2 aient le même layout
-    ipp_assert(ippsConjPerm_32fc(ctx->temp_perm_buffer, (Ipp32fc*)out, input_sample_count));
+    ipp_assert(ippsConjCcs_32fc(ctx->temp_perm_buffer, (Ipp32fc*)out, input_sample_count));
 }
 
 Ipp_Order_Context ipp_create_spec_for_order(i32 fft_order)

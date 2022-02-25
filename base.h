@@ -47,8 +47,16 @@ typedef struct{
 #define StringLit(s) String((char*)(s), ArrayCount(s) - 1)
 
 typedef struct {
-    real32 x;
-    real32 y;
+    union{
+        struct {
+            real32 x;
+            real32 y;
+        };
+        struct {
+            real32 a;
+            real32 b;
+        };
+    };
 } Vec2;
 
 internal inline real32 vec2_length(Vec2 a, Vec2 b)
