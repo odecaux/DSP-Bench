@@ -3,7 +3,7 @@
 #ifndef DESCRIPTOR_H
 #define DESCRIPTOR_H
 
-
+bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b);
 
 Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_fields_by_plugin, u32 buffer_slot_count);
 
