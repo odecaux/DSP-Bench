@@ -1,8 +1,7 @@
-/* date = February 10th 2022 4:14 pm */
+/* date = February 25th 2022 11:12 am */
 
-#ifndef OS_HELPERS_H
-#define OS_HELPERS_H
-
+#ifndef WIN32_HELPERS_H
+#define WIN32_HELPERS_H
 
 internal i64 file_get_size(const char* filename)
 {
@@ -54,17 +53,15 @@ internal bool load_file_to_memory(const char* filename, u8* out_buffer)
     BOOL result = GetFileSizeEx(handle, &file_size_quad);
     u64 file_size = file_size_quad.QuadPart;
     
-    
     auto success = ReadFile(handle, out_buffer, file_size, 0, 0);
     if(success == FALSE)
     {
         return false;
     }
     
-    
     CloseHandle(handle);
     return true;
 }
 
 
-#endif //OS_HELPERS_H
+#endif //WIN32_HELPERS_H

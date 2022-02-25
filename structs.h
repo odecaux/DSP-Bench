@@ -3,7 +3,6 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
 
-
 typedef void*(*buffer_allocator_t)(unsigned int);
 
 typedef void(*audio_callback_t)(void*, void*, float**, unsigned int, unsigned int, float);
@@ -14,6 +13,82 @@ internal void* malloc_allocator(u32 byte_size)
 {
     return malloc(byte_size);
 }
+
+enum Plugin_Parameter_Type{
+    Int,
+    Float,
+    Enum
+};
+
+typedef struct{
+    i32 min;
+    i32 max;
+} Parameter_Int;
+
+typedef struct {
+    real32 min;
+    real32 max;
+} Parameter_Float;
+
+typedef struct{
+    i32 value;
+    String name;
+} Parameter_Enum_Entry;
+
+
+typedef struct {
+    Parameter_Enum_Entry *entries;
+    u32 num_entries;
+} Parameter_Enum;
+
+typedef struct {
+    String name;
+    u32 offset;
+    
+    Plugin_Parameter_Type type;
+    union {
+        Parameter_Int int_param;
+        Parameter_Float float_param;
+        Parameter_Enum enum_param;
+    };
+    
+} Plugin_Descriptor_Parameter;
+
+typedef struct {
+    //String name;
+    //le nom c'est le filename ?
+    struct { 
+        u32 size;
+        u32 alignment;
+    } parameters_struct;
+    
+    struct { 
+        u32 size;
+        u32 alignment;
+    } state_struct;
+    
+    Plugin_Descriptor_Parameter *parameters;
+    u32 num_parameters;
+} Plugin_Descriptor;
+
+typedef struct {
+    union{
+        int int_value;
+        float float_value;
+        int enum_value;
+    };
+} Plugin_Parameter_Value;
+
+
+//TODO pour l'instant il y a un bug : si l'ui arrive à emettre 4096 blocs pendant que le thread audio fait 1 copie
+typedef struct{
+    Plugin_Parameter_Value *buffer;
+    volatile Plugin_Parameter_Value **head;
+    u32 writer_idx;
+    u32 buffer_size;
+    u32 num_fields_by_plugin;
+} Plugin_Parameters_Ring_Buffer;
+
 
 typedef struct {
     bool worked;
@@ -98,7 +173,6 @@ typedef struct{
 } UI_State;
 
 
-
 //TODO types 
 typedef struct {
     real32 X0, Y0, X1, Y1;     // Glyph corners
@@ -144,24 +218,32 @@ typedef struct{
 } IR_Vertex;
 
 typedef struct {
-    Font* font;
-    Vec2 window_dim;
-    
+    Font font;
     Vertex *draw_vertices;
     u32 draw_vertices_count;
     u32 *draw_indices;
     u32 draw_indices_count;
-    
+} Graphics_Context_Atlas;
+
+typedef struct {
     IR_Vertex ir_vertices[6];
-    real32 *IR_min_buffer;
-    real32 *IR_max_buffer;
+    Vec2 *IR_min_max_buffer;
     u32 IR_pixel_count;
-    
+} Graphics_Context_IR;
+
+typedef struct {
     IR_Vertex fft_vertices[6];
     real32 *fft_buffer;
     u32 fft_pixel_count;
-    
-} GraphicsContext;
+} Graphics_Context_FFT;
 
+typedef struct {
+    Vec2 window_dim;
+    Graphics_Context_Atlas atlas;
+    Graphics_Context_IR ir;
+    Graphics_Context_FFT fft;
+} Graphics_Context;
+
+struct Window_Context;
 
 #endif //STRUCTS_H

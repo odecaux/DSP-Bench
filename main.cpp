@@ -6,16 +6,14 @@
 #include "windows.h"
 
 #include "base.h"
-#include "descriptor.h"
 #include "structs.h"
+#include "descriptor.h"
 #include "wav_reader.h"
 #include "audio.h"
 #include "app.h"
 
 int WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR lpCmdLine, i32 show_cmd)
 {
-    
-    
     i32 argc = __argc;
     char **argv = __argv;
     if(argc != 3)
@@ -23,7 +21,6 @@ int WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR lpCmdLine, i3
         printf("wrong argument count\n");
         return -1;
     }
-    
     
     //~
     // Audio 
@@ -77,7 +74,6 @@ int WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR lpCmdLine, i3
     for(u32 channel = 0; channel < num_channels; channel++)
     {
         deinterleaved_buffer[channel] = (real32*) malloc(sizeof(real32) * samples_by_channel);
-        assert(deinterleaved_buffer[channel] != NULL);
     }
     
     deinterleave(deinterleaved_buffer, float_buffer, samples_by_channel, num_channels);
@@ -123,9 +119,6 @@ int WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR lpCmdLine, i3
     
     if(handle.worked)
     {
-        
-        //~ Application
-        
         Plugin_Parameter_Value *parameter_values_audio_side = (Plugin_Parameter_Value*) 
             malloc(sizeof(Plugin_Parameter_Value) * handle.descriptor.num_parameters);
         

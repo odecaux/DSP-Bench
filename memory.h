@@ -46,7 +46,7 @@ void instrumented_free(void* address, const char* file, int line)
 #ifdef LOG_ALLOCATIONS
 
 #define m_allocate(size) instrumented_malloc(size, __FILENAME__, __LINE__)
-#define m_allocate_array(type, count) (type *)instrumented_array_malloc(count, sizeof(type), #type,__FILENAME__, __LINE__)
+#define m_allocate_array(type, count) ((type) *)instrumented_array_malloc(count, sizeof(type), #type,__FILENAME__, __LINE__)
 #define m_free(address) instrumented_free(address, __FILENAME__, __LINE__)
 
 #else 

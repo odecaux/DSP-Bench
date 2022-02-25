@@ -19,6 +19,8 @@ typedef struct {
 
 Ipp_Context ipp_initialize();
 
-void forward_fft(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp_ctx);
+void generate_tone(real32 freq, real32 *buffer, u32 sample_count);
+
+void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp_ctx);
 
 #endif //FFT_H

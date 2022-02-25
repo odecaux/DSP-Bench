@@ -19,7 +19,7 @@
 #define DEFAULT_FONT_FILENAME "JetBrainsMono-Regular.ttf"
 
 
-#define IR_BUFFER_LENGTH 512
+#define IR_BUFFER_LENGTH 64
 #define IR_PIXEL_LENGTH 512
 
 #define ATLAS_MAX_VERTEX_COUNT 4096

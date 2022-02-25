@@ -3,25 +3,25 @@
 #ifndef DRAW_H
 #define DRAW_H
 
-u32 push_vtx(Vec2 pos, Color col, GraphicsContext *graphics_ctx)
+u32 push_vtx(Vec2 pos, Color col, Graphics_Context_Atlas *graphics_ctx)
 {
     Vertex* vtx_write = graphics_ctx->draw_vertices;
     u32 vtx_idx = graphics_ctx->draw_vertices_count++;
     
 	vtx_write[vtx_idx].pos = pos;
     vtx_write[vtx_idx].col = col;
-	vtx_write[vtx_idx].uv = graphics_ctx->font->white_rect_pos;
+	vtx_write[vtx_idx].uv = graphics_ctx->font.white_rect_pos;
     return vtx_idx;
 }
 
-void push_idx(u32 vtx_idx, GraphicsContext *graphics_ctx)
+void push_idx(u32 vtx_idx, Graphics_Context_Atlas *graphics_ctx)
 {
     graphics_ctx->draw_indices[graphics_ctx->draw_indices_count++] = vtx_idx;
 }
 
-void draw_character(i32 codepoint, Color col, Rect bounds, GraphicsContext *graphics_ctx)
+void draw_character(i32 codepoint, Color col, Rect bounds, Graphics_Context_Atlas *graphics_ctx)
 {
-    Font* font = graphics_ctx->font;
+    Font* font = &graphics_ctx->font;
     Glyph *glyph = &font->glyphs[font->codepoint_to_idx[codepoint]];
     
     auto top_left = bounds.origin;
@@ -29,7 +29,7 @@ void draw_character(i32 codepoint, Color col, Rect bounds, GraphicsContext *grap
     auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
     auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
     
-    Vec2 white_rect_pos = graphics_ctx->font->white_rect_pos;
+    Vec2 white_rect_pos = font->white_rect_pos;
     
     u32 vtx_idx = graphics_ctx->draw_vertices_count;
     Vertex *vtx_write = graphics_ctx->draw_vertices + graphics_ctx->draw_vertices_count;
@@ -66,7 +66,7 @@ void draw_character(i32 codepoint, Color col, Rect bounds, GraphicsContext *grap
 
 //TODO c'est de la merde cette api mdr
 
-void draw_line(Vec2 start, Vec2 end, Color col, real32 width, GraphicsContext *graphics_ctx)
+void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_Context_Atlas *graphics_ctx)
 {
     const Vec2 normal = vec2_normalize(start, end);
 	const Vec2 perpendicular = Vec2(normal.y, -normal.x) ;
@@ -77,7 +77,7 @@ void draw_line(Vec2 start, Vec2 end, Color col, real32 width, GraphicsContext *g
     auto c = vec2_add(start, hn);
     auto d = vec2_add(end, hn);
     
-    Vec2 white_rect_pos = graphics_ctx->font->white_rect_pos;
+    Vec2 white_rect_pos = graphics_ctx->font.white_rect_pos;
     
     u32 vtx_idx = graphics_ctx->draw_vertices_count;
     Vertex *vtx_write = graphics_ctx->draw_vertices + graphics_ctx->draw_vertices_count;
@@ -112,7 +112,7 @@ void draw_line(Vec2 start, Vec2 end, Color col, real32 width, GraphicsContext *g
     graphics_ctx->draw_indices_count += 6;
 }
 
-void draw_rectangle(Rect bounds, Color color, GraphicsContext *graphics_ctx)
+void draw_rectangle(Rect bounds, Color color, Graphics_Context_Atlas *graphics_ctx)
 {
     auto top_left = bounds.origin;
     auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
@@ -124,14 +124,14 @@ void draw_rectangle(Rect bounds, Color color, GraphicsContext *graphics_ctx)
     draw_line(top_right, bottom_right, Color_Front, 1.0f, graphics_ctx);
     draw_line(bottom_right, bottom_left, Color_Front, 1.0f, graphics_ctx);
 }
-void fill_rectangle(Rect bounds, Color col, GraphicsContext *graphics_ctx)
+void fill_rectangle(Rect bounds, Color col, Graphics_Context_Atlas *graphics_ctx)
 {
     auto top_left = bounds.origin;
     auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
     auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
     auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
     
-    Vec2 white_rect_pos = graphics_ctx->font->white_rect_pos;
+    Vec2 white_rect_pos = graphics_ctx->font.white_rect_pos;
     
     u32 vtx_idx = graphics_ctx->draw_vertices_count;
     Vertex *vtx_write = graphics_ctx->draw_vertices + graphics_ctx->draw_vertices_count;
@@ -177,9 +177,9 @@ real32 measure_text_width(String text, Font *font)
     return width;
 }
 
-void draw_text(const String& text, Rect bounds, Color col, GraphicsContext *graphics_ctx)
+void draw_text(const String& text, Rect bounds, Color col, Graphics_Context_Atlas *graphics_ctx)
 {
-    Font *font = graphics_ctx->font;
+    Font *font = &graphics_ctx->font;
     
     real32 text_width = measure_text_width(text, font);
     real32 width_remaining = bounds.dim.x - text_width;
@@ -226,7 +226,7 @@ void draw_text(const String& text, Rect bounds, Color col, GraphicsContext *grap
         auto bottom_right = Vec2{x + glyph->X1, y + glyph->Y1};
         auto bottom_left = Vec2{x + glyph->X0, y + glyph->Y1};
         
-        Vec2 white_rect_pos = graphics_ctx->font->white_rect_pos;
+        Vec2 white_rect_pos = graphics_ctx->font.white_rect_pos;
         
         u32 vtx_idx = graphics_ctx->draw_vertices_count;
         Vertex *vtx_write = graphics_ctx->draw_vertices + graphics_ctx->draw_vertices_count;
@@ -267,7 +267,7 @@ void draw_text(const String& text, Rect bounds, Color col, GraphicsContext *grap
 
 void draw_slider(Rect slider_bounds, 
                  real32 normalized_value, 
-                 GraphicsContext *graphics_ctx)
+                 Graphics_Context_Atlas *graphics_ctx)
 {
     real32 slider_x = slider_bounds.origin.x + normalized_value * slider_bounds.dim.x; 
     Rect slider_rect = {
