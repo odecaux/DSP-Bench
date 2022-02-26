@@ -94,6 +94,7 @@ typedef struct {
     bool worked;
     
     void* llvm_jit_engine;
+    void *llvm_context; //TODO mutualiser 
     audio_callback_t audio_callback_f;
     default_parameters_t default_parameters_f;
     initialize_state_t initialize_state_f;
@@ -228,13 +229,13 @@ typedef struct {
 typedef struct {
     IR_Vertex ir_vertices[6];
     Vec2 *IR_min_max_buffer;
-    u32 IR_pixel_count;
+    u32 IR_sample_count;
 } Graphics_Context_IR;
 
 typedef struct {
     IR_Vertex fft_vertices[6];
     real32 *fft_buffer;
-    u32 fft_pixel_count;
+    u32 fft_sample_count;
 } Graphics_Context_FFT;
 
 typedef struct {

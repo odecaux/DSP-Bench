@@ -465,29 +465,68 @@ OpenGL_Context_IR opengl_initialize_ir()
     glGetShaderiv(ir_vertex_shader_handle, GL_COMPILE_STATUS, &status);
     assert(status == GL_TRUE);
     
-    const char *ir_fragment_shader_source =  
+    const char *ir_fragment_shader_source_interpolation =  
         "#version 330 core\n"
         
         //"uniform samplerBuffer IR_max;\n"
         "uniform samplerBuffer IR;\n"
         "in vec2 quad_pos;\n"
         
+        
+        "float plot(vec2 st, float pct){\n"
+        "    return  smoothstep( pct-0.04, pct, st.y) - \n"
+        "            smoothstep( pct, pct+0.04, st.y);\n"
+        "}\n"
+        
         "void main()\n"
         "{\n"
         "    int ir_buffer_size = textureSize(IR);\n"
-        "    vec4 sample = texelFetch(IR, int(quad_pos.x * ir_buffer_size));\n"
-        "    float value_min = step(abs(sample.r - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
-        "    float value_max = step(abs(sample.g - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
-        "    float when_min = max(sign(quad_pos.y - 0.5f), 0.0f);\n"
-        "    float when_max = max(sign(0.5f - quad_pos.y), 0.0f);\n"
-        "    float value = value_min * when_min + value_max * when_max;\n"
-        "    gl_FragColor  = vec4(value, value, value, 1.0f);\n"
+        
+        "    float x = quad_pos.x * (ir_buffer_size - 1);\n"
+        "    float n = floor(x);\n"  // integer
+        "    float f = fract(x);\n"  // fraction
+    
+        "    vec4 prev = texelFetch(IR, int(n));\n"
+        "    vec4 next = texelFetch(IR, int(n) + 1);\n"
+        
+        "    float y = mix(prev.r, next.r, smoothstep(0.,1.,f));\n"
+        "    float value = step(abs(y_min - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
+        "    gl_FragColor  = value * vec4(1.0f);\n"
         "}\n";
     
-    printf("%s\n", ir_fragment_shader_source);
+    const char *ir_fragment_shader_source_accumulation =  
+        "#version 330 core\n"
+        
+        //"uniform samplerBuffer IR_max;\n"
+        "uniform samplerBuffer IR;\n"
+        "in vec2 quad_pos;\n"
+        
+        
+        "float plot(vec2 st, float pct){\n"
+        "    return  smoothstep( pct-0.04, pct, st.y) - \n"
+        "            smoothstep( pct, pct+0.04, st.y);\n"
+        "}\n"
+        
+        "void main()\n"
+        "{\n"
+        "    int ir_buffer_size = textureSize(IR);\n"
+        "    float when_min = max(sign(quad_pos.y - 0.5f), 0.0f);\n"
+        "    float when_max = max(sign(0.5f - quad_pos.y), 0.0f);\n"
+        
+        "    float x = quad_pos.x * (ir_buffer_size - 1);\n"
+        "    vec4 y = texelFetch(IR, int(floor(x)));\n"
+        
+        "    float value_min = step(abs(y.r - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
+        "    float value_max = step(abs(y.g - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
+        
+        "    float value = value_min * when_min + value_max * when_max;\n"
+        "    gl_FragColor  = value * vec4(1.0f);\n"
+        "}\n";
+    
     
     const u32 ir_fragment_shader_handle = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(ir_fragment_shader_handle, 1, &ir_fragment_shader_source, NULL);
+    //TODO fix, charger les deux shaders ???
+    glShaderSource(ir_fragment_shader_handle, 1, &ir_fragment_shader_source_accumulation, NULL);
     glCompileShader(ir_fragment_shader_handle);
     glGetShaderiv(ir_fragment_shader_handle, GL_COMPILE_STATUS, &status);
 	assert(status == GL_TRUE);
@@ -528,7 +567,7 @@ OpenGL_Context_IR opengl_initialize_ir()
     
     
     glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * 2 * IR_PIXEL_LENGTH, NULL, GL_STREAM_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2) * IR_BUFFER_LENGTH, NULL, GL_STREAM_DRAW);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, ir_min_max_buffer);
     
     
@@ -545,6 +584,7 @@ OpenGL_Context_IR opengl_initialize_ir()
         .ir_attribute_quad_pos = ir_attribute_quad_pos,
     };
 }
+
 
 OpenGL_Context_FFT opengl_initialize_fft()
 {
@@ -572,20 +612,31 @@ OpenGL_Context_FFT opengl_initialize_fft()
     glGetShaderiv(fft_vertex_shader_handle, GL_COMPILE_STATUS, &status);
 	assert(status == GL_TRUE);
     
+    
+    
     const char *fft_fragment_shader_source =  
         "#version 330 core\n"
         
-        //"uniform samplerBuffer IR_max;\n"
         "uniform samplerBuffer IR;\n"
         "in vec2 quad_pos;\n"
+        
+        "float plot(vec2 st, float pct){\n"
+        "    return  smoothstep( pct-0.04, pct, st.y) - \n"
+        "            smoothstep( pct, pct+0.04, st.y);\n"
+        "}\n"
         
         "void main()\n"
         "{\n"
         "    int fft_buffer_size = textureSize(IR);\n"
-        "    float sample = texelFetch(IR, int(quad_pos.x * fft_buffer_size)).r;\n"
-        "    float value = step(abs(sample - quad_pos.y) - 0.01f, 0.0f);\n"
-        "    gl_FragColor  = vec4(value, value, value, 1.0f);\n"
+        "    float x = quad_pos.x * (fft_buffer_size - 1);\n"
+        "    float n = floor(x);\n"  // integer
+        "    float f = fract(x);\n"  // fraction
+        "    float prev = texelFetch(IR, int(n)).r;\n"
+        "    float next = texelFetch(IR, int(n) + 1).r;\n"
+        "    float y = mix(prev, next, smoothstep(0.,1.,f));\n"
+        "    gl_FragColor  = plot(quad_pos, y) * vec4(1.0);\n"
         "}\n";
+    
     
     printf("%s\n", fft_fragment_shader_source);
     
@@ -631,7 +682,7 @@ OpenGL_Context_FFT opengl_initialize_fft()
     
     
     glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_PIXEL_LENGTH, NULL, GL_STREAM_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_BUFFER_LENGTH / 4, NULL, GL_STREAM_DRAW);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, fft_data_buffer);
     
     return{
@@ -712,7 +763,7 @@ void opengl_render_ir(OpenGL_Context_IR* opengl_ctx, Graphics_Context_IR* graphi
                     6 * sizeof(IR_Vertex),
                     graphics_ctx->ir_vertices);
     glBufferSubData(GL_TEXTURE_BUFFER, 0, 
-                    graphics_ctx->IR_pixel_count * sizeof(Vec2), 
+                    graphics_ctx->IR_sample_count * sizeof(Vec2), 
                     graphics_ctx->IR_min_max_buffer);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 }
@@ -735,7 +786,7 @@ void opengl_render_fft(OpenGL_Context_FFT* opengl_ctx, Graphics_Context_FFT* gra
                     6 * sizeof(IR_Vertex),
                     graphics_ctx->fft_vertices);
     glBufferSubData(GL_TEXTURE_BUFFER, 0, 
-                    graphics_ctx->fft_pixel_count * sizeof(real32), 
+                    graphics_ctx->fft_sample_count * sizeof(real32), 
                     graphics_ctx->fft_buffer);
     glDrawArrays(GL_TRIANGLES, 0, 6);
 }

@@ -178,6 +178,7 @@ void compute_IR(Plugin_Handle& handle,
     m_free(IR_state_holder);
 }
 
+#if 0
 void render_IR(real32** IR_buffer, u32 channel_count, u32 sample_count, Vec2* min_max_pixel_buffer, u32 pixel_count)
 {
     memset(min_max_pixel_buffer, 0, pixel_count * sizeof(Vec2));
@@ -231,7 +232,6 @@ void render_IR(real32** IR_buffer, u32 channel_count, u32 sample_count, Vec2* mi
     }
 }
 
-
 //TODO stereo 
 void render_fft(real32* magnitude_buffer, u32 sample_count, real32* pixel_buffer, u32 pixel_count)
 {
@@ -260,6 +260,7 @@ void render_fft(real32* magnitude_buffer, u32 sample_count, real32* pixel_buffer
         }
     }
 }
+#endif 
 
 
 
@@ -349,58 +350,48 @@ void frame(Plugin_Descriptor& descriptor,
            Plugin_Parameter_Value* current_parameter_values,
            bool& parameters_were_tweaked)
 {
-    
     if(frame_io.mouse_released)
     {
         ui_state.selected_parameter_idx = -1;
     }
     
-    Rect title_bounds = { 
-        Vec2{0.0f, 0.0f}, 
-        Vec2{TOTAL_WIDTH, TITLE_HEIGHT}
-    };
+    Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };
+    Rect header_bounds = rect_remove_padding(rect_take_top(window_bounds, TITLE_HEIGHT), 10.0f, 10.0f);
+    window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT);
+    
+    
+    
+    Rect title_bounds = header_bounds;
     draw_rectangle(title_bounds, Color_Front, &graphics_ctx->atlas);
     draw_text(StringLit("gain.cpp"), title_bounds, Color_Front, &graphics_ctx->atlas);
     
-    Vec2 position = {0.0f, TITLE_HEIGHT};
     
+    
+    Rect left_panel_bounds = rect_remove_padding(rect_take_left(window_bounds, PARAMETER_PANEL_WIDTH), 10.0f, 10.0f);
+    Rect right_panel_bounds = rect_remove_padding(rect_drop_left(window_bounds, PARAMETER_PANEL_WIDTH), 10.0f, 10.0f);
+    
+    draw_rectangle(left_panel_bounds, Color_Front, &graphics_ctx->atlas);
+    
+    Rect parameter_bounds = left_panel_bounds;
+    parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
     
     for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters; parameter_idx++)
     {
-        position.y += FIELD_MARGIN * 2;
-        
         auto& current_parameter_value = current_parameter_values[parameter_idx];
         auto& parameter_descriptor = descriptor.parameters[parameter_idx];
         
-        Rect field_title_bounds = {
-            position, {TOTAL_WIDTH, FIELD_TITLE_HEIGHT}
-        };
+        Rect field_title_bounds = rect_take_top(parameter_bounds, FIELD_TITLE_HEIGHT);
+        Rect la_partie_du_bas_avec_le_slider_et_les_minmax = rect_remove_padding(rect_drop_top(parameter_bounds, FIELD_TITLE_HEIGHT), 2.5f, 2.5f);
         
         draw_text(parameter_descriptor.name, field_title_bounds, Color_Front, &graphics_ctx->atlas);
-        draw_rectangle(field_title_bounds, Color_Front, &graphics_ctx->atlas);
-        position.y += FIELD_TITLE_HEIGHT + FIELD_MARGIN;
+        //draw_rectangle(field_title_bounds, Color_Front, &graphics_ctx->atlas);
         
-        Rect field_bounds = {
-            position,
-            {TOTAL_WIDTH, FIELD_HEIGHT}
-        };
-        
-        Rect slider_bounds = rect_remove_padding(field_bounds, MIN_MAX_LABEL_WIDTH, 0.0f);
-        
-        Rect min_label_bounds = {
-            {0.0f, position.y},
-            {MIN_MAX_LABEL_WIDTH, FIELD_HEIGHT}
-        };
-        
-        
-        Rect max_label_bounds = {
-            {0.0f + TOTAL_WIDTH - MIN_MAX_LABEL_WIDTH, position.y},
-            {MIN_MAX_LABEL_WIDTH, FIELD_HEIGHT}
-        };
-        
-        draw_rectangle(min_label_bounds, Color_Front, &graphics_ctx->atlas);
+        Rect slider_bounds = rect_remove_padding(la_partie_du_bas_avec_le_slider_et_les_minmax, MIN_MAX_LABEL_WIDTH, 0.0f);
+        Rect min_label_bounds = rect_take_left(la_partie_du_bas_avec_le_slider_et_les_minmax, MIN_MAX_LABEL_WIDTH);
+        Rect max_label_bounds = rect_take_right(la_partie_du_bas_avec_le_slider_et_les_minmax, MIN_MAX_LABEL_WIDTH);
         
         draw_rectangle(slider_bounds, Color_Front, &graphics_ctx->atlas);
+        draw_rectangle(min_label_bounds, Color_Front, &graphics_ctx->atlas);
         draw_rectangle(max_label_bounds, Color_Front, &graphics_ctx->atlas);
         
         real32 new_normalized_value;
@@ -476,56 +467,40 @@ void frame(Plugin_Descriptor& descriptor,
             }break;
         }
         
-        position.y += FIELD_HEIGHT;
+        parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN;
     }
     
     
-    //TODO hardcoded
+    draw_rectangle(right_panel_bounds, Color_Front, &graphics_ctx->atlas);
     
-    //~ 
-    //IR
-    {
-        Rect IR_title_bounds = {
-            {TOTAL_WIDTH + 10.0f, 5.0f},
-            {200.0f, 10.0f}
-        };
-        
-        
-        draw_text(StringLit("Impulse Response"), IR_title_bounds, Color_Front, &graphics_ctx->atlas); 
-        
-        Rect IR_outer_bounds{
-            {TOTAL_WIDTH, 15.0f},
-            {IR_PIXEL_LENGTH, 150.0f}
-        };
-        auto IR_inner_bounds = rect_remove_padding(IR_outer_bounds, 10.0f, 10.0f);
-        draw_rectangle(IR_inner_bounds, Color_Front, &graphics_ctx->atlas);
-        draw_IR(IR_inner_bounds /*, IR_min_buffer, IR_max_buffer, IR_pixel_count*/ , &graphics_ctx->ir);
-        
-        
-    }
+    Rect ir_panel_bounds;
+    Rect fft_panel_bounds;
+    rect_split_vert_middle(right_panel_bounds, &ir_panel_bounds, &fft_panel_bounds);
+    
+    //ir_panel_bounds = rect_remove_padding(ir_panel_bounds, 10.0f, 10.0f);
+    //fft_panel_bounds = rect_remove_padding(fft_panel_bounds, 10.0f, 10.0f);
+    
+    draw_rectangle(ir_panel_bounds, Color_Front, &graphics_ctx->atlas);
+    Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
+    Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
     
     
-    //~ 
+    draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &graphics_ctx->atlas); 
     
-    {
-        
-        Rect IR_title_bounds = {
-            {TOTAL_WIDTH + 10.0f, 160.0f},
-            {200.0f, 10.0f}
-        };
-        
-        
-        draw_text(StringLit("Frequency Response"), IR_title_bounds, Color_Front, &graphics_ctx->atlas); 
-        
-        Rect IR_outer_bounds{
-            {TOTAL_WIDTH, 170.0f},
-            {IR_PIXEL_LENGTH, 150.0f}
-        };
-        auto IR_inner_bounds = rect_remove_padding(IR_outer_bounds, 10.0f, 10.0f);
-        draw_rectangle(IR_inner_bounds, Color_Front, &graphics_ctx->atlas);
-        draw_fft(IR_inner_bounds, &graphics_ctx->fft);
-        
-    }
+    draw_rectangle(ir_graph_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_IR(ir_graph_bounds /*, IR_min_buffer, IR_max_buffer, IR_pixel_count*/ , &graphics_ctx->ir);
+    
+    
+    
+    draw_rectangle(fft_panel_bounds, Color_Front, &graphics_ctx->atlas);
+    Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
+    Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
+    
+    
+    draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &graphics_ctx->atlas); 
+    draw_rectangle(fft_graph_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_fft(fft_graph_bounds, &graphics_ctx->fft);
+    
 }
 
 
@@ -538,7 +513,7 @@ void initialize_gui(Plugin_Handle& handle,
                     Plugin_Parameters_Ring_Buffer* ring)
 {
     Graphics_Context graphics_ctx = {};
-    graphics_ctx.window_dim = { 600.0f + TOTAL_WIDTH, 400.0f}; 
+    graphics_ctx.window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, }; 
     
     Window_Context window = win32_init_window(&graphics_ctx.window_dim);
     
@@ -575,20 +550,29 @@ void initialize_gui(Plugin_Handle& handle,
     
     
     graphics_ctx.ir = {
-        .IR_min_max_buffer = m_allocate_array(Vec2, IR_PIXEL_LENGTH),
-        .IR_pixel_count = IR_PIXEL_LENGTH
+        .IR_min_max_buffer = m_allocate_array(Vec2, IR_BUFFER_LENGTH),
+        .IR_sample_count = IR_BUFFER_LENGTH
     };
     
     graphics_ctx.fft = {
-        .fft_buffer = m_allocate_array(real32, IR_PIXEL_LENGTH),
-        .fft_pixel_count = IR_PIXEL_LENGTH
+        .fft_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH),
+        .fft_sample_count = IR_BUFFER_LENGTH / 4 //TODO variable
     };
     
     
-    render_IR(IR_buffer, audio_parameters.num_channels, IR_BUFFER_LENGTH, graphics_ctx.ir.IR_min_max_buffer, IR_PIXEL_LENGTH);
-    render_fft(magnitudes, IR_BUFFER_LENGTH  /4, graphics_ctx.fft.fft_buffer, IR_PIXEL_LENGTH);
+    //render_IR(IR_buffer, audio_parameters.num_channels, IR_BUFFER_LENGTH, graphics_ctx.ir.IR_min_max_buffer, IR_PIXEL_LENGTH);
+    //render_fft(magnitudes, IR_BUFFER_LENGTH  /4, graphics_ctx.fft.fft_buffer, IR_PIXEL_LENGTH);
+    //memcpy(graphics_ctx.ir.IR_min_max_buffer, magnitudes, sizeof(Vec2) * IR_BUFFER_LENGTH); 
+    {
+        Vec2 *buf = graphics_ctx.ir.IR_min_max_buffer;
+        memset(buf, 0, sizeof(Vec2) * IR_BUFFER_LENGTH);
+        buf[0] = { 0.5f, -0.5f};
+        buf[23] = { 0.2f, -0.6f};
+        
+    }
+    memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH / 4); 
     
-    printf("buffer \n");
+    /*printf("buffer \n");
     for(i32 i = 0;i < IR_BUFFER_LENGTH; i++)
     {
         printf("\n%.3d : %.3f", i, magnitudes[i]);
@@ -598,9 +582,7 @@ void initialize_gui(Plugin_Handle& handle,
     for(i32 i = 0;i < IR_PIXEL_LENGTH; i++)
     {
         printf("\n%.3d : %.3f", i, graphics_ctx.fft.fft_buffer[i]);
-    }
-    //~ 
-    
+    }*/
     
     IO frame_io = io_initial_state();
     UI_State ui_state = {-1};
@@ -644,9 +626,11 @@ void initialize_gui(Plugin_Handle& handle,
             for(i32 i = 0; i < IR_BUFFER_LENGTH; i++)
                 magnitudes[i] = sqrt(fft_out[i].x * fft_out[i].x + fft_out[i].y * fft_out[i].y);
             
-            render_IR(IR_buffer, audio_parameters.num_channels, IR_BUFFER_LENGTH, graphics_ctx.ir.IR_min_max_buffer, IR_PIXEL_LENGTH);
-            render_fft(magnitudes, IR_BUFFER_LENGTH / 4, graphics_ctx.fft.fft_buffer, IR_PIXEL_LENGTH);
+            //memcpy(graphics_ctx.ir.IR_min_max_buffer, magnitudes, sizeof(Vec2) * IR_BUFFER_LENGTH); 
             
+            //render_IR(IR_buffer, audio_parameters.num_channels, IR_BUFFER_LENGTH, graphics_ctx.ir.IR_min_max_buffer, IR_PIXEL_LENGTH);
+            //render_fft(magnitudes, IR_BUFFER_LENGTH / 4, graphics_ctx.fft.fft_buffer, IR_PIXEL_LENGTH);
+            memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH / 4);
         }
         
         opengl_render_ui(&opengl_ctx, &graphics_ctx);

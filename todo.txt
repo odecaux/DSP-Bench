@@ -1,5 +1,39 @@
-faire une app de test pour avoir just les fft -> shaders  
-les shaders avec interpolation
-une gui dynamique
-allocators
 
+
+
+faire deux fragment shaders séparés : un avec interpolation, un accumulation
+allocators
+reload le plugin
+
+faire une app de test pour avoir just les fft -> shaders  
+
+mutualiser llvm_context
+je suis pas sûr qu'on ait besoin de garder compiler_instance et tous les pass_manager; 
+faut qu'on benchmark si ça fait une différence
+
+
+
+llvm::LLVMContext llvm_context;
+auto compile_action = clang::EmitLLVMOnlyAction(&llvm_context);
+compiler_instance.ExecuteAction(*compile_action);
+
+
+llvm::EngineBuilder builder(compile_action->takeModule());
+    builder.setMCJITMemoryManager(std::make_unique<llvm::SectionMemoryManager>());
+    builder.setOptLevel(llvm::CodeGenOpt::Level::Aggressive);
+llvm::ExecutionEngine *engine = builder.create();
+
+engine->finalizeObject();
+auto audio_callback_f = (audio_callback_t)engine->getFunctionAddress("audio_callback_wrapper");
+
+
+
+
+
+
+TESTER :
+	charger-décharger-recharger plugin_handle->execution_engine, 
+	charger plusieurs plugins
+	charger deux plugins et comparer les descripteurs
+	
+	faire fonctionner le module pass manager dans le corps de la fonction; puis dans Clang_Context

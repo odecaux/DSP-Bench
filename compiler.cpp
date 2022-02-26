@@ -54,39 +54,10 @@ float oct_tanh_32(float d1) { return tanh(d1); }
 
 Clang_Context* create_clang_context_impl()
 {
-    
     //magic stuff
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
     llvm::InitializeNativeTargetAsmParser();
-    
-    llvm::PassBuilder passBuilder;
-    llvm::LoopAnalysisManager loopAnalysisManager;
-    llvm::FunctionAnalysisManager functionAnalysisManager;
-    llvm::CGSCCAnalysisManager cGSCCAnalysisManager;
-    llvm::ModuleAnalysisManager moduleAnalysisManager;
-    
-    
-    passBuilder.registerModuleAnalyses(moduleAnalysisManager);
-    passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
-    passBuilder.registerFunctionAnalyses(functionAnalysisManager);
-    functionAnalysisManager.registerPass([&]{ return passBuilder.buildDefaultAAPipeline(); });
-    passBuilder.registerLoopAnalyses(loopAnalysisManager);
-    passBuilder.crossRegisterProxies(loopAnalysisManager, functionAnalysisManager, cGSCCAnalysisManager, moduleAnalysisManager);
-    
-    llvm::ModulePassManager module_pass_manager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
-    
-    auto& Registry = *llvm::PassRegistry::getPassRegistry();
-    llvm::initializeCore(Registry);
-    llvm::initializeScalarOpts(Registry);
-    llvm::initializeVectorization(Registry);
-    llvm::initializeIPO(Registry);
-    llvm::initializeAnalysis(Registry);
-    llvm::initializeTransformUtils(Registry);
-    llvm::initializeInstCombine(Registry);
-    llvm::initializeInstrumentation(Registry);
-    llvm::initializeTarget(Registry);
-    
     
     llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
     
@@ -131,6 +102,37 @@ Clang_Context* create_clang_context_impl()
     llvm::sys::DynamicLibrary::AddSymbol("cosh_64", oct_cosh_64);
     llvm::sys::DynamicLibrary::AddSymbol("tanh_64", oct_tanh_64);
     
+    auto& Registry = *llvm::PassRegistry::getPassRegistry();
+    llvm::initializeCore(Registry);
+    llvm::initializeScalarOpts(Registry);
+    llvm::initializeVectorization(Registry);
+    llvm::initializeIPO(Registry);
+    llvm::initializeAnalysis(Registry);
+    llvm::initializeTransformUtils(Registry);
+    llvm::initializeInstCombine(Registry);
+    llvm::initializeInstrumentation(Registry);
+    llvm::initializeTarget(Registry);
+    
+    
+    
+    auto* clang_ctx = new Clang_Context();
+    
+    
+    llvm::PassBuilder passBuilder;
+    
+    passBuilder.registerModuleAnalyses(clang_ctx->moduleAnalysisManager);
+    passBuilder.registerCGSCCAnalyses(clang_ctx->cGSCCAnalysisManager);
+    passBuilder.registerFunctionAnalyses(clang_ctx->functionAnalysisManager);
+    clang_ctx->functionAnalysisManager.registerPass([&]{ return passBuilder.buildDefaultAAPipeline(); });
+    passBuilder.registerLoopAnalyses(clang_ctx->loopAnalysisManager);
+    passBuilder.crossRegisterProxies(clang_ctx->loopAnalysisManager, 
+                                     clang_ctx->functionAnalysisManager, 
+                                     clang_ctx->cGSCCAnalysisManager, 
+                                     clang_ctx->moduleAnalysisManager);
+    
+    clang_ctx->module_pass_manager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
+    
+    
     clang::LangOptions language_options;
     language_options.Bool = 1;
     language_options.CPlusPlus = 1;
@@ -140,9 +142,6 @@ Clang_Context* create_clang_context_impl()
     language_options.MicrosoftExt = 1;
     
     
-    auto* clang_ctx = new Clang_Context();
-    clang_ctx->module_pass_manager = std::move(module_pass_manager);
-    clang_ctx->module_analysis_manager = std::move(moduleAnalysisManager);
     
     clang_ctx->compiler_instance.createDiagnostics();
     
@@ -150,7 +149,14 @@ Clang_Context* create_clang_context_impl()
     auto triple_str = "-triple=" + triple;
     
     clang::CompilerInvocation::CreateFromArgs(clang_ctx->compiler_instance.getInvocation(),
-                                              {triple_str.c_str(),"-Ofast", "-fcxx-exceptions", "-fms-extensions", "-ffast-math", "-fdenormal-fp-math=positive-zero"}, 
+                                              {
+                                                  triple_str.c_str(),
+                                                  "-Ofast", 
+                                                  "-fcxx-exceptions", 
+                                                  "-fms-extensions", 
+                                                  "-ffast-math", 
+                                                  "-fdenormal-fp-math=positive-zero"
+                                              }, 
                                               clang_ctx->compiler_instance.getDiagnostics());
     
     
@@ -160,6 +166,8 @@ Clang_Context* create_clang_context_impl()
     auto& header_opts = clang_ctx->compiler_instance.getHeaderSearchOpts();
     //header_opts.Verbose = true;
     header_opts.AddPath(".", clang::frontend::Quoted , false, false);
+    
+    
     
     return clang_ctx;
 }
@@ -180,49 +188,50 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx)
     
     Plugin_Descriptor descriptor;
     std::unique_ptr<llvm::MemoryBuffer> new_buffer = nullptr;
-    {
-        //~
-        
-        bool error = false;
-        
-        auto visit_ast = [&](clang::ASTContext& ast_ctx){
-            auto decls = find_decls(ast_ctx);
-            if(!decls.worked)
-            {
-                error = true;
-                return;
-            }
-            
-            if(!parse_plugin_descriptor(decls.parameters_struct, decls.state_struct, descriptor))
-            {
-                error = true;
-                return;
-            }
-            
-            auto& source_manager = compiler_instance.getSourceManager();
-            
-            new_buffer = rewrite_plugin_source(decls, source_manager, compiler_instance.getLangOpts(), source_manager.getMainFileID());
-        };
-        
-        auto action = make_action(visit_ast);
-        compiler_instance.ExecuteAction(action);
-        
-        if(error == true)
+    
+    bool error = false;
+    
+    auto visit_ast = [&](clang::ASTContext& ast_ctx){
+        auto decls = find_decls(ast_ctx);
+        if(!decls.worked)
         {
-            std::cout << "error while parsing file\n";
-            return {false};
-        }
-        else{
-            llvm::outs() << "parsing succeeded\n";
+            error = true;
+            return;
         }
         
+        if(!parse_plugin_descriptor(decls.parameters_struct, decls.state_struct, descriptor))
+        {
+            error = true;
+            return;
+        }
+        
+        
+        new_buffer = rewrite_plugin_source(decls, 
+                                           compiler_instance.getSourceManager(), 
+                                           compiler_instance.getLangOpts(), 
+                                           compiler_instance.getSourceManager().getMainFileID());
+    };
+    
+    auto action = make_action(visit_ast);
+    compiler_instance.ExecuteAction(action);
+    
+    if(error == true)
+    {
+        std::cout << "error while parsing file\n";
+        return {false};
     }
+    else{
+        std::cout << "parsing succeeded\n";
+    }
+    
+    
     
     return jit_compile(new_buffer->getMemBufferRef(), 
                        compiler_instance, 
                        descriptor,
+                       &clang_ctx->llvm_context,
                        clang_ctx->module_pass_manager,
-                       clang_ctx->module_analysis_manager
+                       clang_ctx->moduleAnalysisManager
                        );
 }
 
@@ -578,18 +587,6 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 bool parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
                              const clang::CXXRecordDecl* state_struct_decl,
                              Plugin_Descriptor& plugin_descriptor)
@@ -788,6 +785,7 @@ bool parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl,
 
 Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
                           Plugin_Descriptor& descriptor,
+                          llvm::LLVMContext *llvm_context,
                           llvm::ModulePassManager& module_pass_manager,
                           llvm::ModuleAnalysisManager& module_analysis_manager)
 {
@@ -800,9 +798,7 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
     compiler_instance.getFrontendOpts().Inputs.clear();
     compiler_instance.getFrontendOpts().Inputs.push_back(new_file);
     
-    llvm::LLVMContext llvm_context;
-    
-    auto compile_action = std::make_unique<clang::EmitLLVMOnlyAction>(&llvm_context);
+    auto compile_action = std::make_unique<clang::EmitLLVMOnlyAction>(llvm_context);
     
     if (compiler_instance.ExecuteAction(*compile_action)) 
     {
@@ -814,7 +810,7 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
             {
                 
                 //Optimizations
-                //module_pass_manager.run(*module, module_analysis_manager);
+                module_pass_manager.run(*module, module_analysis_manager);
                 
                 //create JIT
                 llvm::EngineBuilder builder(std::move(module));
@@ -826,6 +822,7 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
                 
                 if (engine) 
                 {
+                    //on en a pas vraiment besoin de faire ça. C'est dans le cas où on chargerait plusieur modules sur le même executionEngine
                     engine->finalizeObject();
                     
                     auto audio_callback_f = (audio_callback_t)engine->getFunctionAddress("audio_callback_wrapper");
@@ -836,19 +833,39 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
                     assert(audio_callback_f && default_parameters_f && initialize_state_f);
                     
                     return Plugin_Handle{
-                        true, 
-                        (void*)engine, 
-                        audio_callback_f, 
-                        default_parameters_f, 
-                        initialize_state_f,
-                        descriptor
+                        .worked = true, 
+                        .llvm_jit_engine = (void*)engine, 
+                        .audio_callback_f = audio_callback_f, 
+                        .default_parameters_f = default_parameters_f, 
+                        .initialize_state_f = initialize_state_f,
+                        .descriptor = descriptor
                     };
                 }
             }
         }
     }
     
-    Plugin_Handle handle;
+    
     return {false};
 }
 
+extern "C" __declspec(dllexport) 
+void release_jit(Plugin_Handle *plugin)
+{
+    //delete engine;
+    //delete module;
+    //delete llvm;
+    
+    delete (llvm::ExecutionEngine *)plugin->llvm_jit_engine;
+    plugin->audio_callback_f = nullptr;
+    plugin->default_parameters_f = nullptr;
+    plugin->initialize_state_f = nullptr;
+}
+
+
+extern "C" __declspec(dllexport) 
+void release_clang_ctx(void* clang_ctx_void)
+{
+    Clang_Context *clang_ctx = (Clang_Context*)clang_ctx_void;
+    delete clang_ctx;
+}

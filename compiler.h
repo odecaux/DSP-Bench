@@ -58,9 +58,15 @@
 
 struct Clang_Context {
     bool succeeded = true;
-    llvm::ModulePassManager module_pass_manager;
-    llvm::ModuleAnalysisManager module_analysis_manager;
     clang::CompilerInstance compiler_instance;
+    llvm::LLVMContext llvm_context;
+    
+    llvm::ModulePassManager module_pass_manager;
+    llvm::ModuleAnalysisManager moduleAnalysisManager;
+    llvm::CGSCCAnalysisManager cGSCCAnalysisManager;
+    llvm::FunctionAnalysisManager functionAnalysisManager;
+    llvm::LoopAnalysisManager loopAnalysisManager;
+    
 };
 
 struct Plugin_Required_Decls{
@@ -215,10 +221,12 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
 
 Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
                           Plugin_Descriptor& descriptor,
+                          llvm::LLVMContext *llvm_context,
                           llvm::ModulePassManager& module_pass_manager,
                           llvm::ModuleAnalysisManager& module_analysis_manager);
 
 Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_cts);
+
 
 #if _WIN32
 #pragma comment(lib, "version.lib")

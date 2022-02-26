@@ -103,6 +103,55 @@ internal bool rect_contains(Rect bounds, Vec2 position)
     (position.y < bounds.origin.y + bounds.dim.y);
 }
 
+internal Rect rect_drop_top(Rect rect, real32 margin_top)
+{
+    rect.dim.y -= margin_top;
+    rect.origin.y += margin_top;
+    return rect;
+}
+
+internal Rect rect_take_top(Rect rect, real32 margin_top)
+{
+    rect.dim.y = margin_top;
+    return rect;
+}
+
+
+internal Rect rect_drop_left(Rect rect, real32 margin_left)
+{
+    rect.dim.x -= margin_left;
+    rect.origin.x += margin_left;
+    return rect;
+}
+
+internal Rect rect_take_left(Rect rect, real32 margin_left)
+{
+    rect.dim.x = margin_left;
+    return rect;
+}
+
+internal Rect rect_take_right(Rect rect, real32 margin_left)
+{
+    rect.origin.x += rect.dim.x - margin_left;
+    rect.dim.x = margin_left;
+    return rect;
+}
+
+
+internal void rect_split_from_left(Rect in, real32 margin_left, Rect *out_left, Rect *out_right)
+{
+    *out_left = rect_take_left(in, margin_left);
+    *out_right = rect_drop_left(in, margin_left);
+}
+
+internal void rect_split_vert_middle(Rect in, Rect *out_top, Rect *out_bottom)
+{
+    in.dim.y /= 2.0f;
+    *out_top = in;
+    in.origin.y += in.dim.y;
+    *out_bottom = in;
+}
+
 internal Rect rect_remove_padding(Rect rect, real32 padding_x, real32 padding_y)
 {
     return Rect{
@@ -111,8 +160,8 @@ internal Rect rect_remove_padding(Rect rect, real32 padding_x, real32 padding_y)
             rect.origin.y + padding_y
         },
         {
-            rect.dim.x - padding_x * 2,
-            rect.dim.y - padding_y * 2
+            octave_max(rect.dim.x - padding_x * 2, 0.0f),
+            octave_max(rect.dim.y - padding_y * 2, 0.0f)
         }
     };
 }
