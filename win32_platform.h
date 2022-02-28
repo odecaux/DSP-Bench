@@ -31,35 +31,15 @@ i64 win32_init_timer()
     return (i64) time.QuadPart;
 }
 
-i64 win32_pace_60_fps(i64 last_time, i64 *current_time, real32 *delta_time) // TODO(octave): refactor variable names
+void win32_pace_60_fps(i64 last_time, i64 *current_time, real32 *delta_time) // TODO(octave): refactor variable names
 {
     
-    //manual framerate management
-    //unnecessary because we use OpenGL's vsync thing : wglSwapIntervalEXT(1);
-#if 0
-    LARGE_INTEGER render_end;
-    QueryPerformanceCounter(&render_end);
-    u64 render_elapsed  = render_end.QuadPart - last_time;
-    auto ms_render = ((1000000.0f*render_elapsed) / counter_frequency.QuadPart) / 1000.0f;
-    int ceiled = ceil(ms_render);
-    
-    if(16-ceiled  > 0)
-    {
-        Sleep(16 - ceiled);
-        printf("%d\n", ceiled);
-    }
-    
-#endif
-    
-    LARGE_INTEGER counter_frequency;
-    QueryPerformanceFrequency(&counter_frequency);
-    
-    LARGE_INTEGER frame_end;
-    QueryPerformanceCounter(&frame_end);
-    auto frame_elapsed  = frame_end.QuadPart - last_time;
-    auto ms_frame = ((1000000.0f*frame_elapsed) / counter_frequency.QuadPart) / 1000.0f;
-    *delta_time = ms_frame;
-    return frame_end.QuadPart;
+    LARGE_INTEGER counter_frequency; QueryPerformanceFrequency(&counter_frequency);
+    LARGE_INTEGER frame_end; QueryPerformanceCounter(&frame_end);
+    i64 elapsed_tick  = frame_end.QuadPart - last_time;
+    i64 elapsed_milli = ((1000000*elapsed_tick) / counter_frequency.QuadPart) / 1000;
+    *delta_time = (real32)elapsed_milli;
+    *current_time = frame_end.QuadPart;
 }
 
 
@@ -73,12 +53,7 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
     {
         LPCREATESTRUCT pcs = (LPCREATESTRUCT)l_param;
         Vec2 *window_dim = (Vec2*)pcs->lpCreateParams;
-        
-        SetWindowLongPtr(
-                         window,
-                         GWLP_USERDATA,
-                         (LONG_PTR)(window_dim)
-                         );
+        SetWindowLongPtr(window, GWLP_USERDATA, (LONG_PTR)(window_dim));
         
         result = 1;
     }
@@ -91,7 +66,18 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
             UINT width = LOWORD(l_param);
             UINT height = HIWORD(l_param);
             *window_dim = { (real32)width, (real32)height };
+            return 0;
         }
+        
+        else if(message == WM_SIZING)
+        {
+            RECT rect = *(RECT*)(l_param);
+            real32 new_width = (real32)(rect.right - rect.left);
+            real32 new_height = (real32)(rect.bottom - rect.top);
+            *window_dim = { new_width, new_height};
+            return TRUE;
+        }
+        
         else if(message == WM_DESTROY || message == WM_DESTROY || message == WM_QUIT)
         {
             printf("quit\n");

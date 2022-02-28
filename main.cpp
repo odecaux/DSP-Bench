@@ -28,14 +28,12 @@ int WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR lpCmdLine, i3
     CoInitializeEx(NULL, COINIT_MULTITHREADED); 
     
     void* platform_audio_context;
-    Audio_Parameters audio_parameters;
     
     Audio_Context audio_context = {};
     audio_context.file_is_valid = 0;
+    Audio_Parameters audio_parameters = {};
     
-    
-    if(!audio_initialize(&platform_audio_context, &audio_parameters, &audio_context))
-        return -1;
+    if(!audio_initialize(&platform_audio_context, &audio_parameters, &audio_context)) return -1;
     
     
     auto wav_data = windows_load_wav(audio_filename);
@@ -115,11 +113,9 @@ int WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR lpCmdLine, i3
     void* clang_ctx = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context")();
     
     auto handle = try_compile_f(argv[2], clang_ctx);
-    auto handle_2 = try_compile_f(argv[2], clang_ctx);
     
-    if(handle.worked ||handle_2.worked)
+    if(handle.worked)
     {
-        assert(plugin_descriptor_compare(&handle.descriptor, &handle_2.descriptor));
         
         Plugin_Parameter_Value *parameter_values_audio_side = (Plugin_Parameter_Value*) 
             malloc(sizeof(Plugin_Parameter_Value) * handle.descriptor.num_parameters);
@@ -174,13 +170,14 @@ int WinMain(HINSTANCE instance, HINSTANCE previous_instance, LPSTR lpCmdLine, i3
         
         initialize_gui(handle, audio_parameters, parameter_values_ui_side, &ring);
         
+        
+        
         typedef void(*release_jit_t)(Plugin_Handle*);
         release_jit_t release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
         
         InterlockedExchange8(&audio_context.plugin_is_valid, 0);
         
         release_jit(&handle);
-        release_jit(&handle_2);
     }
     else
     {

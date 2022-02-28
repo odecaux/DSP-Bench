@@ -20,6 +20,7 @@ internal Font load_fonts(const char* font_filename)
     {
         exit(1);
     }
+    
     u8* font_file_buffer = (u8*) m_allocate(font_file_size);
     if(load_file_to_memory(font_filename, font_file_buffer) == false)
     {
@@ -67,7 +68,7 @@ internal Font load_fonts(const char* font_filename)
     }
     
     //TODO osef, ça ira dans le scratch
-    realloc(codepoint_list, glyph_count * sizeof(i32));
+    codepoint_list = (i32*) realloc(codepoint_list, glyph_count * sizeof(i32));
     
     
     //3) on chope la taille de chaque glyph
@@ -260,7 +261,7 @@ internal Font load_fonts(const char* font_filename)
     m_free(font_file_buffer);
     m_free(codepoint_list);
     m_free(packedchars);
-    m_free(grayscale_pixels);
+    //m_free(grayscale_pixels);
     
     return {
         .font_size = PIXEL_SIZE,

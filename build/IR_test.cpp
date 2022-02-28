@@ -11,6 +11,7 @@ enum random_enum{
 
 struct Parameters{
     FLOAT_ARAM(0.0f, 1.0f) gain;
+    FLOAT_ARAM(0.001f, 0.1f) step;
 };
 
 struct State{
@@ -20,7 +21,7 @@ struct State{
 
 Parameters default_parameters()
 {
-    Parameters initial_state = {0.9f};
+    Parameters initial_state = {0.9f, 0.002f};
     return initial_state;
 }
 
@@ -43,7 +44,6 @@ void audio_callback(const Parameters& param,
                     const u32  num_samples,
                     const real32 sample_rate)
 {
-    double step = 1.0 / (double)num_samples;
     double gain = param.gain;
     
     
@@ -55,8 +55,7 @@ void audio_callback(const Parameters& param,
             out_buffer[channel][sample] = gain; 
         }
         
-        gain -= step;
-        //gain = gain * 0.9999f;
+        gain -= param.step;
     }
 }
 

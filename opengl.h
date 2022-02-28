@@ -20,16 +20,30 @@ typedef struct{
 } OpenGL_Context_Atlas;
 
 typedef struct{
-    u32 ir_shader_program;
+    u32 ir_integrate_shader_program;
     
-    u32 ir_vao;
-    u32 ir_vertex_buffer; //NOTE y a que 6 vertex ptdr
-    u32 ir_min_max_buffer;
-    u32 ir_min_max_texture;
+    u32 ir_integrate_vao;
+    u32 ir_integrate_vertex_buffer; //NOTE y a que 6 vertex ptdr
+    u32 ir_integrate_min_max_buffer;
+    u32 ir_integrate_min_max_texture;
     
-    GLint ir_uniform_mvp;
-    GLint ir_attribute_pos;
-    GLint ir_attribute_quad_pos;
+    GLint ir_integrate_uniform_mvp;
+    GLint ir_integrate_attribute_pos;
+    GLint ir_integrate_attribute_quad_pos;
+    
+    Vec2 *ir_integrate_temp_buffer;
+    //u32 previous_pixel_length; TODO cache
+    
+    u32 ir_interpolate_shader_program;
+    
+    u32 ir_interpolate_vao;
+    u32 ir_interpolate_vertex_buffer; //NOTE y a que 6 vertex ptdr
+    u32 ir_interpolate_buffer;
+    u32 ir_interpolate_texture;
+    
+    GLint ir_interpolate_uniform_mvp;
+    GLint ir_interpolate_attribute_pos;
+    GLint ir_interpolate_attribute_quad_pos;
 } OpenGL_Context_IR;
 
 typedef struct {
@@ -167,11 +181,12 @@ static glTexBuffer_t glTexBuffer = nullptr;
 typedef void (*glBufferSubData_t)(GLenum target, i32 *offset, i64 size, const void *data);
 static glBufferSubData_t glBufferSubData = nullptr;
 
-
 typedef void (*glActiveTexture_t)(GLenum texture);
 static glActiveTexture_t glActiveTexture = nullptr;
 
 typedef HGLRC (*wglCreateContextAttribsARB_t) (HDC hDC, HGLRC hShareContext, const int *attribList);
+typedef  void (*glTexBufferRange_t)(GLenum target​, GLenum internalFormat​, GLuint buffer​, i64 offset​, i64 size​);
+static glTexBufferRange_t glTexBufferRange = nullptr;
 
 #define LOAD_GL(function_name) function_name = (function_name##_t) wglGetProcAddress(#function_name); if(!function_name) { printf("failed to load" #function_name "\n"); return false; }
 
@@ -227,7 +242,7 @@ bool load_opengl_functions()
     LOAD_GL(glBufferSubData);
     LOAD_GL(glTexBuffer);
     LOAD_GL(glActiveTexture);
-    
+    LOAD_GL(glTexBufferRange);
     return true;
 }
 
@@ -465,13 +480,90 @@ OpenGL_Context_IR opengl_initialize_ir()
     glGetShaderiv(ir_vertex_shader_handle, GL_COMPILE_STATUS, &status);
     assert(status == GL_TRUE);
     
-    const char *ir_fragment_shader_source_interpolation =  
+    
+    //~ accumulate
+    
+    const char *ir_integrate_fragment_shader_source =  
         "#version 330 core\n"
         
-        //"uniform samplerBuffer IR_max;\n"
         "uniform samplerBuffer IR;\n"
         "in vec2 quad_pos;\n"
         
+        "float plot(vec2 st, float pct){\n"
+        "    return  smoothstep( pct-0.04, pct, st.y) - \n"
+        "            smoothstep( pct, pct+0.04, st.y);\n"
+        "}\n"
+        
+        "void main()\n"
+        "{\n"
+        "    int ir_buffer_size = textureSize(IR);\n"
+        "    float when_max = max(sign(quad_pos.y - 0.5f), 0.0f);\n"
+        "    float when_min = max(sign(0.5f - quad_pos.y), 0.0f);\n"
+        
+        "    float x = quad_pos.x * (ir_buffer_size - 1);\n"
+        "    vec4 y = texelFetch(IR, int(floor(x)));\n"
+        
+        "    float value_max = step((quad_pos.y - 0.5) - y.r / 2.0, 0.01f);\n"
+        "    float value_min = step(y.g / 2.0 - (quad_pos.y - 0.5), 0.01f);\n"
+        
+        "    float value = value_min * when_min + value_max * when_max;\n"
+        "    gl_FragColor  = value * vec4(1.0f);\n"
+        //"    gl_FragColor = when_min * vec4(1.0, 1.0, 1.0, 1.0) + when_max * vec4(1.0, 0.0, 0.0, 1.0);"
+        "}\n";
+    
+    
+    const u32 ir_integrate_fragment_shader_handle = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(ir_integrate_fragment_shader_handle, 1, &ir_integrate_fragment_shader_source, NULL);
+    glCompileShader(ir_integrate_fragment_shader_handle);
+    glGetShaderiv(ir_integrate_fragment_shader_handle, GL_COMPILE_STATUS, &status);
+    assert(status == GL_TRUE);
+    
+    const u32 ir_integrate_shader_program = glCreateProgram();
+    glAttachShader(ir_integrate_shader_program, ir_vertex_shader_handle);
+    glAttachShader(ir_integrate_shader_program, ir_integrate_fragment_shader_handle);
+    glLinkProgram(ir_integrate_shader_program);
+    glGetProgramiv(ir_integrate_shader_program, GL_LINK_STATUS, &status);
+    assert(status == GL_TRUE);
+    opengl_check_error();
+    
+    glDeleteShader(ir_integrate_fragment_shader_handle);
+    
+    const GLint ir_integrate_uniform_mvp = glGetUniformLocation(ir_integrate_shader_program, "mvp");
+    const GLint ir_integrate_attribute_pos = glGetAttribLocation(ir_integrate_shader_program, "pos");
+    const GLint ir_integrate_attribute_quad_pos = glGetAttribLocation(ir_integrate_shader_program, "quad_pos_in");
+    opengl_check_error();
+    
+    ////////////////////////////////
+    
+    u32 ir_integrate_vao; glGenVertexArrays(1, &ir_integrate_vao);
+    u32 ir_integrate_vertex_buffer; glGenBuffers(1, &ir_integrate_vertex_buffer);
+    
+    u32 ir_integrate_min_max_buffer; glGenBuffers(1, &ir_integrate_min_max_buffer);
+    u32 ir_integrate_min_max_texture; glGenTextures(1, &ir_integrate_min_max_texture);
+    
+    glBindVertexArray(ir_integrate_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, ir_integrate_vertex_buffer);
+    glBindBuffer(GL_TEXTURE_BUFFER, ir_integrate_min_max_buffer);
+    glBindTexture(GL_TEXTURE_BUFFER, ir_integrate_min_max_texture);
+    
+    glEnableVertexAttribArray(ir_integrate_attribute_pos);
+    glVertexAttribPointer(ir_integrate_attribute_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, pos));
+    glEnableVertexAttribArray(ir_integrate_attribute_quad_pos);
+    glVertexAttribPointer(ir_integrate_attribute_quad_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, quad_pos));
+    
+    
+    glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2) * IR_BUFFER_LENGTH, NULL, GL_STREAM_DRAW);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, ir_integrate_min_max_buffer);
+    
+    
+    //~ interpolate
+    
+    const char *ir_interpolate_fragment_shader_source =  
+        "#version 330 core\n"
+        
+        "uniform samplerBuffer IR;\n"
+        "in vec2 quad_pos;\n"
         
         "float plot(vec2 st, float pct){\n"
         "    return  smoothstep( pct-0.04, pct, st.y) - \n"
@@ -490,99 +582,82 @@ OpenGL_Context_IR opengl_initialize_ir()
         "    vec4 next = texelFetch(IR, int(n) + 1);\n"
         
         "    float y = mix(prev.r, next.r, smoothstep(0.,1.,f));\n"
-        "    float value = step(abs(y_min - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
+        "    float value = step(abs(y - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
         "    gl_FragColor  = value * vec4(1.0f);\n"
         "}\n";
     
-    const char *ir_fragment_shader_source_accumulation =  
-        "#version 330 core\n"
-        
-        //"uniform samplerBuffer IR_max;\n"
-        "uniform samplerBuffer IR;\n"
-        "in vec2 quad_pos;\n"
-        
-        
-        "float plot(vec2 st, float pct){\n"
-        "    return  smoothstep( pct-0.04, pct, st.y) - \n"
-        "            smoothstep( pct, pct+0.04, st.y);\n"
-        "}\n"
-        
-        "void main()\n"
-        "{\n"
-        "    int ir_buffer_size = textureSize(IR);\n"
-        "    float when_min = max(sign(quad_pos.y - 0.5f), 0.0f);\n"
-        "    float when_max = max(sign(0.5f - quad_pos.y), 0.0f);\n"
-        
-        "    float x = quad_pos.x * (ir_buffer_size - 1);\n"
-        "    vec4 y = texelFetch(IR, int(floor(x)));\n"
-        
-        "    float value_min = step(abs(y.r - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
-        "    float value_max = step(abs(y.g - (quad_pos.y * 2 - 1)) - 0.02f, 0.0f);\n"
-        
-        "    float value = value_min * when_min + value_max * when_max;\n"
-        "    gl_FragColor  = value * vec4(1.0f);\n"
-        "}\n";
-    
-    
-    const u32 ir_fragment_shader_handle = glCreateShader(GL_FRAGMENT_SHADER);
+    const u32 ir_interpolate_fragment_shader_handle = glCreateShader(GL_FRAGMENT_SHADER);
     //TODO fix, charger les deux shaders ???
-    glShaderSource(ir_fragment_shader_handle, 1, &ir_fragment_shader_source_accumulation, NULL);
-    glCompileShader(ir_fragment_shader_handle);
-    glGetShaderiv(ir_fragment_shader_handle, GL_COMPILE_STATUS, &status);
-	assert(status == GL_TRUE);
+    glShaderSource(ir_interpolate_fragment_shader_handle, 1, &ir_interpolate_fragment_shader_source, NULL);
+    glCompileShader(ir_interpolate_fragment_shader_handle);
+    glGetShaderiv(ir_interpolate_fragment_shader_handle, GL_COMPILE_STATUS, &status);
+    assert(status == GL_TRUE);
     
-    const u32 ir_shader_program = glCreateProgram();
-    glAttachShader(ir_shader_program, ir_vertex_shader_handle);
-    glAttachShader(ir_shader_program, ir_fragment_shader_handle);
-    glLinkProgram(ir_shader_program);
-    glGetProgramiv(ir_shader_program, GL_LINK_STATUS, &status);
+    const u32 ir_interpolate_shader_program = glCreateProgram();
+    glAttachShader(ir_interpolate_shader_program, ir_vertex_shader_handle);
+    glAttachShader(ir_interpolate_shader_program, ir_interpolate_fragment_shader_handle);
+    glLinkProgram(ir_interpolate_shader_program);
+    glGetProgramiv(ir_interpolate_shader_program, GL_LINK_STATUS, &status);
     assert(status == GL_TRUE);
     opengl_check_error();
     
     glDeleteShader(ir_vertex_shader_handle);
-    glDeleteShader(ir_fragment_shader_handle);
+    glDeleteShader(ir_interpolate_fragment_shader_handle);
     
-    const GLint ir_uniform_mvp = glGetUniformLocation(ir_shader_program, "mvp");
-    const GLint ir_attribute_pos = glGetAttribLocation(ir_shader_program, "pos");
-    const GLint ir_attribute_quad_pos = glGetAttribLocation(ir_shader_program, "quad_pos_in");
+    const GLint ir_interpolate_uniform_mvp = glGetUniformLocation(ir_interpolate_shader_program, "mvp");
+    const GLint ir_interpolate_attribute_pos = glGetAttribLocation(ir_interpolate_shader_program, "pos");
+    const GLint ir_interpolate_attribute_quad_pos = glGetAttribLocation(ir_interpolate_shader_program, "quad_pos_in");
     opengl_check_error();
     
     ////////////////////////////////
     
-    u32 ir_vao; glGenVertexArrays(1, &ir_vao);
-    u32 ir_vertex_buffer; glGenBuffers(1, &ir_vertex_buffer);
+    u32 ir_interpolate_vao; glGenVertexArrays(1, &ir_interpolate_vao);
+    u32 ir_interpolate_vertex_buffer; glGenBuffers(1, &ir_interpolate_vertex_buffer);
     
-    u32 ir_min_max_buffer; glGenBuffers(1, &ir_min_max_buffer);
-    u32 ir_min_max_texture; glGenTextures(1, &ir_min_max_texture);
+    u32 ir_interpolate_buffer; glGenBuffers(1, &ir_interpolate_buffer);
+    u32 ir_interpolate_texture; glGenTextures(1, &ir_interpolate_texture);
     
-    glBindVertexArray(ir_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, ir_vertex_buffer);
-    glBindBuffer(GL_TEXTURE_BUFFER, ir_min_max_buffer);
-    glBindTexture(GL_TEXTURE_BUFFER, ir_min_max_texture);
+    glBindVertexArray(ir_interpolate_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, ir_interpolate_vertex_buffer);
+    glBindBuffer(GL_TEXTURE_BUFFER, ir_interpolate_buffer);
+    glBindTexture(GL_TEXTURE_BUFFER, ir_interpolate_texture);
     
-    glEnableVertexAttribArray(ir_attribute_pos);
-    glVertexAttribPointer(ir_attribute_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, pos));
-    glEnableVertexAttribArray(ir_attribute_quad_pos);
-    glVertexAttribPointer(ir_attribute_quad_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, quad_pos));
+    glEnableVertexAttribArray(ir_interpolate_attribute_pos);
+    glVertexAttribPointer(ir_interpolate_attribute_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, pos));
+    glEnableVertexAttribArray(ir_interpolate_attribute_quad_pos);
+    glVertexAttribPointer(ir_interpolate_attribute_quad_pos, 2, GL_FLOAT, GL_FALSE, sizeof(IR_Vertex), (void*)OffsetOf(IR_Vertex, quad_pos));
     
     
     glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(Vec2) * IR_BUFFER_LENGTH, NULL, GL_STREAM_DRAW);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32F, ir_min_max_buffer);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_BUFFER_LENGTH, NULL, GL_STREAM_DRAW);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, ir_interpolate_buffer);
     
     
-    return {
+    OpenGL_Context_IR test = {
         
-        .ir_shader_program = ir_shader_program,
-        .ir_vao = ir_vao, 
-        .ir_vertex_buffer = ir_vertex_buffer, 
-        .ir_min_max_buffer = ir_min_max_buffer,
-        .ir_min_max_texture = ir_min_max_texture,
+        .ir_integrate_shader_program = ir_integrate_shader_program,
+        .ir_integrate_vao = ir_integrate_vao, 
+        .ir_integrate_vertex_buffer = ir_integrate_vertex_buffer, 
+        .ir_integrate_min_max_buffer = ir_integrate_min_max_buffer,
+        .ir_integrate_min_max_texture = ir_integrate_min_max_texture,
         
-        .ir_uniform_mvp = ir_uniform_mvp, 
-        .ir_attribute_pos = ir_attribute_pos,
-        .ir_attribute_quad_pos = ir_attribute_quad_pos,
+        .ir_integrate_uniform_mvp = ir_integrate_uniform_mvp, 
+        .ir_integrate_attribute_pos = ir_integrate_attribute_pos,
+        .ir_integrate_attribute_quad_pos = ir_integrate_attribute_quad_pos,
+        
+        .ir_integrate_temp_buffer = m_allocate_array(Vec2, IR_MAX_PIXEL_WIDTH),
+        
+        .ir_interpolate_shader_program = ir_interpolate_shader_program,
+        .ir_interpolate_vao = ir_interpolate_vao, 
+        .ir_interpolate_vertex_buffer = ir_interpolate_vertex_buffer, 
+        .ir_interpolate_buffer = ir_interpolate_buffer,
+        .ir_interpolate_texture = ir_interpolate_texture,
+        
+        .ir_interpolate_uniform_mvp = ir_interpolate_uniform_mvp, 
+        .ir_interpolate_attribute_pos = ir_interpolate_attribute_pos,
+        .ir_interpolate_attribute_quad_pos = ir_interpolate_attribute_quad_pos,
     };
+    return test;
 }
 
 
@@ -682,7 +757,7 @@ OpenGL_Context_FFT opengl_initialize_fft()
     
     
     glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_BUFFER_LENGTH / 4, NULL, GL_STREAM_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_BUFFER_LENGTH / 2, NULL, GL_STREAM_DRAW);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, fft_data_buffer);
     
     return{
@@ -746,36 +821,130 @@ void opengl_render_atlas(OpenGL_Context_Atlas* opengl_ctx,
     glDrawElements(GL_TRIANGLES, (GLsizei)graphics_ctx->draw_indices_count, GL_UNSIGNED_INT, 0);
 }
 
+
 void opengl_render_ir(OpenGL_Context_IR* opengl_ctx, Graphics_Context_IR* graphics_ctx, real32 *projection_matrix)
 {
-    glUseProgram(opengl_ctx->ir_shader_program);
-    glBindVertexArray(opengl_ctx->ir_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->ir_vertex_buffer);
-    glBindBuffer(GL_TEXTURE_BUFFER, opengl_ctx->ir_min_max_buffer);
-    glBindTexture(GL_TEXTURE_BUFFER, opengl_ctx->ir_min_max_texture);
+    Rect bounds = rect_remove_padding(graphics_ctx->bounds, 1.0f, 1.0f);
     
-    glUniformMatrix4fv(opengl_ctx->ir_uniform_mvp, 
-                       1, 
-                       GL_FALSE, 
-                       projection_matrix);
+    Vec2 top_left = bounds.origin;
+    Vec2 top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
+    Vec2 bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
+    Vec2 bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
     
-    glBufferSubData(GL_ARRAY_BUFFER, 0, 
-                    6 * sizeof(IR_Vertex),
-                    graphics_ctx->ir_vertices);
-    glBufferSubData(GL_TEXTURE_BUFFER, 0, 
-                    graphics_ctx->IR_sample_count * sizeof(Vec2), 
-                    graphics_ctx->IR_min_max_buffer);
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    Vec2 uv_top_left = Vec2{ 0.0f, 1.0f};
+    Vec2 uv_top_right = Vec2{ 1.0f, 1.0f};
+    Vec2 uv_bottom_left = Vec2{ 0.0f, 0.0f};
+    Vec2 uv_bottom_right = Vec2{ 1.0f, 0.0f};
+    
+    IR_Vertex ir_vertices[6];
+    
+    ir_vertices[0] = { bottom_left,  uv_bottom_left};
+    ir_vertices[1] = { top_right,    uv_top_right};
+    ir_vertices[2] = { top_left,     uv_top_left};
+    ir_vertices[3] = { bottom_left,  uv_bottom_left};
+    ir_vertices[4] = { bottom_right, uv_bottom_right};
+    ir_vertices[5] = { top_right,    uv_top_right};
+    
+    
+    i32 pixel_count = bounds.dim.x;
+    i32 sample_count = IR_BUFFER_LENGTH;
+    assert(pixel_count >= 0);
+    
+    Vec2 *temp = opengl_ctx->ir_integrate_temp_buffer;
+    
+    if(bounds.dim.x < graphics_ctx->IR_sample_count)
+    {
+        
+        //memset(temp, 0, pixel_count * sizeof(Vec2));
+        for(u32 pixel_idx = 0; pixel_idx < pixel_count; pixel_idx++)
+        {
+            temp[pixel_idx] = {.a = -1.0f, .b = 1.0f};
+        }
+        for(u32 sample = 0; sample < sample_count; sample++)
+        {
+            real32 val = graphics_ctx->IR_buffer/*[channel]*/[sample];
+            u32 pixel_idx  = sample * pixel_count / sample_count;
+            temp[pixel_idx].a = octave_max(temp[pixel_idx].a, val);
+            temp[pixel_idx].b = octave_min(temp[pixel_idx].b, val);
+        } 
+        
+        
+        
+        glUseProgram(opengl_ctx->ir_integrate_shader_program);
+        glBindVertexArray(opengl_ctx->ir_integrate_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->ir_integrate_vertex_buffer);
+        glBindBuffer(GL_TEXTURE_BUFFER, opengl_ctx->ir_integrate_min_max_buffer);
+        glBindTexture(GL_TEXTURE_BUFFER, opengl_ctx->ir_integrate_min_max_texture);
+        
+        glUniformMatrix4fv(opengl_ctx->ir_integrate_uniform_mvp, 
+                           1, 
+                           GL_FALSE, 
+                           projection_matrix);
+        
+        glBufferSubData(GL_ARRAY_BUFFER, 0, 
+                        6 * sizeof(IR_Vertex),
+                        ir_vertices);
+        
+        glTexBufferRange(GL_TEXTURE_BUFFER, GL_RG32F, opengl_ctx->ir_integrate_min_max_buffer, 0, sizeof(Vec2) * bounds.dim.x);
+        glBufferSubData(GL_TEXTURE_BUFFER, 0, 
+                        bounds.dim.x * sizeof(Vec2), 
+                        temp);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        
+    }
+    else {
+        glUseProgram(opengl_ctx->ir_interpolate_shader_program);
+        glBindVertexArray(opengl_ctx->ir_interpolate_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->ir_interpolate_vertex_buffer);
+        glBindBuffer(GL_TEXTURE_BUFFER, opengl_ctx->ir_interpolate_buffer);
+        glBindTexture(GL_TEXTURE_BUFFER, opengl_ctx->ir_interpolate_texture);
+        
+        glUniformMatrix4fv(opengl_ctx->ir_interpolate_uniform_mvp, 
+                           1, 
+                           GL_FALSE, 
+                           projection_matrix);
+        
+        glBufferSubData(GL_ARRAY_BUFFER, 0, 
+                        6 * sizeof(IR_Vertex),
+                        ir_vertices);
+        glBufferSubData(GL_TEXTURE_BUFFER, 0, 
+                        graphics_ctx->IR_sample_count * sizeof(real32), 
+                        graphics_ctx->IR_buffer);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        
+    }
 }
 
 void opengl_render_fft(OpenGL_Context_FFT* opengl_ctx, Graphics_Context_FFT* graphics_ctx, real32 *projection_matrix)
 {
-    //~ FFT
+    Rect bounds = rect_remove_padding(graphics_ctx->bounds, 1.0f, 1.0f);
+    
+    Vec2 top_left = bounds.origin;
+    Vec2 top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
+    Vec2 bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
+    Vec2 bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
+    
+    Vec2 uv_top_left = Vec2{ 0.0f, 1.0f};
+    Vec2 uv_top_right = Vec2{ 1.0f, 1.0f};
+    Vec2 uv_bottom_left = Vec2{ 0.0f, 0.0f};
+    Vec2 uv_bottom_right = Vec2{ 1.0f, 0.0f};
+    
+    IR_Vertex ir_vertices[6];
+    
+    ir_vertices[0] = { bottom_left,  uv_bottom_left};
+    ir_vertices[1] = { top_right,    uv_top_right};
+    ir_vertices[2] = { top_left,     uv_top_left};
+    ir_vertices[3] = { bottom_left,  uv_bottom_left};
+    ir_vertices[4] = { bottom_right, uv_bottom_right};
+    ir_vertices[5] = { top_right,    uv_top_right};
+    
+    
     glUseProgram(opengl_ctx->fft_shader_program);
     glBindVertexArray(opengl_ctx->fft_vao);
     glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->fft_vertex_buffer);
     glBindBuffer(GL_TEXTURE_BUFFER, opengl_ctx->fft_data_buffer);
     glBindTexture(GL_TEXTURE_BUFFER, opengl_ctx->fft_data_texture);
+    
     
     glUniformMatrix4fv(opengl_ctx->fft_uniform_mvp, 
                        1, 
@@ -784,7 +953,7 @@ void opengl_render_fft(OpenGL_Context_FFT* opengl_ctx, Graphics_Context_FFT* gra
     
     glBufferSubData(GL_ARRAY_BUFFER, 0, 
                     6 * sizeof(IR_Vertex),
-                    graphics_ctx->fft_vertices);
+                    ir_vertices);
     glBufferSubData(GL_TEXTURE_BUFFER, 0, 
                     graphics_ctx->fft_sample_count * sizeof(real32), 
                     graphics_ctx->fft_buffer);
@@ -793,6 +962,7 @@ void opengl_render_fft(OpenGL_Context_FFT* opengl_ctx, Graphics_Context_FFT* gra
 
 void opengl_render_ui(OpenGL_Context *opengl_ctx, Graphics_Context *graphics_ctx)
 {
+    
     
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

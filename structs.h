@@ -227,13 +227,13 @@ typedef struct {
 } Graphics_Context_Atlas;
 
 typedef struct {
-    IR_Vertex ir_vertices[6];
-    Vec2 *IR_min_max_buffer;
+    Rect bounds;
+    real32 *IR_buffer;
     u32 IR_sample_count;
 } Graphics_Context_IR;
 
 typedef struct {
-    IR_Vertex fft_vertices[6];
+    Rect bounds;
     real32 *fft_buffer;
     u32 fft_sample_count;
 } Graphics_Context_FFT;

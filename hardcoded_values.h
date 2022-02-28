@@ -3,7 +3,7 @@
 #ifndef HARDCODED_VALUES_H
 #define HARDCODED_VALUES_H
 
-#define MAX_FFT_ORDER 10
+#define MAX_FFT_ORDER 20
 #define MAX_FFT_SIZE (2<<MAX_FFT_ORDER)
 
 #define INITIAL_WINDOW_WIDTH 800.0f
@@ -23,8 +23,8 @@
 #define DEFAULT_FONT_FILENAME "JetBrainsMono-Regular.ttf"
 
 
-#define IR_BUFFER_LENGTH 32
-//#define IR_PIXEL_LENGTH 256
+#define IR_MAX_PIXEL_WIDTH 4000
+#define IR_BUFFER_LENGTH (1024*2)
 
 #define ATLAS_MAX_VERTEX_COUNT 4096
 

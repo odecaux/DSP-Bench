@@ -31,7 +31,9 @@ void fft_test_generate_tone(real32 frequency, real32 magnitude, real32 *buffer, 
 void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp_ctx)
 {
     assert((input_sample_count & (input_sample_count - 1)) == 0);
-    i32 order = (i32)log((real32)input_sample_count)/log(2.0);
+    real32 r_s = log((real32)input_sample_count);
+    real32 l = log(2.0);
+    i32 order = (i32)(log((real32)input_sample_count)/log(2.0));
     
     Ipp_Order_Context *ctx = &ipp_ctx->order_to_ctx[order];
     ipp_assert(ippsFFTFwd_RToCCS_32f(in, ctx->temp_perm_buffer, ctx->spec, ctx->work_buffer));

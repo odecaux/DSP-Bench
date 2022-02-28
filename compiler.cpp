@@ -210,6 +210,9 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx)
                                            compiler_instance.getSourceManager(), 
                                            compiler_instance.getLangOpts(), 
                                            compiler_instance.getSourceManager().getMainFileID());
+        
+        assert(new_buffer);
+        
     };
     
     auto action = make_action(visit_ast);
@@ -224,9 +227,9 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx)
         std::cout << "parsing succeeded\n";
     }
     
+    llvm::MemoryBufferRef ref = new_buffer->getMemBufferRef(); 
     
-    
-    return jit_compile(new_buffer->getMemBufferRef(), 
+    return jit_compile(ref, 
                        compiler_instance, 
                        descriptor,
                        &clang_ctx->llvm_context,

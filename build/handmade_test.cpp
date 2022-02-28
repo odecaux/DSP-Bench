@@ -2,15 +2,18 @@
 
 
 
-enum random_enum{
-    A, B, C, D
+enum slope_type{
+    linear,
+    logarythmic
 };
 
 
 
 
 struct Parameters{
-    FLOAT_ARAM(0.0f, 2.0f) gain;
+    FLOAT_ARAM(0.0f, 2.0f) initial_gain;
+    ENUM_ARAM(slope_type) slope;
+    FLOAT_ARAM(0.0f, 0.1f) step;
 };
 
 struct State{
@@ -20,7 +23,7 @@ struct State{
 
 Parameters default_parameters()
 {
-    Parameters initial_state = {0.2f};
+    Parameters initial_state = {0.2f, linear, 0.001f};
     return initial_state;
 }
 
@@ -43,17 +46,23 @@ void audio_callback(const Parameters& param,
                     const u32  num_samples,
                     const real32 sample_rate)
 {
-    float gain = param.gain;
-    
+    float value = initial_gain;
     
     for(int sample = 0; sample < num_samples; sample++)
     {
         
         for(int channel = 0; channel < num_channels; channel++)
         {
-            out_buffer[channel][sample] *= gain; 
+            out_buffer[channel][sample] = value; 
         }
-        
+        if(param.slope == logarythmic)
+        {
+            //value = param.step;
+        }
+        else
+        {
+            value -= param.step;
+        }
     }
 }
 

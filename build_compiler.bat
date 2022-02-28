@@ -2,14 +2,14 @@
 
 call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >NUL
 
-set my_inc="C:\llvm\debug_msvc\include"
-set my_lib="C:\llvm\debug_msvc\lib"
+set my_inc="C:\llvm\release_msvc\include"
+set my_lib="C:\llvm\release_msvc\lib"
 
-set opts=-FC -GR- -EHa- -nologo -Zi
+set opts=-FC -GR- -EHa- /nologo /MT /O2 /D "NDEBUG"   /std:c++latest /w44624 /w44530 /w44244
 set code=%cd%
 
 pushd build
 
-cl %opts% "%code%\compiler.cpp" /Fecompiler.dll  /I %my_inc% /std:c++latest /w44624 /w44530 /w44244 /DEBUG /D_USRDLL /D_WINDLL /MTd /link /LIBPATH:%my_lib% /DLL
+cl %opts% "%code%\compiler.cpp" /Fecompiler.dll  /I %my_inc%  /D_USRDLL /D_WINDLL /link /LIBPATH:%my_lib% /DLL
 
 popd

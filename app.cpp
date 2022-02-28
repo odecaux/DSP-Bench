@@ -178,62 +178,9 @@ void compute_IR(Plugin_Handle& handle,
     m_free(IR_state_holder);
 }
 
-#if 0
-void render_IR(real32** IR_buffer, u32 channel_count, u32 sample_count, Vec2* min_max_pixel_buffer, u32 pixel_count)
-{
-    memset(min_max_pixel_buffer, 0, pixel_count * sizeof(Vec2));
-    if(pixel_count == sample_count)
-    {
-        for(u32 channel = 0; channel < channel_count; channel++)
-        {
-            for(u32 sample = 0; sample < sample_count; sample++)
-            {
-                real32 val = IR_buffer[channel][sample];
-                min_max_pixel_buffer[sample].b = octave_max(min_max_pixel_buffer[sample].b, val);
-                min_max_pixel_buffer[sample].a = octave_min(min_max_pixel_buffer[sample].a, val);
-            } 
-        }
-    }
-    /*else if(pixel_count < sample_count)
-    {
-        for(u32 sample = 0; sample < sample_count; sample++)
-        {
-            //NOTE overflow error
-            u32 pixel = sample * pixel_count / sample_count;
-            real32 value = IR_buffer[sample];
-            if(value > pixel_buffer[pixel])
-                pixel_buffer[pixel] = value;
-        }
-    }
-    else {
-        for(u32 pixel = 0; pixel < pixel_count; pixel++)
-        {
-            //NOTE overflow error
-            u32 sample = pixel * sample_count / pixel_count ;
-            pixel_buffer[pixel] = IR_buffer[sample];
-        }
-    }
-    */
-    
-    
-    for(u32 channel = 0; channel < channel_count; channel++)
-    {
-        for(u32 sample = 0; sample < sample_count; sample++)
-        {
-            u32 pixel_idx = sample * pixel_count / sample_count;
-            real32 value = IR_buffer[channel][sample];
-            
-            if(value > min_max_pixel_buffer[pixel_idx].x)
-                min_max_pixel_buffer[pixel_idx].x = value;
-            
-            if(value < min_max_pixel_buffer[pixel_idx].y)
-                min_max_pixel_buffer[pixel_idx].y = value;
-        }
-    }
-}
 
 //TODO stereo 
-void render_fft(real32* magnitude_buffer, u32 sample_count, real32* pixel_buffer, u32 pixel_count)
+void integrate_fft(real32* magnitude_buffer, u32 sample_count, real32* pixel_buffer, u32 pixel_count)
 {
     if(pixel_count == sample_count)
     {
@@ -259,82 +206,6 @@ void render_fft(real32* magnitude_buffer, u32 sample_count, real32* pixel_buffer
             pixel_buffer[pixel_idx] = magnitude_buffer[sample_idx];
         }
     }
-}
-#endif 
-
-
-
-//TODO bad API, pour l'instant ça passe pcq la dimension est constante
-void draw_IR(Rect bounds,
-             /*real32* IR_min_buffer,
-             real32* IR_max_buffer,
-             u32 IR_pixel_count,*/
-             Graphics_Context_IR *graphics_ctx)
-{
-    bounds.dim.x -= 2.0f;
-    bounds.dim.y -= 2.0f;
-    Vec2 top_left = bounds.origin;
-    Vec2 top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
-    Vec2 bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
-    Vec2 bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
-    
-    Vec2 uv_top_left = Vec2{ 0.0f, 1.0f};
-    Vec2 uv_top_right = Vec2{ 1.0f, 1.0f};
-    Vec2 uv_bottom_left = Vec2{ 0.0f, 0.0f};
-    Vec2 uv_bottom_right = Vec2{ 1.0f, 0.0f};
-    
-    graphics_ctx->ir_vertices[0].pos = bottom_left;
-    graphics_ctx->ir_vertices[0].quad_pos = uv_bottom_left;
-    
-    graphics_ctx->ir_vertices[1].pos = top_right;
-    graphics_ctx->ir_vertices[1].quad_pos = uv_top_right;
-    
-    graphics_ctx->ir_vertices[2].pos = top_left;
-    graphics_ctx->ir_vertices[2].quad_pos = uv_top_left;
-    
-    graphics_ctx->ir_vertices[3].pos = bottom_left;
-    graphics_ctx->ir_vertices[3].quad_pos = uv_bottom_left;
-    
-    graphics_ctx->ir_vertices[4].pos = bottom_right;
-    graphics_ctx->ir_vertices[4].quad_pos = uv_bottom_right;
-    
-    graphics_ctx->ir_vertices[5].pos = top_right;
-    graphics_ctx->ir_vertices[5].quad_pos = uv_top_right;
-}
-
-//TODO bad API, pour l'instant ça passe pcq la dimension est constante
-void draw_fft(Rect bounds,
-              Graphics_Context_FFT *graphics_ctx)
-{
-    bounds.dim.x -= 2.0f;
-    bounds.dim.y -= 2.0f;
-    Vec2 top_left = bounds.origin;
-    Vec2 top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
-    Vec2 bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
-    Vec2 bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
-    
-    Vec2 uv_top_left = Vec2{ 0.0f, 1.0f};
-    Vec2 uv_top_right = Vec2{ 1.0f, 1.0f};
-    Vec2 uv_bottom_left = Vec2{ 0.0f, 0.0f};
-    Vec2 uv_bottom_right = Vec2{ 1.0f, 0.0f};
-    
-    graphics_ctx->fft_vertices[0].pos = bottom_left;
-    graphics_ctx->fft_vertices[0].quad_pos = uv_bottom_left;
-    
-    graphics_ctx->fft_vertices[1].pos = top_right;
-    graphics_ctx->fft_vertices[1].quad_pos = uv_top_right;
-    
-    graphics_ctx->fft_vertices[2].pos = top_left;
-    graphics_ctx->fft_vertices[2].quad_pos = uv_top_left;
-    
-    graphics_ctx->fft_vertices[3].pos = bottom_left;
-    graphics_ctx->fft_vertices[3].quad_pos = uv_bottom_left;
-    
-    graphics_ctx->fft_vertices[4].pos = bottom_right;
-    graphics_ctx->fft_vertices[4].quad_pos = uv_bottom_right;
-    
-    graphics_ctx->fft_vertices[5].pos = top_right;
-    graphics_ctx->fft_vertices[5].quad_pos = uv_top_right;
 }
 
 
@@ -488,8 +359,8 @@ void frame(Plugin_Descriptor& descriptor,
     draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &graphics_ctx->atlas); 
     
     draw_rectangle(ir_graph_bounds, Color_Front, &graphics_ctx->atlas);
-    draw_IR(ir_graph_bounds /*, IR_min_buffer, IR_max_buffer, IR_pixel_count*/ , &graphics_ctx->ir);
-    
+    //draw_IR(ir_graph_bounds /*, IR_min_buffer, IR_max_buffer, IR_pixel_count*/ , &graphics_ctx->ir);
+    graphics_ctx->ir.bounds = ir_graph_bounds;
     
     
     draw_rectangle(fft_panel_bounds, Color_Front, &graphics_ctx->atlas);
@@ -499,8 +370,8 @@ void frame(Plugin_Descriptor& descriptor,
     
     draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &graphics_ctx->atlas); 
     draw_rectangle(fft_graph_bounds, Color_Front, &graphics_ctx->atlas);
-    draw_fft(fft_graph_bounds, &graphics_ctx->fft);
-    
+    //draw_fft(fft_graph_bounds, &graphics_ctx->fft);
+    graphics_ctx->fft.bounds = fft_graph_bounds;
 }
 
 
@@ -548,29 +419,27 @@ void initialize_gui(Plugin_Handle& handle,
     for(i32 i = 0; i < IR_BUFFER_LENGTH; i++)
         magnitudes[i] = sqrt(fft_out[i].a * fft_out[i].a + fft_out[i].b * fft_out[i].b);
     
-    
     graphics_ctx.ir = {
-        .IR_min_max_buffer = m_allocate_array(Vec2, IR_BUFFER_LENGTH),
+        .IR_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH),
         .IR_sample_count = IR_BUFFER_LENGTH
     };
+    memcpy(graphics_ctx.ir.IR_buffer, IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
     
     graphics_ctx.fft = {
         .fft_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH),
-        .fft_sample_count = IR_BUFFER_LENGTH / 4 //TODO variable
+        .fft_sample_count = IR_BUFFER_LENGTH / 2 //TODO variable
     };
+    memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH / 2); 
     
     
-    //render_IR(IR_buffer, audio_parameters.num_channels, IR_BUFFER_LENGTH, graphics_ctx.ir.IR_min_max_buffer, IR_PIXEL_LENGTH);
-    //render_fft(magnitudes, IR_BUFFER_LENGTH  /4, graphics_ctx.fft.fft_buffer, IR_PIXEL_LENGTH);
-    //memcpy(graphics_ctx.ir.IR_min_max_buffer, magnitudes, sizeof(Vec2) * IR_BUFFER_LENGTH); 
-    {
+    /*{
         Vec2 *buf = graphics_ctx.ir.IR_min_max_buffer;
         memset(buf, 0, sizeof(Vec2) * IR_BUFFER_LENGTH);
         buf[0] = { 0.5f, -0.5f};
         buf[23] = { 0.2f, -0.6f};
         
     }
-    memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH / 4); 
+    */
     
     /*printf("buffer \n");
     for(i32 i = 0;i < IR_BUFFER_LENGTH; i++)
@@ -612,7 +481,6 @@ void initialize_gui(Plugin_Handle& handle,
         bool parameters_were_tweaked = false;
         
         frame(descriptor, &graphics_ctx, ui_state, frame_io, 
-              /*IR_min_buffer, IR_max_buffer, IR_PIXEL_LENGTH,*/ 
               current_value, parameters_were_tweaked);
         
         
@@ -626,11 +494,8 @@ void initialize_gui(Plugin_Handle& handle,
             for(i32 i = 0; i < IR_BUFFER_LENGTH; i++)
                 magnitudes[i] = sqrt(fft_out[i].x * fft_out[i].x + fft_out[i].y * fft_out[i].y);
             
-            //memcpy(graphics_ctx.ir.IR_min_max_buffer, magnitudes, sizeof(Vec2) * IR_BUFFER_LENGTH); 
-            
-            //render_IR(IR_buffer, audio_parameters.num_channels, IR_BUFFER_LENGTH, graphics_ctx.ir.IR_min_max_buffer, IR_PIXEL_LENGTH);
-            //render_fft(magnitudes, IR_BUFFER_LENGTH / 4, graphics_ctx.fft.fft_buffer, IR_PIXEL_LENGTH);
-            memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH / 4);
+            memcpy(graphics_ctx.ir.IR_buffer, IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
+            memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH / 2);
         }
         
         opengl_render_ui(&opengl_ctx, &graphics_ctx);
@@ -638,6 +503,11 @@ void initialize_gui(Plugin_Handle& handle,
         i64 current_time;
         win32_pace_60_fps(last_time, &current_time, &frame_io.delta_time);
         last_time = current_time;
+        
+        //if(frame_io.delta_time > 20.0f)
+        {
+            printf("%f\n", frame_io.delta_time);
+        }
     }
     
     opengl_uninitialize(&opengl_ctx);
