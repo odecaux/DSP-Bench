@@ -12,7 +12,11 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 ### TODO
 
-make FFT processing available to the plugins \
+FFT processing available to the plugins \
 Proper error messages \
 Proper memory layer \
-Plugin Hot-Swap
+Beautiful UI \
+Zoomable IR \
+Plugin Hot-Swap on save \
+Audio and Source file browsing \
+Plugin chain, maybe graph \
