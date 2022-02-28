@@ -12,7 +12,7 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 ### TODO
 
-make FFT processing available to the plugins
-Proper error messages
-Proper memory layer
+make FFT processing available to the plugins \
+Proper error messages \
+Proper memory layer \
 Plugin Hot-Swap
