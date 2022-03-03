@@ -22,6 +22,27 @@
 #include "opengl.h"
 
 
+typedef struct {
+    const char* source_filename;
+    Plugin_Handle *handle;
+    Compiler_Errors *errors;
+    void *clang_ctx;
+    try_compile_t try_compile_f;
+    
+    bool *compilation_is_over;
+} Compiler_Thread_Param;
+
+DWORD compiler_thread_proc(void *void_param)
+{
+    Compiler_Thread_Param *param = (Compiler_Thread_Param*)void_param;
+    *param->handle = param->try_compile_f(param->source_filename, param->clang_ctx, param->errors);
+    MemoryBarrier();
+    *param->compilation_is_over = true;
+    return 1;
+}
+
+
+
 bool check_extension(const char* filename, const char* extension)
 {
     const char *maybe_ext = filename + strlen(filename) - 3; 
@@ -30,6 +51,8 @@ bool check_extension(const char* filename, const char* extension)
 
 i32 main(i32 argc, char** argv)
 {
+    
+    i64 time_program_begin = win32_get_time();
     
     const char *source_filename = nullptr;
     const char *audio_filename = nullptr;
@@ -97,6 +120,8 @@ i32 main(i32 argc, char** argv)
     
     OpenGL_Context opengl_ctx = opengl_initialize(&window, &graphics_ctx.atlas.font);
     
+    i32 time_to_graphics = win32_get_elapsed_ms_since(time_program_begin);
+    printf("time to graphics : %d\n", time_to_graphics);
     
     void* platform_audio_context;
     Audio_Context audio_context = {};
@@ -109,6 +134,9 @@ i32 main(i32 argc, char** argv)
         return -1;
     }
     
+    
+    i32 time_to_audio = win32_get_elapsed_ms_since(time_program_begin);
+    printf("time to audio : %d\n", time_to_audio);
     
     if(audio_filename != nullptr)
     {
@@ -129,7 +157,8 @@ i32 main(i32 argc, char** argv)
         printf("failed to read .wav file\n");
     }
     
-    
+    i32 time_to_wav = win32_get_elapsed_ms_since(time_program_begin);
+    printf("time to wav : %d\n", time_to_wav);
     
     HMODULE compiler_dll = LoadLibraryA("compiler.dll");
     if(compiler_dll == NULL)
@@ -154,12 +183,32 @@ i32 main(i32 argc, char** argv)
         1024
     };
     
+    bool compilation_is_over = false;
     bool plugin_is_loaded = false;
     Plugin_Handle handle;
     
     Plugin_Parameter_Value *parameter_values_audio_side;
     Plugin_Parameter_Value *parameter_values_ui_side;
     Plugin_Parameters_Ring_Buffer ring;
+    
+    Compiler_Thread_Param compiler_thread_param = {
+        .source_filename = source_filename,
+        .handle = &handle,
+        .errors = &errors,
+        .clang_ctx = clang_ctx,
+        .try_compile_f = try_compile_f,
+        .compilation_is_over = &compilation_is_over
+    };
+    MemoryBarrier();
+    
+    HANDLE compiler_thread_handle = 
+        CreateThread(0, 0,
+                     &compiler_thread_proc,
+                     &compiler_thread_param,
+                     0, 0);
+    
+    i32 time_to_thread_start = win32_get_elapsed_ms_since(time_program_begin);
+    printf("time to thread start : %d\n", time_to_thread_start);
     
     graphics_ctx.ir = {
         .IR_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH),
@@ -174,27 +223,33 @@ i32 main(i32 argc, char** argv)
     
     IO frame_io = io_initial_state();
     UI_State ui_state = {-1};
-    i64 last_time = win32_init_timer();
+    i64 last_time = win32_get_time();
     bool done = false;
+    
+    
+    i32 time_to_main_loop = win32_get_elapsed_ms_since(time_program_begin);
+    printf("time to main loop : %d\n", time_to_main_loop);
     
     while(!done)
     {
+        
         win32_message_dispatch(&window, &frame_io, &done);
         
         // TODO(octave): hack ?
         if(done)
             break;
         
-        if(!plugin_is_loaded)
+        graphics_ctx.atlas.draw_vertices_count = 0;
+        graphics_ctx.atlas.draw_indices_count = 0;
+        
+        frame_io = io_state_advance(frame_io);
+        frame_io.mouse_position = win32_get_mouse_position(&window);
+        
+        MemoryBarrier(); //TODO ???
+        if(compilation_is_over && !plugin_is_loaded)
         {
-            handle = try_compile_f(source_filename, clang_ctx, &errors);
-            
-            if(handle.error != Compiler_Success)
-            {
-                printf("compilation errors\n");
-                return -1;
-            }
-            
+            i32 time_to_compiled = win32_get_elapsed_ms_since(time_program_begin);
+            printf("time to compilation end : %d\n", time_to_compiled);
             
             parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
             
@@ -244,7 +299,6 @@ i32 main(i32 argc, char** argv)
             audio_context.descriptor = &handle.descriptor;
             InterlockedExchange8(&audio_context.plugin_valid, 1);
             
-            
             //~ IR initialization
             
             compute_IR(handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, parameter_values_ui_side);
@@ -255,20 +309,22 @@ i32 main(i32 argc, char** argv)
             memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
             
             plugin_is_loaded = true;
-        }
-        else
-        {
-            //~
-            //frame
-            graphics_ctx.atlas.draw_vertices_count = 0;
-            graphics_ctx.atlas.draw_indices_count = 0;
             
-            frame_io = io_state_advance(frame_io);
-            frame_io.mouse_position = win32_get_mouse_position(&window);
+            i32 time_to_loaded = win32_get_elapsed_ms_since(time_program_begin);
+            printf("time to loaded : %d\n", time_to_loaded);
+        }
+        else if(plugin_is_loaded)
+        {
             
             bool parameters_were_tweaked = false;
             
-            frame(handle.descriptor, &graphics_ctx, ui_state, frame_io, parameter_values_ui_side, &audio_context, parameters_were_tweaked);
+            frame(handle.descriptor, 
+                  &graphics_ctx, 
+                  ui_state, 
+                  frame_io, 
+                  parameter_values_ui_side, 
+                  &audio_context, 
+                  parameters_were_tweaked);
             
             if(parameters_were_tweaked)
             {

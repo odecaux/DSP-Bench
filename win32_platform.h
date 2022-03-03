@@ -82,11 +82,18 @@ void win32_error_window(const String title, const String text)
 }
 
 
-i64 win32_init_timer()
+i64 win32_get_time()
 {
-    LARGE_INTEGER time;
-    QueryPerformanceCounter(&time);
+    LARGE_INTEGER time; QueryPerformanceCounter(&time);
     return (i64) time.QuadPart;
+}
+
+i32 win32_get_elapsed_ms_since(i64 last_time)
+{
+    LARGE_INTEGER counter_frequency; QueryPerformanceFrequency(&counter_frequency);
+    LARGE_INTEGER frame_end; QueryPerformanceCounter(&frame_end);
+    i64 elapsed_tick  = frame_end.QuadPart - last_time;
+    return ((1000000*elapsed_tick) / counter_frequency.QuadPart) / 1000;
 }
 
 void win32_pace_60_fps(i64 last_time, i64 *current_time, real32 *delta_time) // TODO(octave): refactor variable names
