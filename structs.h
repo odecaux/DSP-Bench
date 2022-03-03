@@ -295,4 +295,28 @@ typedef struct {
 
 struct Window_Context;
 
+typedef struct {
+    i32 fft_order;
+    i32 buffer_size;
+    u8* spec_holder;
+    void* spec;
+    u8 *work_buffer;
+    real32 *temp_perm_buffer; //TODO rename, c'est pas clair si on connait pas IPP
+} Ipp_Order_Context;
+//TODO rename, c'est nul comme nom ORDER, en 
+typedef struct {
+    i32 highest_order;
+    Ipp_Order_Context *order_to_ctx;
+} Ipp_Context;
+
+typedef struct {
+    u32 ir_sample_count;
+    u32 ir_num_channels;
+    Ipp_Context ipp_context;
+    real32** IR_buffer;
+    real32** windowed_zero_padded_buffer;
+    Vec2* fft_out;
+    real32 *magnitudes;
+} FFT;
+
 #endif //STRUCTS_H

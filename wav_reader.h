@@ -5,26 +5,21 @@
 
 
 
-typedef struct {
-    /*char                RIFF[4];        // RIFF Header      Magic header
-    unsigned long       chunk_size;      // RIFF Chunk Size  
-    char                WAVE[4];        // WAVE Header      
-    char                format_chunk_id[4];         // FMT header       
-    unsigned long       format_chunk_size;  // Size of the format_chunk_id chunk                                
-    */unsigned short      format;    // Audio format 1=CM,6=mulaw,7=alaw, 257=IBM Mu-Law, 258=IBM A-Law, 259=ADCM 
+typedef struct {                               
+    unsigned short      format;    // Audio format 1=CM,6=mulaw,7=alaw, 257=IBM Mu-Law, 258=IBM A-Law, 259=ADCM 
     unsigned short      num_channels;      // Number of channels 1=Mono 2=Sterio                   
     unsigned long       sample_rate;  // Sampling Frequency in Hz                             
     unsigned long       bytes_per_sec;    // bytes per second 
     unsigned short      block_align;     // 2=16-bit mono, 4=16-bit stereo 
     unsigned short      bit_depth;  // Number of bits per sample      
-    
 } Wav_Format; 
 
 enum Wav_Reading_Error{
     Wav_Success,
     Wav_Could_Not_Open_File,
     Wav_Not_A_RIFF,
-    Wav_File_Reading_Error
+    Wav_File_Reading_Error,
+    Wav_Invalid_Format
 };
 
 typedef struct{
@@ -39,13 +34,11 @@ typedef struct{
     unsigned long size;
 } Chunk_Header;
 
-// Function prototypes 
-typedef struct
-{
+typedef struct {
     Wav_Reading_Error error;
-    Wav_Format header;
-    u64 audio_data_length;
-    char* data;
+    u32 num_channels;
+    u32 samples_by_channel;
+    real32** deinterleaved_buffer;
 } WavData;
 
 internal Chunk_Header read_header(HANDLE handle, u64* file_position)
@@ -67,21 +60,13 @@ internal Chunk_Header read_header(HANDLE handle, u64* file_position)
 
 internal void debug_header(Wav_Format *header)
 {
-    
-    //std::cout << "File is                    :" << file_length<< " bytes." << "\n";
-    
-    
-    printf("Audio Format               : %hu\n", header->format);
     // Audio format 1=CM,6=mulaw,7=alaw, 257=IBM Mu-Law, 258=IBM A-Law, 259=ADCM 
+    printf("Audio Format               : %hu\n", header->format);
     printf("Number of channels         : %hu\n", header->num_channels);
     printf("Sampling Rate              : %hu\n", header->sample_rate);
     printf("Number of bytes per second : %lu\n", header->bytes_per_sec);
     printf("Block align                : %hu\n", header->block_align);
     printf("Number of bits used        : %lu\n", header->bit_depth);
-    
-    
-    
-    
 }
 
 internal WavData windows_load_wav(const char* filename)
@@ -132,7 +117,7 @@ internal WavData windows_load_wav(const char* filename)
     
     Wav_Format format = {};
     
-    u64 total_data_size = 0;
+    u64 audio_data_length = 0;
     
     
     while(total_bytes_read < file_size)
@@ -153,14 +138,14 @@ internal WavData windows_load_wav(const char* filename)
         else if(strncmp(chunk_header.id, "data", 4) == 0)
         {
             DWORD bytes_read;
-            BOOL result = ReadFile(handle, data + total_data_size, chunk_header.size, &bytes_read, NULL);
+            BOOL result = ReadFile(handle, data + audio_data_length, chunk_header.size, &bytes_read, NULL);
             if(bytes_read != chunk_header.size)
             {
                 free(data);
                 return {Wav_File_Reading_Error};
             }
             
-            total_data_size  +=  bytes_read;
+            audio_data_length  +=  bytes_read;
             total_bytes_read += bytes_read;
         }
         else 
@@ -181,12 +166,59 @@ internal WavData windows_load_wav(const char* filename)
         }
     }
     
-    data = (char*) realloc(data, total_data_size);
+    data = (char*) realloc(data, audio_data_length);
     //debug_header(&format);
     
     CloseHandle(handle);
-    return {Wav_Success, format, total_data_size, data};
     
+    auto num_samples = 8 * audio_data_length / format.bit_depth;
+    real32 *float_buffer;
+    
+    if(format.format == 1)
+    {
+        float_buffer = m_allocate_array(real32, num_samples); 
+        
+        if(format.bit_depth == 16)
+            convertInt16ToFloat(data, float_buffer, num_samples);
+        else if(format.bit_depth == 24)
+            convertInt24ToFloat(data, float_buffer, num_samples);
+        else if(format.bit_depth == 32)
+            convertInt32ToFloat(data, float_buffer, num_samples);
+        else
+        {
+            free(data);
+            return {Wav_Invalid_Format};
+        }
+        free(data);
+    }
+    else if(format.format == 3)
+    {
+        float_buffer = (real32*)data;
+    }
+    else
+    {
+        free(data);
+        return {Wav_Invalid_Format};
+    }
+    
+    u32 num_channels = format.num_channels;
+    u32 samples_by_channel = num_samples / num_channels;
+    
+    real32 **deinterleaved_buffer = m_allocate_array(real32*,num_channels);
+    for(u32 channel = 0; channel < num_channels; channel++)
+    {
+        deinterleaved_buffer[channel] = m_allocate_array(real32, samples_by_channel);
+    }
+    
+    deinterleave(deinterleaved_buffer, float_buffer, samples_by_channel, num_channels);
+    free(float_buffer);
+    
+    return {
+        Wav_Success, 
+        num_channels,
+        samples_by_channel,
+        deinterleaved_buffer
+    };
 }
 
 #endif //WAV_READER_H

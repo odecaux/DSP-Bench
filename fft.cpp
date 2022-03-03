@@ -3,12 +3,15 @@
 #include "stdlib.h"
 #include "stdio.h"
 #include "math.h"
+#include "string.h"
 
 #include "ipp.h"
 #include "ipps.h"
 #include <ippdefs.h>
 
+#include "memory.h"
 #include "base.h"
+#include "structs.h"
 #include "fft.h"
 
 void ipp_assert_impl(IppStatus status, const char* file, u32 line)
@@ -20,6 +23,46 @@ void ipp_assert_impl(IppStatus status, const char* file, u32 line)
     }
 }
 
+FFT fft_initialize(u32 ir_sample_count, u32 num_channels)
+{
+    real32** IR_buffer = m_allocate_array(real32*, num_channels);
+    real32** windowed_zero_padded_buffer = m_allocate_array(real32*, num_channels);
+    
+    for(u32 channel = 0; channel < num_channels; channel++)
+    {
+        IR_buffer[channel] = m_allocate_array(real32, ir_sample_count);
+        windowed_zero_padded_buffer[channel] = m_allocate_array(real32, ir_sample_count * 4);
+        memset(windowed_zero_padded_buffer[channel], 0, ir_sample_count * 4 * sizeof(real32));
+    }
+    
+    return {
+        .ir_sample_count = ir_sample_count,
+        .ir_num_channels = num_channels,
+        .ipp_context = ipp_initialize(),
+        .IR_buffer = IR_buffer,
+        .windowed_zero_padded_buffer = windowed_zero_padded_buffer,
+        .fft_out = m_allocate_array(Vec2, ir_sample_count * 4),
+        .magnitudes  = m_allocate_array(real32, ir_sample_count * 4)
+    };
+}
+
+void fft_perform(FFT *fft)
+{
+    
+    for(u32 channel = 0; channel < fft->ir_num_channels; channel++)
+    {
+        windowing_hamming(fft->IR_buffer[channel], fft->windowed_zero_padded_buffer[channel], IR_BUFFER_LENGTH);
+    }
+    
+    fft_forward(fft->windowed_zero_padded_buffer[0], 
+                fft->fft_out, 
+                fft->ir_sample_count * 4, 
+                &fft->ipp_context);
+    
+    for(i32 i = 0; i < IR_BUFFER_LENGTH * 4; i++)
+        fft->magnitudes[i] = sqrt(fft->fft_out[i].a * fft->fft_out[i].a + 
+                                  fft->fft_out[i].b * fft->fft_out[i].b);
+}
 #define ipp_assert(status) ipp_assert_impl(status, __FILE__, __LINE__); 
 
 void fft_test_generate_tone(real32 frequency, real32 magnitude, real32 *buffer, i32 sample_count)
