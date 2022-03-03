@@ -757,7 +757,7 @@ OpenGL_Context_FFT opengl_initialize_fft()
     
     
     glBufferData(GL_ARRAY_BUFFER, sizeof(IR_Vertex) * 6, NULL, GL_STREAM_DRAW);
-    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_BUFFER_LENGTH / 2, NULL, GL_STREAM_DRAW);
+    glBufferData(GL_TEXTURE_BUFFER, sizeof(real32) * IR_BUFFER_LENGTH * 2, NULL, GL_STREAM_DRAW);
     glTexBuffer(GL_TEXTURE_BUFFER, GL_R32F, fft_data_buffer);
     
     return{

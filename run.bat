@@ -1,5 +1,5 @@
 @echo off
 pushd build 
 echo %cd%
-DSP_bench.exe mix2.wav gain_test.cpp
+DSP_bench.exe sine_test.cpp
 popd

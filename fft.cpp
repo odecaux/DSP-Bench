@@ -28,6 +28,11 @@ void fft_test_generate_tone(real32 frequency, real32 magnitude, real32 *buffer, 
     ippsTone_32f(buffer, sample_count, magnitude, frequency, &phase, ippAlgHintFast);
 }
 
+void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count)
+{
+    ipp_assert(ippsWinHamming_32f(in_buffer, out_buffer, sample_count));
+}
+
 void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp_ctx)
 {
     assert((input_sample_count & (input_sample_count - 1)) == 0);
@@ -36,7 +41,7 @@ void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp
     i32 order = (i32)(log((real32)input_sample_count)/log(2.0));
     
     Ipp_Order_Context *ctx = &ipp_ctx->order_to_ctx[order];
-    ipp_assert(ippsFFTFwd_RToCCS_32f(in, ctx->temp_perm_buffer, ctx->spec, ctx->work_buffer));
+    ipp_assert(ippsFFTFwd_RToCCS_32f(in, ctx->temp_perm_buffer, (IppsFFTSpec_R_32f*)ctx->spec, ctx->work_buffer));
     
     //NOTE il faut que Ipp32fc et Vec2 aient le même layout
     ipp_assert(ippsConjCcs_32fc(ctx->temp_perm_buffer, (Ipp32fc*)out, input_sample_count));
@@ -58,7 +63,6 @@ Ipp_Order_Context ipp_create_spec_for_order(i32 fft_order)
     IppsFFTSpec_R_32f *spec; 
     ipp_assert(ippsFFTInit_R_32f(&spec, fft_order, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast, spec_holder, spec_initialization_buffer));
     
-    //printf("%lld\n", (i64) spec_holder - (i64)spec);
     
     free(spec_initialization_buffer);
     

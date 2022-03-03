@@ -15,7 +15,7 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 Proper error messages \
 ~~cli : optional wav~~ \
 ~~Display min,max,value~~ \
-Blackman + zero padding fft \
+~~window + zero padding fft~~\
 Plugin allocator and tracking -> automatic collection \
 ~~Play/Stop/Loop Wav, enable/disable plugin (header ?)~~ \
 Parameter skew factor \
@@ -24,6 +24,7 @@ Reset State button \
 Font sizes system (load multiple font sizes or stretch uv) \
 Review Synchronization code \
 FFT processing available to the plugins \
+Options Blackman, Hamming, etc \
 Zoomable IR \
 Proper memory layer \
 Background thread compilation \

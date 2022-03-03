@@ -248,7 +248,6 @@ i32 main(i32 argc, char** argv)
     OpenGL_Context opengl_ctx = opengl_initialize(&window, &graphics_ctx.atlas.font);
     
     //~ IR initialization
-    Plugin_Descriptor& descriptor = handle.descriptor;
     
     real32** IR_buffer = m_allocate_array(real32*, audio_parameters.num_channels);
     for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
@@ -259,13 +258,21 @@ i32 main(i32 argc, char** argv)
     compute_IR(handle, IR_buffer, IR_BUFFER_LENGTH, audio_parameters, parameter_values_ui_side);
     
     
+    real32** windowed_zero_padded_buffer = m_allocate_array(real32*, audio_parameters.num_channels);
+    for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
+    {
+        windowed_zero_padded_buffer[channel] = m_allocate_array(real32, IR_BUFFER_LENGTH * 4);
+        memset(windowed_zero_padded_buffer[channel], 0, IR_BUFFER_LENGTH * 4 * sizeof(real32));
+        windowing_hamming(IR_buffer[channel], windowed_zero_padded_buffer[channel], IR_BUFFER_LENGTH);
+    }
+    
     Ipp_Context ipp_ctx = ipp_initialize();
     
-    Vec2* fft_out = m_allocate_array(Vec2, IR_BUFFER_LENGTH);
-    fft_forward(IR_buffer[0], fft_out, IR_BUFFER_LENGTH, &ipp_ctx);
+    Vec2* fft_out = m_allocate_array(Vec2, IR_BUFFER_LENGTH * 4);
+    fft_forward(windowed_zero_padded_buffer[0], fft_out, IR_BUFFER_LENGTH * 4, &ipp_ctx);
     
-    real32 *magnitudes  = m_allocate_array(real32, IR_BUFFER_LENGTH);
-    for(i32 i = 0; i < IR_BUFFER_LENGTH; i++)
+    real32 *magnitudes  = m_allocate_array(real32, IR_BUFFER_LENGTH * 4);
+    for(i32 i = 0; i < IR_BUFFER_LENGTH * 4; i++)
         magnitudes[i] = sqrt(fft_out[i].a * fft_out[i].a + fft_out[i].b * fft_out[i].b);
     
     graphics_ctx.ir = {
@@ -275,10 +282,10 @@ i32 main(i32 argc, char** argv)
     memcpy(graphics_ctx.ir.IR_buffer, IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
     
     graphics_ctx.fft = {
-        .fft_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH),
-        .fft_sample_count = IR_BUFFER_LENGTH / 2 //TODO variable
+        .fft_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH * 2),
+        .fft_sample_count = IR_BUFFER_LENGTH * 2
     };
-    memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH / 2); 
+    memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
     
     
     IO frame_io = io_initial_state();
@@ -306,21 +313,25 @@ i32 main(i32 argc, char** argv)
         
         bool parameters_were_tweaked = false;
         
-        frame(descriptor, &graphics_ctx, ui_state, frame_io, parameter_values_ui_side, &audio_context, parameters_were_tweaked);
+        frame(handle.descriptor, &graphics_ctx, ui_state, frame_io, parameter_values_ui_side, &audio_context, parameters_were_tweaked);
         
         
         if(parameters_were_tweaked)
         {
             plugin_parameters_buffer_push(ring, parameter_values_ui_side);
             compute_IR(handle, IR_buffer, IR_BUFFER_LENGTH, audio_parameters, parameter_values_ui_side);
+            for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
+            {
+                windowing_hamming(IR_buffer[channel], windowed_zero_padded_buffer[channel], IR_BUFFER_LENGTH);
+            }
             
-            fft_forward(IR_buffer[0], fft_out, IR_BUFFER_LENGTH, &ipp_ctx);
+            fft_forward(windowed_zero_padded_buffer[0], fft_out, IR_BUFFER_LENGTH * 4, &ipp_ctx);
             
-            for(i32 i = 0; i < IR_BUFFER_LENGTH; i++)
+            for(i32 i = 0; i < IR_BUFFER_LENGTH * 4; i++)
                 magnitudes[i] = sqrt(fft_out[i].x * fft_out[i].x + fft_out[i].y * fft_out[i].y);
             
             memcpy(graphics_ctx.ir.IR_buffer, IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
-            memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH / 2);
+            memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2);
         }
         
         opengl_render_ui(&opengl_ctx, &graphics_ctx);

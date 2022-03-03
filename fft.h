@@ -7,7 +7,7 @@ typedef struct {
     i32 fft_order;
     i32 buffer_size;
     u8* spec_holder;
-    IppsFFTSpec_R_32f *spec;
+    void* spec;
     u8 *work_buffer;
     real32 *temp_perm_buffer; //TODO rename, c'est pas clair si on connait pas IPP
 } Ipp_Order_Context;
@@ -16,6 +16,9 @@ typedef struct {
     i32 highest_order;
     Ipp_Order_Context *order_to_ctx;
 } Ipp_Context;
+
+
+void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count);
 
 Ipp_Context ipp_initialize();
 
