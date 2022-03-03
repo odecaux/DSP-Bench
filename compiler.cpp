@@ -173,12 +173,18 @@ Clang_Context* create_clang_context_impl()
 }
 
 
-extern "C" __declspec(dllexport) Plugin_Handle try_compile(const char* filename, void* clang_ctx_ptr)
+extern "C" __declspec(dllexport) Plugin_Handle try_compile(const char* filename, void* clang_ctx_ptr, Compiler_Errors *errors)
 {
-    return try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr);
+    return try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr, errors);
 }
 
-Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx)
+void errors_push(Compiler_Errors *errors, Compiler_Error new_error)
+{
+    if(errors->count < errors->capacity && new_error != Compiler_Success && new_error != Compiler_Generic_Error)
+        errors->errors[errors->count++] = new_error;
+}
+
+Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx, Compiler_Errors *errors)
 {
     auto& compiler_instance = clang_ctx->compiler_instance;
     
@@ -186,109 +192,161 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx)
     auto kind = clang::InputKind(clang::Language::CXX);
     compiler_instance.getFrontendOpts().Inputs.push_back(clang::FrontendInputFile(filename, kind));
     
-    Plugin_Descriptor descriptor;
+    bool initial_compilation_succeeded = false;
+    
+    Compiler_Error error = Compiler_Initial_Compilation_Error;
+    Plugin_Descriptor descriptor = {.error = Compiler_Generic_Error };
     std::unique_ptr<llvm::MemoryBuffer> new_buffer = nullptr;
-    
-    bool error = false;
-    
+    /*
+    Compiler_Errors errors = {
+        new Compiler_Error[1024],
+        0,
+        1024
+    };
+    */
     auto visit_ast = [&](clang::ASTContext& ast_ctx){
-        auto decls = find_decls(ast_ctx);
-        if(!decls.worked)
+        error = Compiler_Success;
+        
+        Plugin_Required_Decls decls = find_decls(ast_ctx);
+        if(decls.error != Compiler_Success)
         {
-            error = true;
+            errors_push(errors, decls.audio_callback.error);
+            errors_push(errors, decls.default_parameters.error);
+            errors_push(errors, decls.initialize_state.error);
+            errors_push(errors, decls.audio_callback.error);
+            errors_push(errors, decls.audio_callback.error);
+            error = Compiler_Could_Not_Get_Decls;
             return;
         }
         
-        if(!parse_plugin_descriptor(decls.parameters_struct, decls.state_struct, descriptor))
-        {
-            error = true;
+        descriptor = parse_plugin_descriptor(decls.parameters_struct.record, decls.state_struct.record);
+        
+        if(descriptor.error != Compiler_Success){
+            for(u32 i = 0; i < descriptor.num_parameters; i++)
+            {
+                errors_push(errors, descriptor.parameters[i].error);
+            }
+            error = Compiler_Struct_Parsing_Error;
             return;
         }
-        
         
         new_buffer = rewrite_plugin_source(decls, 
                                            compiler_instance.getSourceManager(), 
                                            compiler_instance.getLangOpts(), 
                                            compiler_instance.getSourceManager().getMainFileID());
-        
         assert(new_buffer);
-        
+        error = Compiler_Success;
     };
     
     auto action = make_action(visit_ast);
     compiler_instance.ExecuteAction(action);
     
-    if(error == true)
+    if(error == Compiler_Success) 
     {
-        std::cout << "error while parsing file\n";
-        return {false};
+        //TODO buffer ref as a rvalue ? no bug ? 
+        Plugin_Handle handle = jit_compile(new_buffer->getMemBufferRef(), 
+                                           compiler_instance, 
+                                           descriptor,
+                                           &clang_ctx->llvm_context,
+                                           clang_ctx->module_pass_manager,
+                                           clang_ctx->moduleAnalysisManager,
+                                           errors);
+        errors_push(errors, handle.error);
+        return handle;
     }
-    else{
-        std::cout << "parsing succeeded\n";
+    else 
+    {
+        errors_push(errors, error);
+        return Plugin_Handle{
+            .error = error,
+            .descriptor = descriptor,
+            .llvm_jit_engine = nullptr,
+            .audio_callback_f = nullptr,
+            .default_parameters_f = nullptr,
+            .initialize_state_f = nullptr
+        };
     }
-    
-    llvm::MemoryBufferRef ref = new_buffer->getMemBufferRef(); 
-    
-    return jit_compile(ref, 
-                       compiler_instance, 
-                       descriptor,
-                       &clang_ctx->llvm_context,
-                       clang_ctx->module_pass_manager,
-                       clang_ctx->moduleAnalysisManager
-                       );
 }
 
-
-
-
-
-
-Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
+Decl_Handle find_audio_callback(clang::ASTContext& ast_ctx)
 {
-    bool error = false;
+    Compiler_Error error = Compiler_Success;
     using namespace clang::ast_matchers;
     
-    //~ does functions exists ?
     
     const clang::FunctionDecl* audio_callback_decl = nullptr;
     
     auto audio_callback_matcher = functionDecl(hasName("audio_callback")).bind("callback");
     auto audio_callback_lambda = [&](const auto& result)
     {
-        if(error) return; 
+        if(error != Compiler_Success) return; 
         
         const clang::FunctionDecl* decl = result.Nodes.getNodeAs<clang::FunctionDecl>("callback");
         
         if(decl == nullptr) return;
         if(!decl->isThisDeclarationADefinition()) return;
         if(audio_callback_decl == nullptr)
-        {
             audio_callback_decl = decl;
-        }
         else
-        {
-            std::cout << "too many audio_callback function\n";
-            error = true;
-        }
+            error = Compiler_Too_Many_Fun;
     };
     match_ast(audio_callback_matcher, audio_callback_lambda, ast_ctx);
     
     if(audio_callback_decl == nullptr)
-    {
-        std::cout << "couldn't find an audio_callback function\n";
-        return {false};
+        error = Compiler_No_Fun;
+    
+    if(error != Compiler_Success) return Decl_Handle { error };
+    
+    auto audio_callback_has_right_signature_matcher = 
+        functionDecl(hasName("audio_callback"), 
+                     parameterCountIs(6),
+                     hasBody(compoundStmt()),
+                     
+                     hasParameter(2, hasType(pointsTo(pointsTo(realFloatingPointType())))),
+                     hasParameter(3, varDecl(hasType(hasCanonicalType(allOf(isConstQualified(), isUnsignedInteger()))))),
+                     hasParameter(4, varDecl(hasType(hasCanonicalType(allOf(isConstQualified(), isUnsignedInteger()))))),
+                     hasParameter(5, varDecl(hasType(hasCanonicalType(allOf(isConstQualified(), realFloatingPointType()))))),
+                     
+                     returns(voidType()))
+        .bind("callback");
+    
+    bool has_audio_callback_the_right_signature = false;
+    
+    auto audio_callback_has_right_signature_lambda = [&](const auto& result) {
+        const clang::FunctionDecl* decl = result.Nodes.getNodeAs<clang::FunctionDecl>("callback");
+        if(decl == nullptr) return;
+        if(!decl->isThisDeclarationADefinition()) return;
+        has_audio_callback_the_right_signature = true;
+    };
+    
+    match_node(audio_callback_has_right_signature_matcher,
+               audio_callback_has_right_signature_lambda,
+               *audio_callback_decl,
+               ast_ctx);
+    
+    if(has_audio_callback_the_right_signature == false){
+        error = Compiler_Wrong_Signature_Fun;
     }
     
+    return Decl_Handle{
+        .error = error,
+        .fun = audio_callback_decl
+    };
+}
+
+
+Decl_Handle find_default_parameters(clang::ASTContext& ast_ctx)
+{
+    Compiler_Error error = Compiler_Success;
+    using namespace clang::ast_matchers;
     
-    if(error)
-        return {false};
     
     const clang::FunctionDecl* default_parameters_decl = nullptr;
     
     auto default_parameters_matcher = functionDecl(hasName("default_parameters")).bind("default_param");
-    auto default_parameters_lambda = [&](const auto& result)
-    {
-        if(error) return; 
+    
+    auto default_parameters_lambda = [&](const auto& result) {
+        if(error != Compiler_Success) return; 
         
         const clang::FunctionDecl* decl = result.Nodes.getNodeAs<clang::FunctionDecl>("default_param");
         
@@ -300,21 +358,30 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
         }
         else
         {
-            std::cout << "too many default_parameters function\n";
-            error = true;
+            error = Compiler_Too_Many_Fun;
         }
     };
     match_ast(default_parameters_matcher, default_parameters_lambda, ast_ctx);
     
     if(default_parameters_decl == nullptr)
-    {
-        std::cout << "couldn't find an default_parameters function\n";
-        return {false};
-    }
-    if(error)
-        return {false};
+        error = Compiler_No_Fun;
     
+    if(error != Compiler_Success) return Decl_Handle { error };
     
+    if(default_parameters_decl->getNumParams() != 0)
+        error = Compiler_Wrong_Signature_Fun;
+    
+    return Decl_Handle{
+        .error = error,
+        .fun = default_parameters_decl
+    };
+}
+
+
+Decl_Handle find_initialize_state(clang::ASTContext& ast_ctx)
+{
+    Compiler_Error error = Compiler_Success;
+    using namespace clang::ast_matchers;
     
     const clang::FunctionDecl* initialize_state_decl = nullptr;
     
@@ -333,73 +400,17 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
         }
         else
         {
-            std::cout << "too many initialize_state function\n";
-            error = true;
+            error = Compiler_Too_Many_Fun;
         }
     };
     match_ast(initialize_state_matcher, initialize_state_lambda, ast_ctx);
     
     if(initialize_state_decl == nullptr)
-    {
-        std::cout << "couldn't find an initialize_state function\n";
-        return {false};
-    }
-    if(error)
-        return {false};
+        error = Compiler_No_Fun;
     
-    //~ audio callback has the right signature
+    if(error != Compiler_Success) return Decl_Handle { error };
     
-    auto audio_callback_has_right_signature_matcher = 
-        functionDecl(hasName("audio_callback"), 
-                     parameterCountIs(6),
-                     hasBody(compoundStmt()),
-                     
-                     hasParameter(2, hasType(pointsTo(pointsTo(realFloatingPointType())))),
-                     hasParameter(3, varDecl(hasType(hasCanonicalType(allOf(isConstQualified(), isUnsignedInteger()))))),
-                     hasParameter(4, varDecl(hasType(hasCanonicalType(allOf(isConstQualified(), isUnsignedInteger()))))),
-                     hasParameter(5, varDecl(hasType(hasCanonicalType(allOf(isConstQualified(), realFloatingPointType()))))),
-                     
-                     returns(voidType()))
-        .bind("callback");
-    
-    bool has_audio_callback_the_right_signature = false;
-    
-    auto audio_callback_has_right_signature_lambda = [&](const auto& result)
-    {
-        if(error) return; 
-        const clang::FunctionDecl* decl = result.Nodes.getNodeAs<clang::FunctionDecl>("callback");
-        if(decl == nullptr) return;
-        if(!decl->isThisDeclarationADefinition()) return;
-        
-        if(has_audio_callback_the_right_signature == false)
-        {
-            has_audio_callback_the_right_signature = true;
-        }
-        else
-        {
-            error = true;
-        }
-    };
-    
-    
-    match_node(audio_callback_has_right_signature_matcher,
-               audio_callback_has_right_signature_lambda,
-               *audio_callback_decl,
-               ast_ctx);
-    
-    
-    if(has_audio_callback_the_right_signature == false)
-    {
-        std::cout << "audio_callback doesn't have the right signature\n";
-        return {false};
-    }
-    if(error) 
-        return {false};
-    
-    
-    //~
-    // check initializer signature
-    
+    //TODO see Compiler_Error comment
     bool initializer_has_the_right_signature = [&](){
         
         auto num_params = initialize_state_decl->getNumParams();
@@ -419,14 +430,14 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
         
         if(!num_channels_type.isSpecificBuiltinType(clang::BuiltinType::UInt))
         {
-            std::cout << "second parameter is unsigned int num_channels\n";
+            std::cout << "second parameter should be unsigned int num_channels\n";
             return false;
         }
         
         //TODO assert que float est 32 bit
         if(!sample_rate_type.isSpecificBuiltinType(clang::BuiltinType::Float))
         {
-            std::cout << "third parameter is float sample_rate\n";
+            std::cout << "third parameter should be float sample_rate\n";
             return false;
         }
         
@@ -448,7 +459,7 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
         
         if(!allocator_has_the_right_signature)
         {
-            std::cout << "fourth parameter should be allocator (unsigned int num_samples) -> void\n"; 
+            std::cout << "fourth parameter should be allocator (unsigned int num_samples) -> void*\n"; 
             return false;
         }
         return true;
@@ -456,55 +467,86 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
     
     if(!initializer_has_the_right_signature)
     {
-        return {false};
+        error = Compiler_Wrong_Signature_Fun;
     }
     
-    if(default_parameters_decl->getNumParams() != 0)
+    return Decl_Handle{
+        .error = error, 
+        .fun = initialize_state_decl
+    };
+}
+
+Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
+{
+    Decl_Handle audio_callback_decl = find_audio_callback(ast_ctx);
+    Decl_Handle default_parameters_decl = find_default_parameters(ast_ctx);
+    Decl_Handle initialize_state_decl = find_initialize_state(ast_ctx);
+    
+    if(audio_callback_decl.error != Compiler_Success ||
+       default_parameters_decl.error != Compiler_Success ||
+       initialize_state_decl.error != Compiler_Success)
     {
-        std::cout << "default_parameters doesn't take any parameters\n";
-        return {false};
+        return Plugin_Required_Decls{
+            Compiler_Generic_Error,
+            audio_callback_decl,
+            default_parameters_decl,
+            initialize_state_decl,
+            Decl_Handle{.error = Compiler_Generic_Error},
+            Decl_Handle{.error = Compiler_Generic_Error}
+        };
     }
     
-    //~comparer les types
+    const auto& default_parameters_return_type = *default_parameters_decl.fun->getReturnType();
+    const auto& initialize_state_return_type = *initialize_state_decl.fun->getReturnType();
     
-    const auto& default_parameters_return_type = *default_parameters_decl->getReturnType();
-    const auto& initialize_state_return_type = *initialize_state_decl->getReturnType();
+    const auto& initialize_state_parameter_type = *initialize_state_decl.fun->getParamDecl(0)->getType()->getPointeeType();
+    const auto& audio_callback_parameter_type = *audio_callback_decl.fun->getParamDecl(0)->getType()->getPointeeType();
+    const auto& audio_callback_state_type = *audio_callback_decl.fun->getParamDecl(1)->getType()->getPointeeType();
     
-    //TODO si c'est pas des pointers, alors ça va être pas ouf
+    const auto& parameters_type = default_parameters_return_type;
+    const auto& state_type = initialize_state_return_type;
     
-    const auto& initialize_state_parameter_type = *initialize_state_decl->getParamDecl(0)->getType()->getPointeeType();
-    const auto& audio_callback_parameter_type = *audio_callback_decl->getParamDecl(0)->getType()->getPointeeType();
-    const auto& audio_callback_state_type = *audio_callback_decl->getParamDecl(1)->getType()->getPointeeType();
+    Decl_Handle parameters_struct_decl = {Compiler_Success};
     
     if(&default_parameters_return_type != &initialize_state_parameter_type ||
        &default_parameters_return_type != &audio_callback_parameter_type)
     {
-        std::cout << "parameter type don't match\n";
-        return {false};
+        parameters_struct_decl.error = Compiler_Types_Mismatch;
     }
+    else if(!parameters_type.isRecordType()){
+        parameters_struct_decl.error = Compiler_Not_Record_Type;
+    }
+    else {
+        parameters_struct_decl.record = parameters_type.getAsCXXRecordDecl();
+        if(parameters_struct_decl.record->isPolymorphic())
+        {
+            parameters_struct_decl.error = Compiler_Polymorphic;
+        }
+    }
+    
+    Decl_Handle state_struct_decl = {Compiler_Success};
     
     if(&initialize_state_return_type != &audio_callback_state_type)
     {
-        std::cout << "state types don't match\n";
-        return {false};
+        state_struct_decl.error = Compiler_Types_Mismatch;
+    }
+    else if(!state_type.isRecordType()){
+        state_struct_decl.error = Compiler_Not_Record_Type;
+    }
+    else {
+        state_struct_decl.record = state_type.getAsCXXRecordDecl();
+        if(state_struct_decl.record->isPolymorphic())
+        {
+            state_struct_decl.error = Compiler_Polymorphic;
+        }
     }
     
-    const auto& state_type = initialize_state_return_type;
-    const auto& parameters_type = default_parameters_return_type;
-    
-    if(!state_type.isRecordType() || !parameters_type.isRecordType())
-    {
-        std::cout << "must be records\n"; 
-        return {false};
-    }
-    
-    const auto* state_struct_decl = state_type.getAsCXXRecordDecl();
-    const auto* parameters_struct_decl = parameters_type.getAsCXXRecordDecl();
-    
-    //TODO check if false
+    Compiler_Error error = 
+        parameters_struct_decl.error == Compiler_Success && state_struct_decl.error == Compiler_Success ?
+        Compiler_Success : Compiler_Generic_Error;
     
     return {
-        true,
+        error,
         audio_callback_decl,
         default_parameters_decl,
         initialize_state_decl,
@@ -514,9 +556,197 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
 }
 
 
-
-
-
+Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
+                                          const clang::CXXRecordDecl* state_struct_decl)
+{
+    
+    const clang::ASTRecordLayout& parameters_struct_layout  = parameters_struct_decl->getASTContext().getASTRecordLayout(parameters_struct_decl);
+    
+    auto parameters_struct_size = parameters_struct_layout.getSize();
+    auto parameters_struct_alignment = parameters_struct_layout.getAlignment();
+    
+    const clang::ASTRecordLayout& state_struct_layout  = state_struct_decl->getASTContext().getASTRecordLayout(state_struct_decl);
+    
+    auto state_struct_size = state_struct_layout.getSize();
+    auto state_struct_alignment = state_struct_layout.getAlignment();
+    
+    
+    //TODO c'est une liste I guess ?
+    u32 num_fields = 0;
+    for(const auto* _ : parameters_struct_decl->fields())
+    {
+        num_fields++;
+    }
+    
+    bool there_was_an_error = false;
+    
+    auto *anotated_parameters = (Plugin_Descriptor_Parameter*)malloc(sizeof(Plugin_Descriptor_Parameter) * num_fields);
+    u32 anotated_parameter_idx = 0;
+    for(const auto* field : parameters_struct_decl->fields())
+    {
+        
+        if (field->hasAttr<clang::AnnotateAttr>()) {
+            
+            clang::AnnotateAttr* attr = field->getAttr<clang::AnnotateAttr>();
+            
+            std::vector<std::string> param_strings{};
+            {
+                std::istringstream iss(attr->getAnnotation().str());
+                std::string token;
+                while(std::getline(iss, token, ' ')) {
+                    param_strings.push_back(token);
+                }
+            }
+            
+            Plugin_Descriptor_Parameter plugin_parameter_rename = [&param_strings, 
+                                                                   &parameters_struct_layout,
+                                                                   &field] {
+                Plugin_Descriptor_Parameter parameter = {};
+                
+                const auto& type = *field->getType();
+                auto index = field->getFieldIndex();
+                parameter.offset = parameters_struct_layout.getFieldOffset(index) / 8;
+                parameter.name = allocate_and_copy_llvm_stringref(field->getName());
+                
+                if(param_strings.size() == 0)
+                {
+                    parameter.error = Compiler_Empty_Annotation;
+                    return parameter;
+                }
+                else if (param_strings[0] == "Int") 
+                {
+                    parameter.type = Int;
+                    const auto *maybe_int = llvm::dyn_cast<clang::BuiltinType>(&type);
+                    if(maybe_int == nullptr || maybe_int->getKind() != clang::BuiltinType::Int)
+                    {
+                        parameter.error = Compiler_Annotation_Type_Mismatch;
+                        return parameter;
+                    }
+                    
+                    if(param_strings.size() != 3) 
+                    {
+                        parameter.error = Compiler_Missing_Min_Max;
+                        return parameter;
+                    }
+                    char* min_end_ptr = nullptr;
+                    i32 min = strtol(param_strings[1].c_str() , &min_end_ptr, 0);
+                    if(min_end_ptr == nullptr)
+                    {
+                        parameter.error = Compiler_Invalid_Min_Value;
+                    }
+                    else 
+                    {
+                        parameter.int_param.min = min;
+                    }
+                    
+                    char* max_end_ptr = nullptr;
+                    i32 max = strtol(param_strings[2].c_str(), &max_end_ptr, 0);
+                    if(max_end_ptr == nullptr)
+                    {
+                        parameter.error = Compiler_Invalid_Max_Value;
+                    }
+                    else {
+                        parameter.int_param.max = max; //TODO conversion;
+                    }
+                    
+                    if(min_end_ptr && max_end_ptr && min >= max)
+                    {
+                        parameter.error = Compiler_Min_Greater_Than_Max;
+                    }
+                }
+                else if (param_strings[0] == "Float") 
+                {
+                    parameter.type = Float;
+                    const auto *maybe_float = llvm::dyn_cast<clang::BuiltinType>(&type);
+                    if(maybe_float == nullptr || maybe_float->getKind() != clang::BuiltinType::Float)
+                    {
+                        parameter.error = Compiler_Annotation_Type_Mismatch;
+                        return parameter;
+                    }
+                    if(param_strings.size() != 3) 
+                    {
+                        parameter.error = Compiler_Missing_Min_Max;
+                        return parameter;
+                    }
+                    char* min_end_ptr = nullptr;
+                    real32 min = strtof(param_strings[1].c_str(), &min_end_ptr);
+                    if(min_end_ptr == nullptr)
+                        parameter.error = Compiler_Invalid_Min_Value;
+                    else
+                        parameter.float_param.min = min;
+                    
+                    char* max_end_ptr = nullptr;
+                    real32 max = strtof(param_strings[2].c_str(), &max_end_ptr);
+                    if(max_end_ptr == nullptr)
+                        parameter.error = Compiler_Invalid_Max_Value;
+                    else 
+                        parameter.float_param.max = max; //TODO conversion;
+                    
+                    if(min_end_ptr && max_end_ptr && min >= max)
+                    {
+                        parameter.error = Compiler_Min_Greater_Than_Max;
+                    }
+                }
+                else if (param_strings[0] == "Enum") 
+                {
+                    parameter.type = Enum;
+                    const auto *maybe_enum = llvm::dyn_cast<clang::EnumType>(&type);
+                    if(maybe_enum == nullptr)
+                    {
+                        parameter.error = Compiler_Annotation_Type_Mismatch;
+                        return parameter;
+                    }
+                    
+                    Parameter_Enum enum_param = {};
+                    
+                    auto *enum_decl = maybe_enum->getDecl();
+                    //TODO assert que le getIntegerType soit un int normal
+                    for(auto _: maybe_enum->getDecl()->enumerators())
+                        enum_param.num_entries++;
+                    
+                    //TODO est-ce que je vais avoir le droit de le free dans l'exe, différentes heap
+                    enum_param.entries = new Parameter_Enum_Entry[enum_param.num_entries];
+                    
+                    auto i = 0;
+                    for(const auto *field : maybe_enum->getDecl()->enumerators())
+                    {
+                        enum_param.entries[i].name = allocate_and_copy_llvm_stringref(field->getName());
+                        enum_param.entries[i].value = field->getInitVal().getExtValue(); 
+                        i++;
+                    }
+                    
+                    parameter.enum_param = enum_param;
+                }
+                else {
+                    parameter.error = Compiler_Invalid_Annotation;
+                }
+                return parameter;
+            }();
+            
+            if(plugin_parameter_rename.error != Compiler_Success)
+                there_was_an_error = true;
+            anotated_parameters[anotated_parameter_idx++] = plugin_parameter_rename;
+        }
+    }
+    
+    u32 anotated_parameter_count = anotated_parameter_idx;
+    anotated_parameters = (Plugin_Descriptor_Parameter*) realloc(anotated_parameters, sizeof(Plugin_Descriptor_Parameter) * anotated_parameter_count);
+    
+    
+    return {
+        .error = there_was_an_error ? Compiler_Generic_Error : Compiler_Success,
+        .parameters_struct = {
+            .size = parameters_struct_size.getQuantity(),
+            .alignment = parameters_struct_alignment.getQuantity()
+        },
+        .state_struct = {
+            .size = state_struct_size.getQuantity(),
+            .alignment = state_struct_alignment.getQuantity()
+        },
+        .parameters = anotated_parameters,
+        .num_parameters = anotated_parameter_count
+    };
+}
 
 
 std::unique_ptr<llvm::MemoryBuffer> 
@@ -526,12 +756,12 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
                       clang::FileID plugin_source_file_id)
 {
     
-    auto audio_callback_source_range = decls.audio_callback->getSourceRange();
-    auto default_parameters_source_range = decls.default_parameters->getSourceRange();
-    auto initialize_state_source_range = decls.initialize_state->getSourceRange();
+    auto audio_callback_source_range = decls.audio_callback.fun->getSourceRange();
+    auto default_parameters_source_range = decls.default_parameters.fun->getSourceRange();
+    auto initialize_state_source_range = decls.initialize_state.fun->getSourceRange();
     
-    auto parameters_struct_name = decls.parameters_struct->getNameAsString();
-    auto state_struct_name = decls.state_struct->getNameAsString();
+    auto parameters_struct_name = decls.parameters_struct.record->getNameAsString();
+    auto state_struct_name = decls.state_struct.record->getNameAsString();
     
     std::string audio_callback_wrapper_declaration = ""
         "\nextern \"C\" void audio_callback_wrapper(void* param_ptr, void* state_ptr,float** out_buffer, unsigned int num_channels, unsigned int num_samples, float sample_rate);\n"
@@ -590,207 +820,12 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
 }
 
 
-bool parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
-                             const clang::CXXRecordDecl* state_struct_decl,
-                             Plugin_Descriptor& plugin_descriptor)
-{
-    if(parameters_struct_decl->isPolymorphic() || 
-       state_struct_decl->isPolymorphic())
-    {
-        std::cout << "Cannot be polymorphic\n";
-        return false;
-    }
-    
-    const clang::ASTRecordLayout& parameters_struct_layout  = parameters_struct_decl->getASTContext().getASTRecordLayout(parameters_struct_decl);
-    
-    auto parameters_struct_size = parameters_struct_layout.getSize();
-    auto parameters_struct_alignment = parameters_struct_layout.getAlignment();
-    
-    
-    const clang::ASTRecordLayout& state_struct_layout  = state_struct_decl->getASTContext().getASTRecordLayout(state_struct_decl);
-    
-    auto state_struct_size = state_struct_layout.getSize();
-    auto state_struct_alignment = state_struct_layout.getAlignment();
-    
-    
-    
-    //plugin_descriptor.name = allocate_and_copy_llvm_stringref(plugin_descriptor_declaration->getName());
-    plugin_descriptor.parameters_struct.size = parameters_struct_size.getQuantity();
-    plugin_descriptor.parameters_struct.alignment = parameters_struct_alignment.getQuantity();
-    
-    plugin_descriptor.state_struct.size = state_struct_size.getQuantity();
-    plugin_descriptor.state_struct.alignment = state_struct_alignment.getQuantity();
-    
-    
-    u32 num_fields = 0;
-    
-    for(const auto* _ : parameters_struct_decl->fields())
-    {
-        num_fields++;
-    }
-    
-    auto *valid_parameters = (Plugin_Descriptor_Parameter*)malloc(sizeof(Plugin_Descriptor_Parameter) * num_fields);
-    
-    u32 valid_parameter_idx = 0;
-    for(const auto* field : parameters_struct_decl->fields())
-    {
-        const auto& type = *field->getType();
-        
-        if (field->hasAttr<clang::AnnotateAttr>()) {
-            clang::AnnotateAttr* attr = field->getAttr<clang::AnnotateAttr>();
-            
-            std::string space_delimiter = " ";
-            std::string text = attr->getAnnotation().str() ;
-            std::vector<std::string> param_strings{};
-            
-            std::istringstream iss(text);
-            
-            std::string token;
-            
-            while(std::getline(iss, token, ' ')) {
-                param_strings.push_back(token);
-            }
-            
-            Plugin_Descriptor_Parameter plugin_parameter = {};
-            plugin_parameter.name = allocate_and_copy_llvm_stringref(field->getName());
-            
-            auto index = field->getFieldIndex();
-            plugin_parameter.offset = parameters_struct_layout.getFieldOffset(index) / 8;
-            
-            if (param_strings[0] == "Int") {
-                const auto *maybe_int = llvm::dyn_cast<clang::BuiltinType>(&type);
-                if(maybe_int == nullptr || maybe_int->getKind() != clang::BuiltinType::Int)
-                {
-                    
-                    std::cout << "Error : not an Int type\n";
-                    return false;
-                }
-                
-                if(param_strings.size() != 3) 
-                {
-                    std::cout << "two parameters required : min and max\n";
-                    return false;
-                }
-                
-                char* end_ptr = nullptr;
-                i32 min = strtol(param_strings[1].c_str() , &end_ptr, 0);
-                if(end_ptr == nullptr)
-                {
-                    std::cout << "invalid min value\n";
-                    return false;
-                }
-                i32 max = strtol(param_strings[2].c_str(), &end_ptr, 0);
-                if(end_ptr == nullptr)
-                {
-                    std::cout << "invalid max value\n";
-                    return false;
-                }
-                if(min >= max)
-                {
-                    std::cout << "min must be greater than max\n";
-                    return false;
-                }
-                
-                plugin_parameter.int_param.min = min;
-                plugin_parameter.int_param.max = max; //TODO conversion;
-                plugin_parameter.type = Int;
-            }
-            else if (param_strings[0] == "Float") 
-            {
-                
-                const auto *maybe_float = llvm::dyn_cast<clang::BuiltinType>(&type);
-                if(maybe_float == nullptr || maybe_float->getKind() != clang::BuiltinType::Float)
-                {
-                    
-                    std::cout << "Error : not a Float type\n";
-                    return false;
-                }
-                
-                if(param_strings.size() != 3) 
-                {
-                    std::cout << "two parameters required : min and max\n";
-                    return false;
-                }
-                
-                char* end_ptr = nullptr;
-                real32 min = strtof(param_strings[1].c_str(), &end_ptr);
-                if(end_ptr == nullptr)
-                {
-                    std::cout << "invalid min value\n";
-                    return false;
-                }
-                real32 max = strtof(param_strings[2].c_str(), &end_ptr);
-                if(end_ptr == nullptr)
-                {
-                    std::cout << "invalid max value\n";
-                    return false;
-                }
-                if(min >= max)
-                {
-                    std::cout << "min must be greater than max\n";
-                    return false;
-                }
-                
-                plugin_parameter.float_param.min = min;
-                plugin_parameter.float_param.max = max; //TODO conversion;
-                plugin_parameter.type = Float;}
-            else if (param_strings[0] == "Enum") 
-            {
-                const auto *maybe_enum = llvm::dyn_cast<clang::EnumType>(&type);
-                if(maybe_enum == nullptr)
-                {
-                    
-                    std::cout << "Error : not an Enum type\n";
-                    return false;
-                }
-                
-                Parameter_Enum enum_param = {};
-                
-                auto *enum_decl = maybe_enum->getDecl();
-                //TODO assert que le getIntegerType soit un int normal
-                for(auto _: maybe_enum->getDecl()->enumerators())
-                    enum_param.num_entries++;
-                
-                enum_param.entries = new Parameter_Enum_Entry[enum_param.num_entries];
-                
-                auto i = 0;
-                for(const auto *field : maybe_enum->getDecl()->enumerators())
-                {
-                    enum_param.entries[i].name = allocate_and_copy_llvm_stringref(field->getName());
-                    enum_param.entries[i].value = field->getInitVal().getExtValue(); //TODO conversion
-                    i++;
-                }
-                
-                plugin_parameter.type = Enum;
-                plugin_parameter.enum_param = enum_param;
-            }
-            else {
-                
-                std::cout << "Invalid type annotation, should be Int, Float or Enum\n";
-                return false;
-            }
-            
-            std::cout << "\n";
-            print_parameter(plugin_parameter);
-            std::cout << "\n";
-            
-            valid_parameters[valid_parameter_idx++] = plugin_parameter;
-        }
-    }
-    
-    valid_parameters = (Plugin_Descriptor_Parameter*) realloc(valid_parameters, sizeof(Plugin_Descriptor_Parameter) * valid_parameter_idx);
-    
-    plugin_descriptor.num_parameters = valid_parameter_idx;
-    plugin_descriptor.parameters = valid_parameters;
-    return true;
-}
-
-
 Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
                           Plugin_Descriptor& descriptor,
                           llvm::LLVMContext *llvm_context,
                           llvm::ModulePassManager& module_pass_manager,
-                          llvm::ModuleAnalysisManager& module_analysis_manager)
+                          llvm::ModuleAnalysisManager& module_analysis_manager,
+                          Compiler_Errors *errors)
 {
     
     auto new_file = clang::FrontendInputFile{
@@ -803,53 +838,49 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
     
     auto compile_action = std::make_unique<clang::EmitLLVMOnlyAction>(llvm_context);
     
-    if (compiler_instance.ExecuteAction(*compile_action)) 
-    {
-        if(compiler_instance.getDiagnostics().getNumErrors() == 0)
-        {
-            std::unique_ptr<llvm::Module> module = compile_action->takeModule();
-            
-            if(module)
-            {
-                
-                //Optimizations
-                module_pass_manager.run(*module, module_analysis_manager);
-                
-                //create JIT
-                llvm::EngineBuilder builder(std::move(module));
-                builder.setMCJITMemoryManager(std::make_unique<llvm::SectionMemoryManager>());
-                builder.setOptLevel(llvm::CodeGenOpt::Level::Aggressive);
-                
-                llvm::ExecutionEngine *engine = builder.create();
-                
-                
-                if (engine) 
-                {
-                    //on en a pas vraiment besoin de faire ça. C'est dans le cas où on chargerait plusieur modules sur le même executionEngine
-                    engine->finalizeObject();
-                    
-                    auto audio_callback_f = (audio_callback_t)engine->getFunctionAddress("audio_callback_wrapper");
-                    auto default_parameters_f = (default_parameters_t)engine->getFunctionAddress("default_parameters_wrapper");
-                    auto initialize_state_f = (initialize_state_t)engine->getFunctionAddress("initialize_state_wrapper");
-                    
-                    
-                    assert(audio_callback_f && default_parameters_f && initialize_state_f);
-                    
-                    return Plugin_Handle{
-                        .worked = true, 
-                        .llvm_jit_engine = (void*)engine, 
-                        .audio_callback_f = audio_callback_f, 
-                        .default_parameters_f = default_parameters_f, 
-                        .initialize_state_f = initialize_state_f,
-                        .descriptor = descriptor
-                    };
-                }
-            }
-        }
-    }
+    if (!compiler_instance.ExecuteAction(*compile_action)) 
+        return { .error = Compiler_Rewritten_Compilation_Error };
+    
+    if(compiler_instance.getDiagnostics().getNumErrors() != 0)
+        return { .error = Compiler_Rewritten_Compilation_Error };
+    
+    std::unique_ptr<llvm::Module> module = compile_action->takeModule();
+    
+    if(!module) 
+        return { .error = Compiler_Rewritten_Compilation_Error };
+    
+    //Optimizations
+    module_pass_manager.run(*module, module_analysis_manager);
+    
+    //create JIT
+    llvm::EngineBuilder builder(std::move(module));
+    builder.setMCJITMemoryManager(std::make_unique<llvm::SectionMemoryManager>());
+    builder.setOptLevel(llvm::CodeGenOpt::Level::Aggressive);
+    
+    llvm::ExecutionEngine *engine = builder.create();
     
     
-    return {false};
+    if (!engine) 
+        return { .error = Compiler_Cant_Launch_Jit };
+    
+    //on en a pas vraiment besoin de faire ça. C'est dans le cas où on chargerait plusieur modules sur le même executionEngine
+    engine->finalizeObject();
+    
+    auto audio_callback_f = (audio_callback_t)engine->getFunctionAddress("audio_callback_wrapper");
+    auto default_parameters_f = (default_parameters_t)engine->getFunctionAddress("default_parameters_wrapper");
+    auto initialize_state_f = (initialize_state_t)engine->getFunctionAddress("initialize_state_wrapper");
+    
+    
+    assert(audio_callback_f && default_parameters_f && initialize_state_f);
+    
+    return Plugin_Handle{
+        .error = Compiler_Success, 
+        .descriptor = descriptor,
+        .llvm_jit_engine = (void*)engine, 
+        .audio_callback_f = audio_callback_f, 
+        .default_parameters_f = default_parameters_f, 
+        .initialize_state_f = initialize_state_f
+    };
 }
 
 extern "C" __declspec(dllexport) 

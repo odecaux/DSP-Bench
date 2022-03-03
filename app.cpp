@@ -8,22 +8,16 @@
 
 #include "windows.h"
 
-#include "memory.h"
 
+#include "memory.h"
 #include "base.h"
 #include "structs.h"
 #include "descriptor.h"
-#include "win32_helpers.h"
-#include "font.h"
 #include "draw.h"
 #include "app.h"
 
-#include "win32_platform.h"
-#include "opengl.h"
 
-#include <ippdefs.h>
 
-#include "fft.h"
 //#define log printf
 #define log noop_log
 
@@ -209,16 +203,44 @@ void integrate_fft(real32* magnitude_buffer, u32 sample_count, real32* pixel_buf
 }
 
 
+bool button(Rect bounds, 
+            String text, 
+            u32 id, 
+            Graphics_Context *graphics_ctx, 
+            UI_State *ui_state,
+            IO *io)
+{
+    fill_rectangle(bounds, 0xffffffff, &graphics_ctx->atlas);
+    bounds = rect_remove_padding(bounds, 3.0f, 3.0f);
+    
+    bool hovered = rect_contains(bounds,io->mouse_position); 
+    bool clicked = false;
+    if(hovered && io->mouse_clicked)
+    {
+        clicked = true;
+        ui_state->selected_parameter_idx = id;
+    }
+    bool down = ui_state->selected_parameter_idx == id;
+    
+    if(down)
+        draw_rectangle(bounds, 5.0f, 0xff007700, &graphics_ctx->atlas);
+    else if(hovered)
+        draw_rectangle(bounds, 5.0f, 0xff770000, &graphics_ctx->atlas);
+    else
+        draw_rectangle(bounds, 4.0f, 0xff000000, &graphics_ctx->atlas);
+    
+    bounds = rect_remove_padding(bounds, 5.0f, 5.0f);
+    draw_text(text, bounds, 0xff000000, &graphics_ctx->atlas);
+    
+    return clicked;
+}
+
 void frame(Plugin_Descriptor& descriptor, 
            Graphics_Context *graphics_ctx, 
            UI_State& ui_state, 
            IO frame_io, 
-           /*
-           real32* IR_min_buffer,
-           real32* IR_max_buffer,
-           u32 IR_pixel_count,
-           */
            Plugin_Parameter_Value* current_parameter_values,
+           Audio_Context *audio_ctx,
            bool& parameters_were_tweaked)
 {
     if(frame_io.mouse_released)
@@ -226,22 +248,82 @@ void frame(Plugin_Descriptor& descriptor,
         ui_state.selected_parameter_idx = -1;
     }
     
+    
+    Rect button_bounds_a = {
+        {200.0f, 100.0f},
+        {200.0f, 100.0f}
+    };
+    
+    Rect button_bounds_b = {
+        {200.0f, 250.0f},
+        {200.0f, 100.0f}
+    };
+    /*
+    if(button(button_bounds_a, StringLit("Play/Stop"), 300, graphics_ctx, &ui_state, &frame_io))
+    {
+        if(audio_ctx->audio_file_play){
+            audio_ctx->audio_file_play = 0;
+            MemoryBarrier();
+            audio_ctx->audio_file_read_cursor = 0;
+        }
+        else{
+            audio_ctx->audio_file_play = 1;
+            MemoryBarrier();
+        }
+    }
+    
+    if(button(button_bounds_b, StringLit("Loop"), 400, graphics_ctx, &ui_state, &frame_io))
+    {
+        audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
+    }
+    */
+    
     Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };
     Rect header_bounds = rect_remove_padding(rect_take_top(window_bounds, TITLE_HEIGHT), 10.0f, 10.0f);
     window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT);
     
     
     
-    Rect title_bounds = header_bounds;
-    draw_rectangle(title_bounds, Color_Front, &graphics_ctx->atlas);
+    Rect title_bounds = rect_drop_right(header_bounds,  TITLE_HEIGHT * 3);
+    draw_rectangle(title_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     draw_text(StringLit("gain.cpp"), title_bounds, Color_Front, &graphics_ctx->atlas);
+    
+    Rect audio_buttons_panel_bounds = rect_take_right(header_bounds, TITLE_HEIGHT * 3);
+    draw_rectangle(audio_buttons_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    Rect play_stop_bounds = rect_take_left(audio_buttons_panel_bounds, TITLE_HEIGHT);
+    Rect loop_bounds = rect_move_by(play_stop_bounds, {TITLE_HEIGHT, 0.0f});
+    Rect plugin_play_stop_bounds = rect_move_by(loop_bounds, {TITLE_HEIGHT, 0.0f});
+    
+    //TODO synchronization
+    if(button(play_stop_bounds, StringLit("Play/Stop"), 256, graphics_ctx, &ui_state, &frame_io))
+    {
+        if(audio_ctx->audio_file_play){
+            audio_ctx->audio_file_play = 0;
+            MemoryBarrier();
+            audio_ctx->audio_file_read_cursor = 0;
+        }
+        else{
+            audio_ctx->audio_file_play = 1;
+            MemoryBarrier();
+        }
+    }
+    if(button(loop_bounds, StringLit("Loop"), 257, graphics_ctx, &ui_state, &frame_io))
+    {
+        audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
+    }
+    
+    if(button(plugin_play_stop_bounds, StringLit("Plugin"), 258, graphics_ctx, &ui_state, &frame_io))
+    {
+        audio_ctx->plugin_play = audio_ctx->plugin_play == 0 ? 1 : 0;
+    }
+    
     
     
     
     Rect left_panel_bounds = rect_remove_padding(rect_take_left(window_bounds, PARAMETER_PANEL_WIDTH), 10.0f, 10.0f);
     Rect right_panel_bounds = rect_remove_padding(rect_drop_left(window_bounds, PARAMETER_PANEL_WIDTH), 10.0f, 10.0f);
     
-    draw_rectangle(left_panel_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_rectangle(left_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     
     Rect parameter_bounds = left_panel_bounds;
     parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
@@ -252,18 +334,18 @@ void frame(Plugin_Descriptor& descriptor,
         auto& parameter_descriptor = descriptor.parameters[parameter_idx];
         
         Rect field_title_bounds = rect_take_top(parameter_bounds, FIELD_TITLE_HEIGHT);
-        Rect la_partie_du_bas_avec_le_slider_et_les_minmax = rect_remove_padding(rect_drop_top(parameter_bounds, FIELD_TITLE_HEIGHT), 2.5f, 2.5f);
+        Rect current_value_bounds = rect_remove_padding(rect_drop_top(parameter_bounds, FIELD_TITLE_HEIGHT), 2.5f, 2.5f);
+        Rect slider_and_minmax_bounds = rect_move_by(current_value_bounds, {0.0f, FIELD_TITLE_HEIGHT});
         
         draw_text(parameter_descriptor.name, field_title_bounds, Color_Front, &graphics_ctx->atlas);
-        //draw_rectangle(field_title_bounds, Color_Front, &graphics_ctx->atlas);
         
-        Rect slider_bounds = rect_remove_padding(la_partie_du_bas_avec_le_slider_et_les_minmax, MIN_MAX_LABEL_WIDTH, 0.0f);
-        Rect min_label_bounds = rect_take_left(la_partie_du_bas_avec_le_slider_et_les_minmax, MIN_MAX_LABEL_WIDTH);
-        Rect max_label_bounds = rect_take_right(la_partie_du_bas_avec_le_slider_et_les_minmax, MIN_MAX_LABEL_WIDTH);
+        Rect slider_bounds = rect_remove_padding(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH, 0.0f);
+        Rect min_label_bounds = rect_take_left(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
+        Rect max_label_bounds = rect_take_right(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
         
-        draw_rectangle(slider_bounds, Color_Front, &graphics_ctx->atlas);
-        draw_rectangle(min_label_bounds, Color_Front, &graphics_ctx->atlas);
-        draw_rectangle(max_label_bounds, Color_Front, &graphics_ctx->atlas);
+        draw_rectangle(slider_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+        draw_rectangle(min_label_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+        draw_rectangle(max_label_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
         
         real32 new_normalized_value;
         
@@ -274,17 +356,16 @@ void frame(Plugin_Descriptor& descriptor,
         
         bool should_update_this_parameter = false;
         
+        bool dragging = frame_io.mouse_down && (frame_io.mouse_delta.x != 0.0f
+                                                || frame_io.mouse_delta.y != 0.0f);
+        
         if(ui_state.selected_parameter_idx == parameter_idx 
-           && frame_io.mouse_down 
-           && (frame_io.mouse_delta.x != 0.0f
-               || frame_io.mouse_delta.y != 0.0f))
+           && (dragging || frame_io.mouse_clicked))
         {
             real32 mouse_x = frame_io.mouse_position.x;
-            real32 normalized_mouse_value = (mouse_x - slider_bounds.origin.x) / slider_bounds.dim.x;
-            if(normalized_mouse_value < 0.0f)
-                normalized_mouse_value = 0.0f;
-            else if(normalized_mouse_value > 1.0f)
-                normalized_mouse_value = 1.0f;
+            real32 normalized_mouse_value = (mouse_x - slider_bounds.origin.x - (SLIDER_WIDTH / 2)) / (slider_bounds.dim.x - SLIDER_WIDTH);
+            
+            normalized_mouse_value = octave_clamp(normalized_mouse_value, 0.0f, 1.0f);
             
             new_normalized_value = normalized_mouse_value;
             parameters_were_tweaked = true;
@@ -298,7 +379,6 @@ void frame(Plugin_Descriptor& descriptor,
             case Int :
             {
                 int current_value = current_parameter_value.int_value; 
-                //int value = int_parameter_extract_value(parameter, plugin_state_holder);
                 real32 current_normalized_value = normalize_parameter_int_value(parameter_descriptor.int_param, current_value);
                 draw_slider(slider_bounds, current_normalized_value, &graphics_ctx->atlas);
                 
@@ -307,6 +387,22 @@ void frame(Plugin_Descriptor& descriptor,
                     auto new_int_value = denormalize_int_value(parameter_descriptor.int_param, new_normalized_value);
                     current_parameter_value.int_value = new_int_value;
                 }
+                
+                i32 min_value = parameter_descriptor.int_param.min;
+                i32 max_value = parameter_descriptor.int_param.max;
+                char text[256];
+                int text_size = sprintf(text, "%d", min_value);
+                if(text_size >= 0)
+                    draw_text(String{.str = text, .size = (u64)text_size}, min_label_bounds, Color_Front, &graphics_ctx->atlas);
+                
+                text_size = sprintf(text, "%d", max_value);
+                if(text_size >= 0)
+                    draw_text(String{.str = text, .size = (u64)text_size}, max_label_bounds, Color_Front, &graphics_ctx->atlas);
+                
+                text_size = sprintf(text, "%d", current_parameter_value.int_value);
+                if(text_size >= 0)
+                    draw_text(String{.str = text, .size = (u64)text_size}, current_value_bounds, Color_Front, &graphics_ctx->atlas);
+                
             }break;
             case Float : 
             {
@@ -319,6 +415,22 @@ void frame(Plugin_Descriptor& descriptor,
                     auto new_float_value = denormalize_float_value(parameter_descriptor.float_param, new_normalized_value);
                     current_parameter_value.float_value = new_float_value;
                 }
+                
+                
+                real32 min_value = parameter_descriptor.float_param.min;
+                real32 max_value = parameter_descriptor.float_param.max;
+                char text[256];
+                int text_size = sprintf(text, "%.2f", min_value);
+                if(text_size >= 0)
+                    draw_text(String{.str = text, .size = (u64)text_size}, min_label_bounds, Color_Front, &graphics_ctx->atlas);
+                
+                text_size = sprintf(text, "%.2f", max_value);
+                if(text_size >= 0)
+                    draw_text(String{.str = text, .size = (u64)text_size}, max_label_bounds, Color_Front, &graphics_ctx->atlas);
+                
+                text_size = sprintf(text, "%.4f", current_parameter_value.float_value);
+                if(text_size >= 0)
+                    draw_text(String{.str = text, .size = (u64)text_size}, current_value_bounds, Color_Front, &graphics_ctx->atlas);
             }break;
             case Enum : 
             {
@@ -342,173 +454,32 @@ void frame(Plugin_Descriptor& descriptor,
     }
     
     
-    draw_rectangle(right_panel_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_rectangle(right_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     
     Rect ir_panel_bounds;
     Rect fft_panel_bounds;
     rect_split_vert_middle(right_panel_bounds, &ir_panel_bounds, &fft_panel_bounds);
     
-    //ir_panel_bounds = rect_remove_padding(ir_panel_bounds, 10.0f, 10.0f);
-    //fft_panel_bounds = rect_remove_padding(fft_panel_bounds, 10.0f, 10.0f);
-    
-    draw_rectangle(ir_panel_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
     Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
     
     
     draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &graphics_ctx->atlas); 
     
-    draw_rectangle(ir_graph_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     //draw_IR(ir_graph_bounds /*, IR_min_buffer, IR_max_buffer, IR_pixel_count*/ , &graphics_ctx->ir);
     graphics_ctx->ir.bounds = ir_graph_bounds;
     
     
-    draw_rectangle(fft_panel_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
     Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
     
     
     draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &graphics_ctx->atlas); 
-    draw_rectangle(fft_graph_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     //draw_fft(fft_graph_bounds, &graphics_ctx->fft);
     graphics_ctx->fft.bounds = fft_graph_bounds;
 }
 
-
-
-
-
-void initialize_gui(Plugin_Handle& handle,
-                    Audio_Parameters& audio_parameters,
-                    Plugin_Parameter_Value *current_value,
-                    Plugin_Parameters_Ring_Buffer* ring)
-{
-    Graphics_Context graphics_ctx = {};
-    graphics_ctx.window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, }; 
-    
-    Window_Context window = win32_init_window(&graphics_ctx.window_dim);
-    
-    graphics_ctx.atlas = {
-        .font = load_fonts(DEFAULT_FONT_FILENAME),
-        .draw_vertices = m_allocate_array(Vertex, ATLAS_MAX_VERTEX_COUNT),
-        .draw_vertices_count = 0,
-        .draw_indices = m_allocate_array(u32, ATLAS_MAX_VERTEX_COUNT), 
-        .draw_indices_count = 0
-    };
-    
-    OpenGL_Context opengl_ctx = opengl_initialize(&window, &graphics_ctx.atlas.font);
-    
-    //~ IR initialization
-    Plugin_Descriptor& descriptor = handle.descriptor;
-    
-    real32** IR_buffer = m_allocate_array(real32*, audio_parameters.num_channels);
-    for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
-    {
-        IR_buffer[channel] = m_allocate_array(real32, IR_BUFFER_LENGTH);
-    }
-    
-    compute_IR(handle, IR_buffer, IR_BUFFER_LENGTH, audio_parameters, current_value);
-    
-    
-    Ipp_Context ipp_ctx = ipp_initialize();
-    
-    Vec2* fft_out = m_allocate_array(Vec2, IR_BUFFER_LENGTH);
-    fft_forward(IR_buffer[0], fft_out, IR_BUFFER_LENGTH, &ipp_ctx);
-    
-    real32 *magnitudes  = m_allocate_array(real32, IR_BUFFER_LENGTH);
-    for(i32 i = 0; i < IR_BUFFER_LENGTH; i++)
-        magnitudes[i] = sqrt(fft_out[i].a * fft_out[i].a + fft_out[i].b * fft_out[i].b);
-    
-    graphics_ctx.ir = {
-        .IR_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH),
-        .IR_sample_count = IR_BUFFER_LENGTH
-    };
-    memcpy(graphics_ctx.ir.IR_buffer, IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
-    
-    graphics_ctx.fft = {
-        .fft_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH),
-        .fft_sample_count = IR_BUFFER_LENGTH / 2 //TODO variable
-    };
-    memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH / 2); 
-    
-    
-    /*{
-        Vec2 *buf = graphics_ctx.ir.IR_min_max_buffer;
-        memset(buf, 0, sizeof(Vec2) * IR_BUFFER_LENGTH);
-        buf[0] = { 0.5f, -0.5f};
-        buf[23] = { 0.2f, -0.6f};
-        
-    }
-    */
-    
-    /*printf("buffer \n");
-    for(i32 i = 0;i < IR_BUFFER_LENGTH; i++)
-    {
-        printf("\n%.3d : %.3f", i, magnitudes[i]);
-    }
-    printf("\n/////////\n");
-    printf("pixels\n");
-    for(i32 i = 0;i < IR_PIXEL_LENGTH; i++)
-    {
-        printf("\n%.3d : %.3f", i, graphics_ctx.fft.fft_buffer[i]);
-    }*/
-    
-    IO frame_io = io_initial_state();
-    UI_State ui_state = {-1};
-    
-    bool done = false;
-    
-    i64 last_time = win32_init_timer();
-    
-    //~ Main Loop
-    while(!done)
-    {
-        win32_message_dispatch(&window, &frame_io, &done);
-        
-        // TODO(octave): hack ?
-        if(done)
-            break;
-        
-        //~
-        //frame
-        
-        graphics_ctx.atlas.draw_vertices_count = 0;
-        graphics_ctx.atlas.draw_indices_count = 0;
-        
-        frame_io = io_state_advance(frame_io);
-        frame_io.mouse_position = win32_get_mouse_position(&window);
-        
-        bool parameters_were_tweaked = false;
-        
-        frame(descriptor, &graphics_ctx, ui_state, frame_io, 
-              current_value, parameters_were_tweaked);
-        
-        
-        if(parameters_were_tweaked)
-        {
-            plugin_parameters_buffer_push(*ring, current_value);
-            compute_IR(handle, IR_buffer, IR_BUFFER_LENGTH, audio_parameters, current_value);
-            
-            fft_forward(IR_buffer[0], fft_out, IR_BUFFER_LENGTH, &ipp_ctx);
-            
-            for(i32 i = 0; i < IR_BUFFER_LENGTH; i++)
-                magnitudes[i] = sqrt(fft_out[i].x * fft_out[i].x + fft_out[i].y * fft_out[i].y);
-            
-            memcpy(graphics_ctx.ir.IR_buffer, IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
-            memcpy(graphics_ctx.fft.fft_buffer, magnitudes, sizeof(real32) * IR_BUFFER_LENGTH / 2);
-        }
-        
-        opengl_render_ui(&opengl_ctx, &graphics_ctx);
-        
-        i64 current_time;
-        win32_pace_60_fps(last_time, &current_time, &frame_io.delta_time);
-        last_time = current_time;
-        
-        //if(frame_io.delta_time > 20.0f)
-        {
-            printf("%f\n", frame_io.delta_time);
-        }
-    }
-    
-    opengl_uninitialize(&opengl_ctx);
-}

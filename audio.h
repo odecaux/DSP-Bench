@@ -3,16 +3,17 @@
 #ifndef AUDIO_H
 #define AUDIO_H
 
-
-internal u64 next_power_of_two(u64 in)
+//TODO what if in == 0
+internal u32 next_power_of_two(u32 in)
 {
+    if(in == 0) return 0;
+    
     in--;
     in |= in >> 1;
     in |= in >> 2;
     in |= in >> 4;
     in |= in >> 8;
     in |= in >> 16;
-    in |= in >> 32;
     in++;
     return in;
 }
@@ -35,8 +36,7 @@ internal void copy_add(real32** in, real32** out, Audio_Parameters p)
 internal void convertInt32ToFloat (const void* source, real32* dest, i32 numSamples)
 {
     assert(source != (void*) dest);
-    
-    const unsigned char* data = static_cast<const unsigned char*> (source);
+    const u8* data = (const u8*)(source);
     
     for (i32 i = 0; i < numSamples; ++i)
     {
@@ -49,8 +49,7 @@ internal void convertInt32ToFloat (const void* source, real32* dest, i32 numSamp
 internal void convertInt24ToFloat (const void* source, real32* dest, i32 numSamples)
 {
     assert(source != (void*) dest);
-    
-    const unsigned char* data = static_cast<const unsigned char*> (source);
+    const u8* data = (const u8*)(source);
     
     for (i32 i = 0; i < numSamples; ++i)
     {
@@ -59,7 +58,7 @@ internal void convertInt24ToFloat (const void* source, real32* dest, i32 numSamp
         /*if (value & 0x800000)
             value|= ~0xffffff;
         */
-        float fl =  double(value ) / (double)((1 << 31) - 1);
+        real32 fl =  real32(double(value ) / (double)((1 << 31) - 1));
         dest[i] = fl;
         data += 3;
     }
@@ -68,8 +67,7 @@ internal void convertInt24ToFloat (const void* source, real32* dest, i32 numSamp
 internal void convertInt16ToFloat (const void* source, real32* dest, i32 numSamples)
 {
     assert(source != (void*) dest);
-    
-    const unsigned char* data = static_cast<unsigned const char*> (source);
+    const u8* data = (const u8*)(source);
     
     for (i32 i = 0; i < numSamples; ++i)
     {

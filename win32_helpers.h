@@ -32,6 +32,7 @@ internal i64 file_get_size(const char* filename)
     return (i64)file_size;
 }
 
+//TODO cleanup
 internal bool load_file_to_memory(const char* filename, u8* out_buffer)
 {
     HANDLE handle = CreateFileA(filename,
@@ -51,9 +52,9 @@ internal bool load_file_to_memory(const char* filename, u8* out_buffer)
     LARGE_INTEGER file_size_quad;
     //TODO check result
     BOOL result = GetFileSizeEx(handle, &file_size_quad);
-    u64 file_size = file_size_quad.QuadPart;
+    u64 file_size = file_size_quad.QuadPart; assert(file_size <= 0xFFFFFFFF);
     
-    auto success = ReadFile(handle, out_buffer, file_size, 0, 0);
+    auto success = ReadFile(handle, out_buffer, (u32)file_size, 0, 0);
     if(success == FALSE)
     {
         return false;

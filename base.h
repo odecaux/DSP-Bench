@@ -33,6 +33,7 @@ typedef double real64;
 
 #define octave_max(x, y) (((x) > (y)) ? (x) : (y))
 #define octave_min(x, y) (((x) < (y)) ? (x) : (y))
+#define octave_clamp(x, low, high) (((x) > (low)) ? (((x) < (high)) ? (x) : (high)) : (low))
 #define octave_abs(x) ((x > 0) ? (x) : -(x))
 
 typedef struct{
@@ -61,7 +62,7 @@ typedef struct {
 
 internal inline real32 vec2_length(Vec2 a, Vec2 b)
 {
-    return sqrt((a.x - b.x)*(a.x - b.x) +  (a.y - b.y) * (a.y - b.y));
+    return (real32)sqrt((a.x - b.x)*(a.x - b.x) +  (a.y - b.y) * (a.y - b.y));
 }
 
 internal inline Vec2 vec2_normalize(Vec2 a, Vec2 b)
@@ -103,6 +104,13 @@ internal bool rect_contains(Rect bounds, Vec2 position)
     (position.y < bounds.origin.y + bounds.dim.y);
 }
 
+internal Rect rect_move_by(Rect bounds, Vec2 delta)
+{
+    bounds.origin.x += delta.x;
+    bounds.origin.y += delta.y;
+    return bounds;
+}
+
 internal Rect rect_drop_top(Rect rect, real32 margin_top)
 {
     rect.dim.y -= margin_top;
@@ -130,13 +138,18 @@ internal Rect rect_take_left(Rect rect, real32 margin_left)
     return rect;
 }
 
-internal Rect rect_take_right(Rect rect, real32 margin_left)
+internal Rect rect_take_right(Rect rect, real32 margin_right)
 {
-    rect.origin.x += rect.dim.x - margin_left;
-    rect.dim.x = margin_left;
+    rect.origin.x += rect.dim.x - margin_right;
+    rect.dim.x = margin_right;
     return rect;
 }
 
+internal Rect rect_drop_right(Rect rect, real32 margin_right)
+{
+    rect.dim.x -= margin_right;
+    return rect;
+}
 
 internal void rect_split_from_left(Rect in, real32 margin_left, Rect *out_left, Rect *out_right)
 {

@@ -69,14 +69,23 @@ struct Clang_Context {
     
 };
 
-struct Plugin_Required_Decls{
-    bool worked;
-    const clang::FunctionDecl* audio_callback;
-    const clang::FunctionDecl* default_parameters;
-    const clang::FunctionDecl* initialize_state;
-    const clang::CXXRecordDecl* parameters_struct;
-    const clang::CXXRecordDecl* state_struct;
+struct Decl_Handle{
+    Compiler_Error error;
+    union {
+        const clang::FunctionDecl* fun;
+        const clang::CXXRecordDecl* record;
+    };
 };
+
+struct Plugin_Required_Decls{
+    Compiler_Error error;
+    Decl_Handle audio_callback;
+    Decl_Handle default_parameters;
+    Decl_Handle initialize_state;
+    Decl_Handle parameters_struct;
+    Decl_Handle state_struct;
+};
+
 
 
 Clang_Context* create_clang_context_impl();
@@ -209,9 +218,8 @@ internal void print_parameter(Plugin_Descriptor_Parameter parameter)
 
 Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx);
 
-bool parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
-                             const clang::CXXRecordDecl* state_struct_decl,
-                             Plugin_Descriptor& plugin_descriptor);
+Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
+                                          const clang::CXXRecordDecl* state_struct_decl);
 
 std::unique_ptr<llvm::MemoryBuffer> 
 rewrite_plugin_source(Plugin_Required_Decls decls,
@@ -223,9 +231,10 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
                           Plugin_Descriptor& descriptor,
                           llvm::LLVMContext *llvm_context,
                           llvm::ModulePassManager& module_pass_manager,
-                          llvm::ModuleAnalysisManager& module_analysis_manager);
+                          llvm::ModuleAnalysisManager& module_analysis_manager,
+                          Compiler_Errors *errors);
 
-Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_cts);
+Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_cts, Compiler_Errors *errors);
 
 
 #if _WIN32

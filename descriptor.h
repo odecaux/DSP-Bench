@@ -66,27 +66,27 @@ internal float normalize_parameter_enum_index(Parameter_Enum param, i32 index)
 }
 
 
-internal int denormalize_int_value(Parameter_Int& parameter, float normalized_value)
+internal i32 denormalize_int_value(Parameter_Int& parameter, real32 normalized_value)
+{
+    return i32(normalized_value * (parameter.max - parameter.min) + parameter.min);
+}
+
+internal real32 denormalize_float_value(Parameter_Float& parameter, real32 normalized_value)
 {
     return normalized_value * (parameter.max - parameter.min) + parameter.min;
 }
 
-internal float denormalize_float_value(Parameter_Float& parameter, float normalized_value)
+internal u32 denormalize_enum_index(Parameter_Enum& parameter, real32 normalized_value)
 {
-    return normalized_value * (parameter.max - parameter.min) + parameter.min;
+    return u32(normalized_value * (parameter.num_entries - 1));
 }
 
-internal u32 denormalize_enum_index(Parameter_Enum& parameter, float normalized_value)
-{
-    return normalized_value * (parameter.num_entries - 1);
-}
-
-internal int enum_index_to_value(Parameter_Enum& parameter, u32 index)
+internal i64 enum_index_to_value(Parameter_Enum& parameter, u32 index)
 {
     return parameter.entries[index].value;
 }
 
-internal u32 enum_value_to_index(Parameter_Enum& parameter, int value)
+internal u32 enum_value_to_index(Parameter_Enum& parameter, i64 value)
 {
     for(auto i = 0; i < parameter.num_entries; i++)
     {

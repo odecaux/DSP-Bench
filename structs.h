@@ -14,11 +14,54 @@ internal void* malloc_allocator(u32 byte_size)
     return malloc(byte_size);
 }
 
+//TODO should be a struct, and include data, like which parameter is wrong
+//I do it the other way around for now : each handle says which type of error it has
+//the use case where it doesn't work is signature checking, I don't have a separate handle for every parameter of the signature, but I still want to report the details of what went wrong
+//mayber I just need the location of the problem in the source ?
+
+enum Compiler_Error{
+    Compiler_Success,
+    Compiler_Generic_Error,
+    
+    Compiler_Initial_Compilation_Error,
+    
+    Compiler_Too_Many_Fun,
+    Compiler_No_Fun,
+    Compiler_Wrong_Signature_Fun,
+    
+    Compiler_Types_Mismatch,
+    Compiler_Not_Record_Type,
+    Compiler_Polymorphic,
+    
+    Compiler_Could_Not_Get_Decls,
+    
+    Compiler_Empty_Annotation,
+    Compiler_Invalid_Annotation,
+    Compiler_Missing_Min_Max,
+    Compiler_Min_Greater_Than_Max,
+    Compiler_Invalid_Min_Value,
+    Compiler_Invalid_Max_Value,
+    Compiler_Annotation_Type_Mismatch,
+    
+    Compiler_Struct_Parsing_Error,
+    
+    Compiler_Rewritten_Compilation_Error,
+    Compiler_Cant_Launch_Jit,
+};
+
+struct Compiler_Errors{
+    Compiler_Error *errors;
+    u32 count;
+    u32 capacity;
+};
+
+
 enum Plugin_Parameter_Type{
     Int,
     Float,
     Enum
 };
+
 
 typedef struct{
     i32 min;
@@ -31,7 +74,7 @@ typedef struct {
 } Parameter_Float;
 
 typedef struct{
-    i32 value;
+    i64 value;
     String name;
 } Parameter_Enum_Entry;
 
@@ -42,6 +85,7 @@ typedef struct {
 } Parameter_Enum;
 
 typedef struct {
+    Compiler_Error error;
     String name;
     u32 offset;
     
@@ -57,14 +101,15 @@ typedef struct {
 typedef struct {
     //String name;
     //le nom c'est le filename ?
+    Compiler_Error error;
     struct { 
-        u32 size;
-        u32 alignment;
+        i64 size;
+        i64 alignment;
     } parameters_struct;
     
     struct { 
-        u32 size;
-        u32 alignment;
+        i64 size;
+        i64 alignment;
     } state_struct;
     
     Plugin_Descriptor_Parameter *parameters;
@@ -91,17 +136,16 @@ typedef struct{
 
 
 typedef struct {
-    bool worked;
+    Compiler_Error error;
+    Plugin_Descriptor descriptor;
     
     void* llvm_jit_engine;
-    void *llvm_context; //TODO mutualiser 
     audio_callback_t audio_callback_f;
     default_parameters_t default_parameters_f;
     initialize_state_t initialize_state_f;
-    Plugin_Descriptor descriptor;
 } Plugin_Handle;
 
-typedef Plugin_Handle(*try_compile_t)(const char*, const void*);
+typedef Plugin_Handle(*try_compile_t)(const char*, const void*, Compiler_Errors*);
 
 typedef struct 
 {
@@ -113,14 +157,17 @@ typedef struct
 
 typedef struct 
 {
-    volatile i8 file_is_valid;
+    i8 audio_file_valid;
+    i8 audio_file_play;
+    i8 audio_file_loop;
     
     real32** audio_file_buffer;
     u64 audio_file_length;
     u64 audio_file_read_cursor;
     u64 audio_file_num_channels;
     
-    volatile i8 plugin_is_valid;
+    i8 plugin_valid;
+    i8 plugin_play;
     audio_callback_t audio_callback_f;
     
     char* plugin_parameters_holder;
@@ -171,6 +218,7 @@ enum Colors : u32 {
 
 typedef struct{
     i64 selected_parameter_idx;
+    i64 hovered_id;
 } UI_State;
 
 

@@ -20,20 +20,20 @@
 //Memory_Log_Node *free_list;
 //} Memory_Log;
 //
-void* instrumented_malloc(size_t size, const char* file, int line)
+static void* instrumented_malloc(size_t size, const char* file, int line)
 {
     printf("malloc : %llu bytes at %s:%d\n", size, file, line);
     return malloc(size);
 }
 
 
-void* instrumented_array_malloc(size_t count, size_t size, const char* type, const char* file, int line)
+static void* instrumented_array_malloc(size_t count, size_t size, const char* type, const char* file, int line)
 {
     printf("malloc : %llu * %s at %s:%d\n", count, type, file, line);
     return malloc(count * size);
 }
 
-void instrumented_free(void* address, const char* file, int line)
+static void instrumented_free(void* address, const char* file, int line)
 {
     printf("free : %s:%d\n", file, line);
     free(address);

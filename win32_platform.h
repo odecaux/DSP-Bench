@@ -8,6 +8,64 @@ typedef struct Window_Context{
     HWND window;
 } Window_Context;
 
+typedef struct {
+    bool worked;
+    char* filename;
+    HANDLE handle;
+    u64 last_write_time;
+} File_Change_Listener ;
+
+File_Change_Listener win32_init_file_change_listener(char *filename) 
+{
+    HANDLE handle = CreateFileA(
+                                filename,
+                                FILE_READ_ATTRIBUTES,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                                nullptr,
+                                OPEN_EXISTING,
+                                FILE_ATTRIBUTE_NORMAL,
+                                nullptr);
+    
+    if(handle == INVALID_HANDLE_VALUE)
+    {
+        return {false};
+    }
+    FILETIME win32_write_time;
+    BOOL result = GetFileTime(handle,
+                              nullptr,
+                              nullptr,
+                              &win32_write_time);
+    u64 write_time = (win32_write_time.dwHighDateTime << 32) + win32_write_time.dwLowDateTime;
+    
+    return File_Change_Listener{
+        .worked = true,
+        .filename = filename,
+        .handle = handle,
+        .last_write_time = write_time,
+    };
+}
+bool win32_query_file_change(File_Change_Listener *listener)
+{
+    if(!listener->worked)
+        return false;
+    FILETIME win32_time;
+    BOOL result = GetFileTime(listener->handle,
+                              nullptr,
+                              nullptr,
+                              &win32_time);
+    if(result == 0)
+    {
+        return false;
+    }
+    u64 write_time = (win32_time.dwHighDateTime << 32) + win32_time.dwLowDateTime;
+    if(listener->last_write_time < write_time){
+        listener->last_write_time = write_time;
+        return true;
+    }
+    else{
+        return false;
+    }
+}
 
 Vec2 win32_get_mouse_position(Window_Context *window_ctx)
 {
@@ -80,7 +138,6 @@ LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_
         
         else if(message == WM_DESTROY || message == WM_DESTROY || message == WM_QUIT)
         {
-            printf("quit\n");
             PostQuitMessage(0);
             return 0;
         }

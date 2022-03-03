@@ -20,7 +20,12 @@ typedef struct {
     
 } Wav_Format; 
 
-
+enum Wav_Reading_Error{
+    Wav_Success,
+    Wav_Could_Not_Open_File,
+    Wav_Not_A_RIFF,
+    Wav_File_Reading_Error
+};
 
 typedef struct{
     char id[4];
@@ -35,28 +40,13 @@ typedef struct{
 } Chunk_Header;
 
 // Function prototypes 
-typedef struct{
+typedef struct
+{
+    Wav_Reading_Error error;
     Wav_Format header;
     u64 audio_data_length;
     char* data;
 } WavData;
-
-internal Riff_Header read_riff_header(HANDLE handle, u64* file_position)
-{
-    //printf("curret offset : %llu\n", *file_position);
-    Riff_Header header = {};
-    DWORD bytes_read;
-    BOOL result = ReadFile(handle, &header, sizeof(Riff_Header), &bytes_read, NULL);
-    
-    if(bytes_read != sizeof(Riff_Header))
-    {
-        printf("error reading riff header\n");
-        exit(0);
-    }
-    *file_position += bytes_read;
-    return header;
-}
-
 
 internal Chunk_Header read_header(HANDLE handle, u64* file_position)
 {
@@ -96,9 +86,14 @@ internal void debug_header(Wav_Format *header)
 
 internal WavData windows_load_wav(const char* filename)
 {
+    i64 file_size = file_get_size(filename);
     
-    HANDLE handle = CreateFileA(
-                                filename,
+    
+    
+    char* data = (char*)malloc(file_size); //TODO temporary, might be too much
+    if(data == nullptr) exit(-1);
+    
+    HANDLE handle = CreateFileA(filename,
                                 GENERIC_READ,
                                 0,
                                 0,
@@ -108,38 +103,31 @@ internal WavData windows_load_wav(const char* filename)
     
     if(handle == INVALID_HANDLE_VALUE)
     {
-        printf("error opening wav file\n");
-        exit(1);
+        return { Wav_Could_Not_Open_File };
     }
     
-    
-    
-    u64 file_size;
-    { 
-        LARGE_INTEGER file_size_quad;
-        BOOL result = GetFileSizeEx(handle, &file_size_quad);
-        file_size = file_size_quad.QuadPart;
-        
-        if(result == 0)
-        {
-            printf("couldn't get file size\n");
-            exit(0);
-        }
-    }
-    
-    char* data = (char*)malloc(file_size); //TODO temporary, might be too much
-    if(data == nullptr) exit(-1);
     
     u64 total_bytes_read = 0;
     
-    Riff_Header riff_header =  read_riff_header(handle, &total_bytes_read);
-    
-    if(strncmp(riff_header.id, "RIFF", 4) != 0 || strncmp(riff_header.WAVE, "WAVE", 4) != 0)
+    Riff_Header riff_header = {};
     {
-        printf("not a RIFF file\n");
-        exit(-1);
+        DWORD bytes_read;
+        BOOL result = ReadFile(handle, &riff_header, sizeof(Riff_Header), &bytes_read, NULL);
+        
+        if(bytes_read != sizeof(Riff_Header))
+        {
+            free(data);
+            return {Wav_File_Reading_Error};
+        }
+        total_bytes_read += bytes_read;
+        
+        
+        if(strncmp(riff_header.id, "RIFF", 4) != 0 || strncmp(riff_header.WAVE, "WAVE", 4) != 0)
+        {
+            free(data);
+            return {Wav_Not_A_RIFF};
+        }
     }
-    
     
     
     Wav_Format format = {};
@@ -157,7 +145,8 @@ internal WavData windows_load_wav(const char* filename)
             BOOL result = ReadFile(handle, &format, sizeof(Wav_Format), &bytes_read, NULL);
             if(bytes_read != sizeof(Wav_Format))
             {
-                exit(-1);
+                free(data);
+                return {Wav_File_Reading_Error};
             }
             total_bytes_read += bytes_read;
         }
@@ -167,7 +156,8 @@ internal WavData windows_load_wav(const char* filename)
             BOOL result = ReadFile(handle, data + total_data_size, chunk_header.size, &bytes_read, NULL);
             if(bytes_read != chunk_header.size)
             {
-                exit(-1);
+                free(data);
+                return {Wav_File_Reading_Error};
             }
             
             total_data_size  +=  bytes_read;
@@ -176,21 +166,17 @@ internal WavData windows_load_wav(const char* filename)
         else 
         {
             LARGE_INTEGER offset;
-            
             offset.QuadPart = chunk_header.size;
-            
             offset.LowPart = SetFilePointer (handle, 
                                              offset.LowPart, 
                                              &offset.HighPart, 
                                              1);
             
-            if (offset.LowPart == INVALID_SET_FILE_POINTER && GetLastError() 
-                != NO_ERROR)
+            if (offset.LowPart == INVALID_SET_FILE_POINTER && GetLastError() != NO_ERROR)
             {
-                printf("error seeking\n");
-                exit(-1);
+                free(data);
+                return { Wav_File_Reading_Error };
             }
-            
             total_bytes_read += chunk_header.size;
         }
     }
@@ -199,7 +185,7 @@ internal WavData windows_load_wav(const char* filename)
     //debug_header(&format);
     
     CloseHandle(handle);
-    return {format, total_data_size, data};
+    return {Wav_Success, format, total_data_size, data};
     
 }
 

@@ -109,7 +109,7 @@ DWORD audio_thread_fn(LPVOID Context)
         // update parameters
         
         //TODO mettre un memcopy ici ??? comme ça on a peut faire des trucs comme log sans que ça interfère avec le machin bidule
-        if(audio_context->plugin_is_valid){
+        if(audio_context->plugin_valid){
             Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_buffer_pull(*ring);
             if(maybe_new_parameter_values)
             {
@@ -136,7 +136,7 @@ DWORD audio_thread_fn(LPVOID Context)
         if(wait_result == WAIT_OBJECT_0 + 0)
             still_playing = false;
         
-        if(wait_result == WAIT_OBJECT_0 + 0 ||wait_result == WAIT_OBJECT_0 + 1)
+        if(wait_result == WAIT_OBJECT_0 + 0 || wait_result == WAIT_OBJECT_0 + 1)
         {
             u32 padding;
             u32 system_allocated_samples;
@@ -311,7 +311,7 @@ bool audio_initialize(void **out_ctx,
     */
     Audio_Parameters param;
     
-    param.sample_rate = wave_format_given.Format.nSamplesPerSec;
+    param.sample_rate = (real32)wave_format_given.Format.nSamplesPerSec;
     param.num_channels = wave_format_given.Format.nChannels;
     param.bit_depth = wave_format_given.Format.wBitsPerSample;
     

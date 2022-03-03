@@ -324,7 +324,7 @@ OpenGL_Context_Win32 opengl_initialize_win32(HWND window)
     glGetIntegerv(GL_MAJOR_VERSION, &major);
     glGetIntegerv(GL_MINOR_VERSION, &minor);
     
-    printf("opengl version : %d.%d\n", major, minor);
+    //printf("opengl version : %d.%d\n", major, minor);
     
     const char* target_openg_version = "#version 330 core";
     
@@ -680,7 +680,7 @@ OpenGL_Context_FFT opengl_initialize_fft()
         "   quad_pos = quad_pos_in;\n"
         "}\0";
     
-    printf("%s\n", fft_vertex_shader_source);
+    //printf("%s\n", fft_vertex_shader_source);
     const u32 fft_vertex_shader_handle = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(fft_vertex_shader_handle, 1, &fft_vertex_shader_source, NULL);
     glCompileShader(fft_vertex_shader_handle);
@@ -713,7 +713,7 @@ OpenGL_Context_FFT opengl_initialize_fft()
         "}\n";
     
     
-    printf("%s\n", fft_fragment_shader_source);
+    //printf("%s\n", fft_fragment_shader_source);
     
     const u32 fft_fragment_shader_handle = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fft_fragment_shader_handle, 1, &fft_fragment_shader_source, NULL);

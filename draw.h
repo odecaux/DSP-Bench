@@ -70,7 +70,7 @@ void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_Context_A
 {
     const Vec2 normal = vec2_normalize(start, end);
 	const Vec2 perpendicular = Vec2(normal.y, -normal.x) ;
-    const Vec2 hn = vec2_mult_scalar(0.5f, perpendicular);
+    const Vec2 hn = vec2_mult_scalar(width * 0.5f, perpendicular);
     
     auto a = vec2_minus(end, hn);
     auto b = vec2_minus(start, hn);
@@ -112,17 +112,18 @@ void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_Context_A
     graphics_ctx->draw_indices_count += 6;
 }
 
-void draw_rectangle(Rect bounds, Color color, Graphics_Context_Atlas *graphics_ctx)
+void draw_rectangle(Rect bounds, real32 width, Color color, Graphics_Context_Atlas *graphics_ctx)
 {
+    bounds = rect_remove_padding(bounds, width / 2, width / 2);
     auto top_left = bounds.origin;
     auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
     auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
     auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
     
-    draw_line(top_left, top_right, Color_Front, 1.0f, graphics_ctx);
-    draw_line(top_left, bottom_left, Color_Front, 1.0f, graphics_ctx);
-    draw_line(top_right, bottom_right, Color_Front, 1.0f, graphics_ctx);
-    draw_line(bottom_right, bottom_left, Color_Front, 1.0f, graphics_ctx);
+    draw_line(top_left, top_right, color, width, graphics_ctx);
+    draw_line(top_left, bottom_left, color, width, graphics_ctx);
+    draw_line(top_right, bottom_right, color, width, graphics_ctx);
+    draw_line(bottom_right, bottom_left, color, width, graphics_ctx);
 }
 void fill_rectangle(Rect bounds, Color col, Graphics_Context_Atlas *graphics_ctx)
 {
@@ -269,7 +270,7 @@ void draw_slider(Rect slider_bounds,
                  real32 normalized_value, 
                  Graphics_Context_Atlas *graphics_ctx)
 {
-    real32 slider_x = slider_bounds.origin.x + normalized_value * slider_bounds.dim.x; 
+    real32 slider_x = slider_bounds.origin.x + normalized_value * (slider_bounds.dim.x - SLIDER_WIDTH); 
     Rect slider_rect = {
         Vec2{slider_x, slider_bounds.origin.y},
         Vec2{SLIDER_WIDTH, slider_bounds.dim.y}

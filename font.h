@@ -161,8 +161,8 @@ internal Font load_fonts(const char* font_filename)
     int unscaled_ascent, unscaled_descent, unscaled_line_gap;
     stbtt_GetFontVMetrics(&font_info, &unscaled_ascent, &unscaled_descent, &unscaled_line_gap);
     
-    const float ascent = floor(unscaled_ascent * font_scale + ((unscaled_ascent > 0.0f) ? +1 : -1));
-    const float descent = floor(unscaled_descent * font_scale + ((unscaled_descent > 0.0f) ? +1 : -1));
+    const float ascent = (real32)floor(unscaled_ascent * font_scale + ((unscaled_ascent > 0.0f) ? +1 : -1));
+    const float descent = (real32)floor(unscaled_descent * font_scale + ((unscaled_descent > 0.0f) ? +1 : -1));
     
     const float font_off_x = 0;//= cfg.GlyphOffset.x;
     const float font_off_y = 0; //cfg.GlyphOffset.y + IM_ROUND(dst_font->Ascent);
