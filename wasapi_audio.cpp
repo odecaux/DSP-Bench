@@ -323,7 +323,7 @@ bool audio_initialize(void **out_ctx,
     u64 device_period_num_samples_min = reftimes_to_num_samples(min_period, param.sample_rate);
     u64 device_period_num_samples_default  = reftimes_to_num_samples(default_period, param.sample_rate);
     
-    printf("min device period: %llu samples\ndefault device period : %llu samples\n", device_period_num_samples_min, device_period_num_samples_default);
+    //printf("min device period: %llu samples\ndefault device period : %llu samples\n", device_period_num_samples_min, device_period_num_samples_default);
     
     
     //~ Initialisation

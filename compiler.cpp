@@ -194,8 +194,13 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx, C
     
     bool initial_compilation_succeeded = false;
     
+    String plugin_filename =  allocate_and_copy_llvm_stringref(compiler_instance.getFrontendOpts().Inputs.back().getFile());
+    
     Compiler_Error error = Compiler_Initial_Compilation_Error;
-    Plugin_Descriptor descriptor = {.error = Compiler_Generic_Error };
+    Plugin_Descriptor descriptor = {
+        .name = plugin_filename,
+        .error = Compiler_Generic_Error 
+    };
     std::unique_ptr<llvm::MemoryBuffer> new_buffer = nullptr;
     /*
     Compiler_Errors errors = {
@@ -220,6 +225,7 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx, C
         }
         
         descriptor = parse_plugin_descriptor(decls.parameters_struct.record, decls.state_struct.record);
+        descriptor.name = plugin_filename; //TODO c'est un peu chiant cette histoire mdr
         
         if(descriptor.error != Compiler_Success){
             for(u32 i = 0; i < descriptor.num_parameters; i++)

@@ -41,6 +41,21 @@ DWORD compiler_thread_proc(void *void_param)
     return 1;
 }
 
+typedef struct {
+    const char *filename;
+    WavData *file;
+    bool *loading_is_over;
+} Wav_Loader_Thread_Param;
+
+DWORD wav_loader_thread_proc(void *void_param)
+{
+    Wav_Loader_Thread_Param *param = (Wav_Loader_Thread_Param*)void_param;
+    
+    *param->file = windows_load_wav(param->filename);
+    MemoryBarrier();
+    *param->loading_is_over = true;
+    return 1;
+}
 
 
 bool check_extension(const char* filename, const char* extension)
@@ -102,8 +117,9 @@ i32 main(i32 argc, char** argv)
         return -1;
     }
     
-    CoInitializeEx(NULL, COINIT_MULTITHREADED); 
+    //~ Graphics Init
     
+    CoInitializeEx(NULL, COINIT_MULTITHREADED); 
     
     Graphics_Context graphics_ctx = {};
     graphics_ctx.window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, }; 
@@ -120,11 +136,14 @@ i32 main(i32 argc, char** argv)
     
     OpenGL_Context opengl_ctx = opengl_initialize(&window, &graphics_ctx.atlas.font);
     
-    i32 time_to_graphics = win32_get_elapsed_ms_since(time_program_begin);
-    printf("time to graphics : %d\n", time_to_graphics);
+    
+    win32_print_elapsed(time_program_begin, "time to graphics");
+    
+    //~ Audio Init
     
     void* platform_audio_context;
     Audio_Context audio_context = {};
+    audio_context.audio_file_play = 1;
     Audio_Parameters audio_parameters = {};
     MemoryBarrier();
     
@@ -134,31 +153,31 @@ i32 main(i32 argc, char** argv)
         return -1;
     }
     
+    win32_print_elapsed(time_program_begin, "time to audio");
     
-    i32 time_to_audio = win32_get_elapsed_ms_since(time_program_begin);
-    printf("time to audio : %d\n", time_to_audio);
+    //~ Wav Init
+    
+    WavData wav_file;
+    bool wav_loading_is_over = false;
+    bool wav_is_already_loaded = false;
+    Wav_Loader_Thread_Param wav_thread_param = {
+        .filename = audio_filename,
+        .file = &wav_file,
+        .loading_is_over = &wav_loading_is_over
+    };
+    HANDLE wav_loader_thread_handle;
     
     if(audio_filename != nullptr)
     {
-        const char* audio_filename = argv[1];
-        WavData wav_file = windows_load_wav(audio_filename);
-        if(wav_file.error == Wav_Success)
-        {
-            audio_context.audio_file_buffer = wav_file.deinterleaved_buffer;
-            audio_context.audio_file_length = wav_file.samples_by_channel;
-            audio_context.audio_file_read_cursor = 0;
-            audio_context.audio_file_num_channels = wav_file.num_channels;
-            MemoryBarrier();
-            audio_context.audio_file_valid = 1;
-        }
-    }
-    else
-    {
-        printf("failed to read .wav file\n");
+        wav_loader_thread_handle = CreateThread(0, 0,
+                                                &wav_loader_thread_proc,
+                                                &wav_thread_param,
+                                                0, 0);
     }
     
-    i32 time_to_wav = win32_get_elapsed_ms_since(time_program_begin);
-    printf("time to wav : %d\n", time_to_wav);
+    win32_print_elapsed(time_program_begin, "time to wav");
+    
+    //~ Compiler Init
     
     HMODULE compiler_dll = LoadLibraryA("compiler.dll");
     if(compiler_dll == NULL)
@@ -207,8 +226,10 @@ i32 main(i32 argc, char** argv)
                      &compiler_thread_param,
                      0, 0);
     
-    i32 time_to_thread_start = win32_get_elapsed_ms_since(time_program_begin);
-    printf("time to thread start : %d\n", time_to_thread_start);
+    
+    win32_print_elapsed(time_program_begin, "time to thread start");
+    
+    //~ IR/FFT
     
     graphics_ctx.ir = {
         .IR_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH),
@@ -226,13 +247,9 @@ i32 main(i32 argc, char** argv)
     i64 last_time = win32_get_time();
     bool done = false;
     
-    
-    i32 time_to_main_loop = win32_get_elapsed_ms_since(time_program_begin);
-    printf("time to main loop : %d\n", time_to_main_loop);
-    
+    win32_print_elapsed(time_program_begin, "time to loop");
     while(!done)
     {
-        
         win32_message_dispatch(&window, &frame_io, &done);
         
         // TODO(octave): hack ?
@@ -246,6 +263,21 @@ i32 main(i32 argc, char** argv)
         frame_io.mouse_position = win32_get_mouse_position(&window);
         
         MemoryBarrier(); //TODO ???
+        
+        if(wav_loading_is_over && !wav_is_already_loaded)
+        {
+            if(wav_file.error == Wav_Success)
+            {
+                audio_context.audio_file_buffer = wav_file.deinterleaved_buffer;
+                audio_context.audio_file_length = wav_file.samples_by_channel;
+                audio_context.audio_file_read_cursor = 0;
+                audio_context.audio_file_num_channels = wav_file.num_channels;
+                MemoryBarrier();
+                audio_context.audio_file_valid = 1;
+            }
+            wav_is_already_loaded = true;
+        }
+        
         if(compilation_is_over && !plugin_is_loaded)
         {
             i32 time_to_compiled = win32_get_elapsed_ms_since(time_program_begin);

@@ -99,7 +99,7 @@ typedef struct {
 } Plugin_Descriptor_Parameter;
 
 typedef struct {
-    //String name;
+    String name;
     //le nom c'est le filename ?
     Compiler_Error error;
     struct { 

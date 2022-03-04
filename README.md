@@ -12,22 +12,23 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 ### TODO
 
-Background wav loading \
 Loading screen \
 Compiler errors display \
-Command queue to audio thread : play, stop, parameter change (? full parameter state ?)
+Self contained slider widget \
+Parameter ctrl precision (hide mouse)
+Parameter skew factor \
+FFT processing available to the plugins \
 ~~cli : optional wav~~ \
 ~~Display min,max,value~~ \
 ~~window + zero padding fft~~\
 ~~Background thread compilation~~ \
+~~Background wav loading~~ \
 ~~Play/Stop/Loop Wav, enable/disable plugin (header ?)~~ \
+Command queue to audio thread : play, stop, parameter change (? full parameter state ?)
 Plugin allocator and tracking -> automatic collection \
-Parameter skew factor \
-Parameter ctrl precision (hide mouse)
 Reset State button \
 Font sizes system (load multiple font sizes or stretch uv) \
 Review Synchronization code \
-FFT processing available to the plugins \
 Options Blackman, Hamming, etc \
 Zoomable IR \
 Proper memory layer \

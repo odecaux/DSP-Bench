@@ -96,6 +96,12 @@ i32 win32_get_elapsed_ms_since(i64 last_time)
     return ((1000000*elapsed_tick) / counter_frequency.QuadPart) / 1000;
 }
 
+void win32_print_elapsed(i64 last_time, const char* text)
+{
+    
+    i32 elapsed_time = win32_get_elapsed_ms_since(last_time);
+    printf("%s : %d\n", text, elapsed_time);
+}
 void win32_pace_60_fps(i64 last_time, i64 *current_time, real32 *delta_time) // TODO(octave): refactor variable names
 {
     
