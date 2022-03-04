@@ -180,9 +180,6 @@ Window_Context win32_init_window(Vec2* window_dim)
                                instance, 
                                window_dim);
     
-    ShowWindow(window, 1);
-    UpdateWindow(window);
-    
     return { window };
 }
 

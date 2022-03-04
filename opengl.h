@@ -960,6 +960,36 @@ void opengl_render_fft(OpenGL_Context_FFT* opengl_ctx, Graphics_Context_FFT* gra
     glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
+void opengl_render_generic(OpenGL_Context *opengl_ctx, Graphics_Context *graphics_ctx)
+{
+    
+    
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glEnable(GL_SCISSOR_TEST);
+    
+    glViewport(0,0, graphics_ctx->window_dim.x, graphics_ctx->window_dim.y);
+    glScissor(0,0, graphics_ctx->window_dim.x, graphics_ctx->window_dim.y);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    
+    real32 projection_matrix[16] = 
+    {
+        2.0f / graphics_ctx->window_dim.x, 0.0f, 0.0f, 0.0f,
+        0.0f,- 2.0f / graphics_ctx->window_dim.y, 0.0f, 0.0f ,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        -1.0f, 1.0f, 0.0f, 1.0f,
+    };
+    
+    opengl_render_atlas(&opengl_ctx->atlas, &graphics_ctx->atlas, projection_matrix);
+    
+    SwapBuffers(opengl_ctx->win32.window_dc);
+    //glFinish();
+}
+
 void opengl_render_ui(OpenGL_Context *opengl_ctx, Graphics_Context *graphics_ctx)
 {
     

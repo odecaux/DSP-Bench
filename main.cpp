@@ -256,6 +256,10 @@ i32 main(i32 argc, char** argv)
     bool done = false;
     
     win32_print_elapsed(time_program_begin, "time to loop");
+    
+    ShowWindow(window.window, 1);
+    //UpdateWindow(window.window);
+    
     while(!done)
     {
         win32_message_dispatch(&window, &frame_io, &done);
@@ -360,6 +364,7 @@ i32 main(i32 argc, char** argv)
             else 
             {
                 draw_text(StringLit("Loading"), { Vec2{0.0f, 0.0f}, graphics_ctx.window_dim }, Color_Front, &graphics_ctx.atlas);
+                opengl_render_generic(&opengl_ctx, &graphics_ctx);
             }
         }
         
@@ -398,14 +403,15 @@ i32 main(i32 argc, char** argv)
             {
                 ShowCursor(TRUE);
             }
+            opengl_render_ui(&opengl_ctx, &graphics_ctx);
         }
         else if(ui_stage == UI_STAGE_FAILED)
         {
             draw_text(StringLit("Compilation Error"), { Vec2{0.0f, 0.0f}, graphics_ctx.window_dim }, Color_Front, &graphics_ctx.atlas);
+            opengl_render_generic(&opengl_ctx, &graphics_ctx);
         }
         
         
-        opengl_render_ui(&opengl_ctx, &graphics_ctx);
         i64 current_time;
         win32_get_elapsed_ms_since(last_time, &current_time, &frame_io.delta_time);
         last_time = current_time;
