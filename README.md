@@ -14,7 +14,7 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 Loading screen \
 Compiler errors display \
-Self contained slider widget \
+~~Self contained slider widget~~ \
 Parameter ctrl precision (hide mouse)
 Parameter skew factor \
 FFT processing available to the plugins \

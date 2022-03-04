@@ -172,6 +172,52 @@ void compute_IR(Plugin_Handle& handle,
     m_free(IR_state_holder);
 }
 
+real32 slider(real32 normalized_value, i32 id, 
+              String title, String current_value_label, String min_label, String max_label, Rect bounds, IO io, 
+              UI_State *ui_state, Graphics_Context *graphics_ctx)
+{
+    Rect title_bounds = rect_take_top(bounds, FIELD_TITLE_HEIGHT);
+    Rect current_value_bounds = rect_remove_padding(rect_drop_top(bounds, FIELD_TITLE_HEIGHT), 2.5f, 2.5f);
+    Rect slider_and_minmax_bounds = rect_move_by(current_value_bounds, {0.0f, FIELD_TITLE_HEIGHT});
+    
+    draw_text(title, title_bounds, Color_Front, &graphics_ctx->atlas);
+    
+    Rect slider_bounds = rect_remove_padding(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH, 0.0f);
+    Rect min_label_bounds = rect_take_left(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
+    Rect max_label_bounds = rect_take_right(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
+    
+    draw_rectangle(slider_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    draw_rectangle(min_label_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    draw_rectangle(max_label_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    
+    draw_text(min_label, min_label_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_text(max_label, max_label_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_text(current_value_label, current_value_bounds, Color_Front, &graphics_ctx->atlas);
+    
+    draw_slider(slider_bounds, normalized_value, &graphics_ctx->atlas);
+    
+    if(io.mouse_clicked && rect_contains(slider_bounds, io.mouse_position))
+    {
+        assert(ui_state->selected_parameter_idx == -1);
+        ui_state->selected_parameter_idx = id;
+    }
+    
+    bool dragging = io.mouse_down && (io.mouse_delta.x != 0.0f
+                                      || io.mouse_delta.y != 0.0f);
+    
+    if(ui_state->selected_parameter_idx == id 
+       && (dragging || io.mouse_clicked))
+    {
+        real32 mouse_x = io.mouse_position.x;
+        real32 normalized_mouse_value = (mouse_x - slider_bounds.origin.x - (SLIDER_WIDTH / 2)) / (slider_bounds.dim.x - SLIDER_WIDTH);
+        
+        return octave_clamp(normalized_mouse_value, 0.0f, 1.0f);
+    }
+    else
+    {
+        return normalized_value;
+    }
+}
 
 //TODO stereo 
 void integrate_fft(real32* magnitude_buffer, u32 sample_count, real32* pixel_buffer, u32 pixel_count)
@@ -248,36 +294,6 @@ void frame(Plugin_Descriptor& descriptor,
         ui_state.selected_parameter_idx = -1;
     }
     
-    
-    Rect button_bounds_a = {
-        {200.0f, 100.0f},
-        {200.0f, 100.0f}
-    };
-    
-    Rect button_bounds_b = {
-        {200.0f, 250.0f},
-        {200.0f, 100.0f}
-    };
-    /*
-    if(button(button_bounds_a, StringLit("Play/Stop"), 300, graphics_ctx, &ui_state, &frame_io))
-    {
-        if(audio_ctx->audio_file_play){
-            audio_ctx->audio_file_play = 0;
-            MemoryBarrier();
-            audio_ctx->audio_file_read_cursor = 0;
-        }
-        else{
-            audio_ctx->audio_file_play = 1;
-            MemoryBarrier();
-        }
-    }
-    
-    if(button(button_bounds_b, StringLit("Loop"), 400, graphics_ctx, &ui_state, &frame_io))
-    {
-        audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
-    }
-    */
-    
     Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };
     Rect header_bounds = rect_remove_padding(rect_take_top(window_bounds, TITLE_HEIGHT), 10.0f, 10.0f);
     window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT);
@@ -286,7 +302,7 @@ void frame(Plugin_Descriptor& descriptor,
     
     Rect title_bounds = rect_drop_right(header_bounds,  TITLE_HEIGHT * 3);
     draw_rectangle(title_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    draw_text(StringLit("gain.cpp"), title_bounds, Color_Front, &graphics_ctx->atlas);
+    draw_text(descriptor.name, title_bounds, Color_Front, &graphics_ctx->atlas);
     
     Rect audio_buttons_panel_bounds = rect_take_right(header_bounds, TITLE_HEIGHT * 3);
     draw_rectangle(audio_buttons_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
@@ -318,8 +334,6 @@ void frame(Plugin_Descriptor& descriptor,
     }
     
     
-    
-    
     Rect left_panel_bounds = rect_remove_padding(rect_take_left(window_bounds, PARAMETER_PANEL_WIDTH), 10.0f, 10.0f);
     Rect right_panel_bounds = rect_remove_padding(rect_drop_left(window_bounds, PARAMETER_PANEL_WIDTH), 10.0f, 10.0f);
     
@@ -333,120 +347,98 @@ void frame(Plugin_Descriptor& descriptor,
         auto& current_parameter_value = current_parameter_values[parameter_idx];
         auto& parameter_descriptor = descriptor.parameters[parameter_idx];
         
-        Rect field_title_bounds = rect_take_top(parameter_bounds, FIELD_TITLE_HEIGHT);
-        Rect current_value_bounds = rect_remove_padding(rect_drop_top(parameter_bounds, FIELD_TITLE_HEIGHT), 2.5f, 2.5f);
-        Rect slider_and_minmax_bounds = rect_move_by(current_value_bounds, {0.0f, FIELD_TITLE_HEIGHT});
-        
-        draw_text(parameter_descriptor.name, field_title_bounds, Color_Front, &graphics_ctx->atlas);
-        
-        Rect slider_bounds = rect_remove_padding(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH, 0.0f);
-        Rect min_label_bounds = rect_take_left(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
-        Rect max_label_bounds = rect_take_right(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
-        
-        draw_rectangle(slider_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-        draw_rectangle(min_label_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-        draw_rectangle(max_label_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-        
-        real32 new_normalized_value;
-        
-        if(frame_io.mouse_clicked && rect_contains(slider_bounds, frame_io.mouse_position))
-        {
-            ui_state.selected_parameter_idx = parameter_idx;
-        }
-        
-        bool should_update_this_parameter = false;
-        
-        bool dragging = frame_io.mouse_down && (frame_io.mouse_delta.x != 0.0f
-                                                || frame_io.mouse_delta.y != 0.0f);
-        
-        if(ui_state.selected_parameter_idx == parameter_idx 
-           && (dragging || frame_io.mouse_clicked))
-        {
-            real32 mouse_x = frame_io.mouse_position.x;
-            real32 normalized_mouse_value = (mouse_x - slider_bounds.origin.x - (SLIDER_WIDTH / 2)) / (slider_bounds.dim.x - SLIDER_WIDTH);
-            
-            normalized_mouse_value = octave_clamp(normalized_mouse_value, 0.0f, 1.0f);
-            
-            new_normalized_value = normalized_mouse_value;
-            parameters_were_tweaked = true;
-            should_update_this_parameter = true;
-        }
-        
-        
-        
         switch(parameter_descriptor.type)
         {
             case Int :
             {
                 int current_value = current_parameter_value.int_value; 
-                real32 current_normalized_value = normalize_parameter_int_value(parameter_descriptor.int_param, current_value);
-                draw_slider(slider_bounds, current_normalized_value, &graphics_ctx->atlas);
+                char current_value_text[256];
+                int text_size = sprintf(current_value_text, "%d", current_value);
+                assert(text_size >= 0);
+                String current_value_label = {.str = current_value_text, .size = (u64)text_size};
                 
-                if(should_update_this_parameter)
+                real32 current_normalized_value = normalize_parameter_int_value(parameter_descriptor.int_param, current_value);
+                
+                
+                i32 min_value = parameter_descriptor.int_param.min;
+                char min_value_text[256];
+                text_size = sprintf(min_value_text, "%d", min_value);
+                assert(text_size >= 0);
+                String min_label = {.str = min_value_text, .size = (u64)text_size};
+                
+                i32 max_value = parameter_descriptor.int_param.max;
+                char max_value_text[256];
+                text_size = sprintf(max_value_text, "%d", max_value);
+                assert(text_size >= 0);
+                String max_label = {.str = max_value_text, .size = (u64)text_size};
+                
+                real32 new_normalized_value =
+                    slider(current_normalized_value, parameter_idx, 
+                           parameter_descriptor.name, current_value_label, min_label, max_label, 
+                           parameter_bounds, frame_io, &ui_state, graphics_ctx);
+                
+                if(new_normalized_value != current_normalized_value )
                 {
+                    parameters_were_tweaked = true;
                     auto new_int_value = denormalize_int_value(parameter_descriptor.int_param, new_normalized_value);
                     current_parameter_value.int_value = new_int_value;
                 }
                 
-                i32 min_value = parameter_descriptor.int_param.min;
-                i32 max_value = parameter_descriptor.int_param.max;
-                char text[256];
-                int text_size = sprintf(text, "%d", min_value);
-                if(text_size >= 0)
-                    draw_text(String{.str = text, .size = (u64)text_size}, min_label_bounds, Color_Front, &graphics_ctx->atlas);
-                
-                text_size = sprintf(text, "%d", max_value);
-                if(text_size >= 0)
-                    draw_text(String{.str = text, .size = (u64)text_size}, max_label_bounds, Color_Front, &graphics_ctx->atlas);
-                
-                text_size = sprintf(text, "%d", current_parameter_value.int_value);
-                if(text_size >= 0)
-                    draw_text(String{.str = text, .size = (u64)text_size}, current_value_bounds, Color_Front, &graphics_ctx->atlas);
-                
             }break;
             case Float : 
             {
-                float current_value = current_parameter_value.float_value;
-                real32 current_normalized_value = normalize_parameter_float_value(parameter_descriptor.float_param, current_value);
-                draw_slider(slider_bounds, current_normalized_value, &graphics_ctx->atlas);
+                real32 current_value = current_parameter_value.float_value; 
+                char current_value_text[256];
+                int text_size = sprintf(current_value_text, "%.3f", current_value);
+                assert(text_size >= 0);
+                String current_value_label = {.str = current_value_text, .size = (u64)text_size};
                 
-                if(should_update_this_parameter)
+                real32 current_normalized_value = normalize_parameter_float_value(parameter_descriptor.float_param, current_value);
+                
+                real32 min_value = parameter_descriptor.float_param.min;
+                char min_value_text[256];
+                text_size = sprintf(min_value_text, "%.3f", min_value);
+                assert(text_size >= 0);
+                String min_label = {.str = min_value_text, .size = (u64)text_size};
+                
+                real32 max_value = parameter_descriptor.float_param.max;
+                char max_value_text[256];
+                text_size = sprintf(max_value_text, "%.3f", max_value);
+                assert(text_size >= 0);
+                String max_label = {.str = max_value_text, .size = (u64)text_size};
+                
+                real32 new_normalized_value =
+                    slider(current_normalized_value, parameter_idx, 
+                           parameter_descriptor.name, current_value_label, min_label, max_label, 
+                           parameter_bounds, frame_io, &ui_state, graphics_ctx);
+                
+                if(new_normalized_value != current_normalized_value)
                 {
+                    parameters_were_tweaked = true;
                     auto new_float_value = denormalize_float_value(parameter_descriptor.float_param, new_normalized_value);
                     current_parameter_value.float_value = new_float_value;
                 }
                 
-                
-                real32 min_value = parameter_descriptor.float_param.min;
-                real32 max_value = parameter_descriptor.float_param.max;
-                char text[256];
-                int text_size = sprintf(text, "%.2f", min_value);
-                if(text_size >= 0)
-                    draw_text(String{.str = text, .size = (u64)text_size}, min_label_bounds, Color_Front, &graphics_ctx->atlas);
-                
-                text_size = sprintf(text, "%.2f", max_value);
-                if(text_size >= 0)
-                    draw_text(String{.str = text, .size = (u64)text_size}, max_label_bounds, Color_Front, &graphics_ctx->atlas);
-                
-                text_size = sprintf(text, "%.4f", current_parameter_value.float_value);
-                if(text_size >= 0)
-                    draw_text(String{.str = text, .size = (u64)text_size}, current_value_bounds, Color_Front, &graphics_ctx->atlas);
             }break;
             case Enum : 
             {
                 i32 index = current_parameter_value.enum_value;
                 real32 current_normalized_value = normalize_parameter_enum_index(parameter_descriptor.enum_param, index);
                 Parameter_Enum_Entry value = parameter_descriptor.enum_param.entries[index];
-                draw_slider(slider_bounds, current_normalized_value, &graphics_ctx->atlas);
                 
-                draw_text(value.name, slider_bounds, Color_Front, &graphics_ctx->atlas);
+                real32 new_normalized_value =
+                    slider(current_normalized_value, parameter_idx, 
+                           parameter_descriptor.name, value.name, {}, {}, 
+                           parameter_bounds, frame_io, &ui_state, graphics_ctx);
                 
-                if(should_update_this_parameter)
+                if(new_normalized_value != current_normalized_value)
                 {
+                    parameters_were_tweaked = true;
                     auto new_index = denormalize_enum_index(parameter_descriptor.enum_param, new_normalized_value);
                     auto new_value = enum_index_to_value(parameter_descriptor.enum_param, new_index);
                     current_parameter_value.enum_value = new_value;
                 }
+                
             }break;
         }
         
