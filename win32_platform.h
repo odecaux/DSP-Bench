@@ -200,6 +200,7 @@ void win32_message_dispatch(Window_Context *window_ctx, IO *frame_io, bool *done
     HWND window = window_ctx->window;
     
     frame_io->delete_pressed = false;
+    frame_io->left_ctrl_pressed = false;
     
     while(PeekMessage(&message,0,0,0, PM_REMOVE))
     {
@@ -239,9 +240,29 @@ void win32_message_dispatch(Window_Context *window_ctx, IO *frame_io, bool *done
             }break;
             
             case WM_KEYDOWN:{
-                if (message.wParam == VK_BACK || message.wParam == VK_DELETE)
+                switch(message.wParam)
                 {
-                    frame_io->delete_pressed = true;
+                    case VK_DELETE :
+                    case VK_BACK :
+                    {
+                        frame_io->delete_pressed = true;
+                    }break;
+                    
+                    case VK_CONTROL :
+                    {
+                        frame_io->left_ctrl_pressed = true;
+                        frame_io->left_ctrl_down = true;
+                    }break;
+                }
+            }break;
+            
+            case WM_KEYUP:{
+                switch(message.wParam)
+                {
+                    case VK_CONTROL :
+                    {
+                        frame_io->left_ctrl_down = false;
+                    }break;
                 }
             }break;
         }

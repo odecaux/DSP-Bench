@@ -49,90 +49,91 @@ IO io_initial_state()
         .mouse_double_click_time = 175.0f,
         .mouse_down_time = -1.0f,
         .right_mouse_down_time = -1.0f,
-        .mouse_clicked_time = 0 // TODO(octave): on est sur ?
+        .mouse_clicked_time = 0, // TODO(octave): on est sur ?
+        
+        .left_ctrl_pressed = false,
+        .left_ctrl_down = false,
     };
 }
 
-IO io_state_advance(const IO old_io)
+IO io_state_advance(IO io)
 {
-    IO new_io = old_io;
+    io.frame_count++;
+    io.time += io.delta_time;
     
-    new_io.frame_count++;
-    new_io.time += new_io.delta_time;
-    
-    if(new_io.mouse_position.x < 0.0f && new_io.mouse_position.y < 0.0f)
-        new_io.mouse_position = Vec2(-99999.0f, -99999.0f);
+    if(io.mouse_position.x < 0.0f && io.mouse_position.y < 0.0f)
+        io.mouse_position = Vec2(-99999.0f, -99999.0f);
     
     //?
-    if((new_io.mouse_position.x < 0.0f && new_io.mouse_position.y < 0.0f) ||
-       (new_io.mouse_pos_prev.x < 0.0f && new_io.mouse_pos_prev.y < 0.0f))
-        new_io.mouse_delta = Vec2{0.0f, 0.0f};
+    if((io.mouse_position.x < 0.0f && io.mouse_position.y < 0.0f) ||
+       (io.mouse_pos_prev.x < 0.0f && io.mouse_pos_prev.y < 0.0f))
+        io.mouse_delta = Vec2{0.0f, 0.0f};
     else{
-        new_io.mouse_delta.x = new_io.mouse_position.x - new_io.mouse_pos_prev.x;
-        new_io.mouse_delta.y = new_io.mouse_position.y - new_io.mouse_pos_prev.y;
+        io.mouse_delta.x = io.mouse_position.x - io.mouse_pos_prev.x;
+        io.mouse_delta.y = io.mouse_position.y - io.mouse_pos_prev.y;
         
     }
-    new_io.mouse_pos_prev = new_io.mouse_position;
+    io.mouse_pos_prev = io.mouse_position;
     
-    new_io.mouse_released = !new_io.mouse_down && new_io.mouse_down_time >= 0.0f;
+    io.mouse_released = !io.mouse_down && io.mouse_down_time >= 0.0f;
     
     
-    if(new_io.mouse_down)
+    if(io.mouse_down)
     {
-        if(new_io.mouse_down_time < 0.0f)
+        if(io.mouse_down_time < 0.0f)
         {
-            new_io.mouse_down_time = 0.1f;
-            new_io.mouse_clicked = true;
+            io.mouse_down_time = 0.1f;
+            io.mouse_clicked = true;
             
         }
         else
         {
-            new_io.mouse_down_time += 0.2f;// new_io.delta_time;
-            new_io.mouse_clicked = false;
+            io.mouse_down_time += 0.2f;// io.delta_time;
+            io.mouse_clicked = false;
         }
     }
     else
     {
-        new_io.mouse_down_time = -1.0f;
-        new_io.mouse_clicked = false;
+        io.mouse_down_time = -1.0f;
+        io.mouse_clicked = false;
     }
     
     
-    new_io.mouse_double_clicked = false;
-    if(new_io.mouse_clicked)
+    io.mouse_double_clicked = false;
+    if(io.mouse_clicked)
     {
-        if(new_io.time - new_io.mouse_clicked_time < new_io.mouse_double_click_time)
+        if(io.time - io.mouse_clicked_time < io.mouse_double_click_time)
         {
-            new_io.mouse_double_clicked = true;
-            new_io.mouse_clicked_time = -1000000.0f;
+            io.mouse_double_clicked = true;
+            io.mouse_clicked_time = -1000000.0f;
         }
         else
         {
-            new_io.mouse_clicked_time = new_io.time;
+            io.mouse_clicked_time = io.time;
         }
     }
     
     
-    if(new_io.right_mouse_down)
+    if(io.right_mouse_down)
     {
-        if(new_io.right_mouse_down_time < 0.0f)
+        if(io.right_mouse_down_time < 0.0f)
         {
-            new_io.right_mouse_down_time = 0.1f;
-            new_io.right_mouse_clicked = true;
+            io.right_mouse_down_time = 0.1f;
+            io.right_mouse_clicked = true;
         }
         else
         {
-            new_io.right_mouse_down_time += new_io.delta_time;
-            new_io.right_mouse_clicked = false;
+            io.right_mouse_down_time += io.delta_time;
+            io.right_mouse_clicked = false;
         }
     }
     else
     {
-        new_io.right_mouse_down_time = -1.0f;
-        new_io.right_mouse_clicked = false;
+        io.right_mouse_down_time = -1.0f;
+        io.right_mouse_clicked = false;
     }
     
-    return new_io;
+    return io;
 }
 
 void compute_IR(Plugin_Handle& handle, 
@@ -198,20 +199,26 @@ real32 slider(real32 normalized_value, i32 id,
     
     if(io.mouse_clicked && rect_contains(slider_bounds, io.mouse_position))
     {
-        assert(ui_state->selected_parameter_idx == -1);
-        ui_state->selected_parameter_idx = id;
+        assert(ui_state->selected_parameter_id == -1);
+        ui_state->selected_parameter_id = id;
     }
     
     bool dragging = io.mouse_down && (io.mouse_delta.x != 0.0f
                                       || io.mouse_delta.y != 0.0f);
     
-    if(ui_state->selected_parameter_idx == id 
-       && (dragging || io.mouse_clicked))
+    if(ui_state->selected_parameter_id == id && io.mouse_clicked)
     {
         real32 mouse_x = io.mouse_position.x;
         real32 normalized_mouse_value = (mouse_x - slider_bounds.origin.x - (SLIDER_WIDTH / 2)) / (slider_bounds.dim.x - SLIDER_WIDTH);
         
         return octave_clamp(normalized_mouse_value, 0.0f, 1.0f);
+    }
+    else if(ui_state->selected_parameter_id == id && dragging)
+    {
+        
+        real32 mouse_delta_x = (io.left_ctrl_down) ? io.mouse_delta.x / 4 : io.mouse_delta.x;
+        real32 normalized_delta = (mouse_delta_x) / (slider_bounds.dim.x - SLIDER_WIDTH);
+        return octave_clamp(normalized_delta + normalized_value, 0.0f, 1.0f);
     }
     else
     {
@@ -264,9 +271,9 @@ bool button(Rect bounds,
     if(hovered && io->mouse_clicked)
     {
         clicked = true;
-        ui_state->selected_parameter_idx = id;
+        ui_state->selected_parameter_id = id;
     }
-    bool down = ui_state->selected_parameter_idx == id;
+    bool down = ui_state->selected_parameter_id == id;
     
     if(down)
         draw_rectangle(bounds, 5.0f, 0xff007700, &graphics_ctx->atlas);
@@ -291,7 +298,7 @@ void frame(Plugin_Descriptor& descriptor,
 {
     if(frame_io.mouse_released)
     {
-        ui_state.selected_parameter_idx = -1;
+        ui_state.selected_parameter_id = -1;
     }
     
     Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };

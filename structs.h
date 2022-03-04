@@ -205,6 +205,9 @@ typedef struct
     real32 mouse_down_time;
     real32 right_mouse_down_time;
     real32 mouse_clicked_time;
+    
+    bool left_ctrl_pressed;
+    bool left_ctrl_down;
 } IO;
 
 
@@ -217,8 +220,8 @@ enum Colors : u32 {
 
 
 typedef struct{
-    i64 selected_parameter_idx;
-    i64 hovered_id;
+    i64 selected_parameter_id;
+    //i64 hovered_id;
 } UI_State;
 
 

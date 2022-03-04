@@ -372,6 +372,16 @@ i32 main(i32 argc, char** argv)
             }
         }
         
+        //TODO hack
+        if(ui_state.selected_parameter_id != -1 && ui_state.selected_parameter_id < 255 && frame_io.mouse_clicked)
+        {
+            ShowCursor(FALSE);
+        }
+        else if(frame_io.mouse_released)
+        {
+            ShowCursor(TRUE);
+        }
+        
         opengl_render_ui(&opengl_ctx, &graphics_ctx);
         i64 current_time;
         win32_pace_60_fps(last_time, &current_time, &frame_io.delta_time);
