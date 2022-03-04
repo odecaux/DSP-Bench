@@ -12,8 +12,9 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 ### TODO
 
-Loading screen \
-Compiler errors display \
+~~Loading screen~~ \
+Display Compiler errors \
+don't call opengl_render_fft/ir when plugin isn't live \
 ~~Self contained slider widget~~ \
 ~~Parameter ctrl precision (hide mouse)~~ \
 Parameter skew factor \
@@ -24,7 +25,7 @@ FFT processing available to the plugins \
 ~~Background thread compilation~~ \
 ~~Background wav loading~~ \
 ~~Play/Stop/Loop Wav, enable/disable plugin (header ?)~~ \
-Command queue to audio thread : play, stop, parameter change (? full parameter state ?)
+Command queue to audio thread : play, stop, parameter change (? full parameter state ?) \
 Plugin allocator and tracking -> automatic collection \
 Reset State button \
 Font sizes system (load multiple font sizes or stretch uv) \

@@ -3,7 +3,7 @@
 #ifndef DRAW_H
 #define DRAW_H
 
-u32 push_vtx(Vec2 pos, Color col, Graphics_Context_Atlas *graphics_ctx)
+function u32 push_vtx(Vec2 pos, Color col, Graphics_Context_Atlas *graphics_ctx)
 {
     Vertex* vtx_write = graphics_ctx->draw_vertices;
     u32 vtx_idx = graphics_ctx->draw_vertices_count++;
@@ -14,12 +14,12 @@ u32 push_vtx(Vec2 pos, Color col, Graphics_Context_Atlas *graphics_ctx)
     return vtx_idx;
 }
 
-void push_idx(u32 vtx_idx, Graphics_Context_Atlas *graphics_ctx)
+function void push_idx(u32 vtx_idx, Graphics_Context_Atlas *graphics_ctx)
 {
     graphics_ctx->draw_indices[graphics_ctx->draw_indices_count++] = vtx_idx;
 }
 
-void draw_character(i32 codepoint, Color col, Rect bounds, Graphics_Context_Atlas *graphics_ctx)
+function void draw_character(i32 codepoint, Color col, Rect bounds, Graphics_Context_Atlas *graphics_ctx)
 {
     Font* font = &graphics_ctx->font;
     Glyph *glyph = &font->glyphs[font->codepoint_to_idx[codepoint]];
@@ -66,7 +66,7 @@ void draw_character(i32 codepoint, Color col, Rect bounds, Graphics_Context_Atla
 
 //TODO c'est de la merde cette api mdr
 
-void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_Context_Atlas *graphics_ctx)
+function void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_Context_Atlas *graphics_ctx)
 {
     const Vec2 normal = vec2_normalize(start, end);
 	const Vec2 perpendicular = Vec2(normal.y, -normal.x) ;
@@ -112,7 +112,7 @@ void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_Context_A
     graphics_ctx->draw_indices_count += 6;
 }
 
-void draw_rectangle(Rect bounds, real32 width, Color color, Graphics_Context_Atlas *graphics_ctx)
+function void draw_rectangle(Rect bounds, real32 width, Color color, Graphics_Context_Atlas *graphics_ctx)
 {
     bounds = rect_remove_padding(bounds, width / 2, width / 2);
     auto top_left = bounds.origin;
@@ -125,7 +125,7 @@ void draw_rectangle(Rect bounds, real32 width, Color color, Graphics_Context_Atl
     draw_line(top_right, bottom_right, color, width, graphics_ctx);
     draw_line(bottom_right, bottom_left, color, width, graphics_ctx);
 }
-void fill_rectangle(Rect bounds, Color col, Graphics_Context_Atlas *graphics_ctx)
+function void fill_rectangle(Rect bounds, Color col, Graphics_Context_Atlas *graphics_ctx)
 {
     auto top_left = bounds.origin;
     auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
@@ -168,7 +168,7 @@ void fill_rectangle(Rect bounds, Color col, Graphics_Context_Atlas *graphics_ctx
     
 }
 
-real32 measure_text_width(String text, Font *font)
+function real32 measure_text_width(String text, Font *font)
 {
     real32 width = 0;
     for(char *c = &text.data[0]; c < text.data + text.size; c++)
@@ -178,7 +178,7 @@ real32 measure_text_width(String text, Font *font)
     return width;
 }
 
-void draw_text(const String& text, Rect bounds, Color col, Graphics_Context_Atlas *graphics_ctx)
+function void draw_text(const String& text, Rect bounds, Color col, Graphics_Context_Atlas *graphics_ctx)
 {
     Font *font = &graphics_ctx->font;
     
@@ -266,9 +266,9 @@ void draw_text(const String& text, Rect bounds, Color col, Graphics_Context_Atla
 }
 
 
-void draw_slider(Rect slider_bounds, 
-                 real32 normalized_value, 
-                 Graphics_Context_Atlas *graphics_ctx)
+function void draw_slider(Rect slider_bounds, 
+                          real32 normalized_value, 
+                          Graphics_Context_Atlas *graphics_ctx)
 {
     real32 slider_x = slider_bounds.origin.x + normalized_value * (slider_bounds.dim.x - SLIDER_WIDTH); 
     Rect slider_rect = {

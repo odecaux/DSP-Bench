@@ -30,6 +30,7 @@ typedef double real64;
 #define M_2I (3.1415926535897932384626433 * 2.0)
 
 #define internal static
+#define function static
 
 #define octave_max(x, y) (((x) > (y)) ? (x) : (y))
 #define octave_min(x, y) (((x) < (y)) ? (x) : (y))

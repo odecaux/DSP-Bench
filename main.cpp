@@ -17,10 +17,18 @@
 #include "font.h"
 #include "fft.h"
 #include "app.h"
+#include "draw.h"
 
 #include "win32_platform.h"
 #include "opengl.h"
 
+
+//NOTE hack ? is this a good idea ?
+enum UI_STAGE {
+    UI_STAGE_LOADING,
+    UI_STAGE_LIVE,
+    UI_STAGE_FAILED
+};
 
 typedef struct {
     const char* source_filename;
@@ -202,8 +210,8 @@ i32 main(i32 argc, char** argv)
         1024
     };
     
+    UI_STAGE ui_stage = UI_STAGE_LOADING;
     bool compilation_is_over = false;
-    bool plugin_is_loaded = false;
     Plugin_Handle handle;
     
     Plugin_Parameter_Value *parameter_values_audio_side;
@@ -275,72 +283,87 @@ i32 main(i32 argc, char** argv)
             wav_is_already_loaded = true;
         }
         
-        if(compilation_is_over && !plugin_is_loaded)
+        if(ui_stage == UI_STAGE_LOADING)
         {
-            win32_print_elapsed(time_program_begin, "time to compilation end");
-            
-            parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
-            
-            parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
-            
-            char* plugin_parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
-            char* plugin_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
-            
-            handle.default_parameters_f(plugin_parameters_holder);
-            handle.initialize_state_f(plugin_parameters_holder, 
-                                      plugin_state_holder, 
-                                      audio_parameters.num_channels,
-                                      audio_parameters.sample_rate, 
-                                      &malloc_allocator
-                                      );
-            
-            for(auto param_idx = 0; param_idx < handle.descriptor.num_parameters; param_idx++)
+            if(compilation_is_over)
             {
-                auto param_descriptor = handle.descriptor.parameters[param_idx];
-                auto offset = param_descriptor.offset;
-                switch(param_descriptor.type){
-                    case Int :
+                win32_print_elapsed(time_program_begin, "time to compilation end");
+                
+                if(handle.error == Compiler_Success)
+                {
+                    
+                    parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
+                    
+                    parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
+                    
+                    char* plugin_parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
+                    char* plugin_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
+                    
+                    handle.default_parameters_f(plugin_parameters_holder);
+                    handle.initialize_state_f(plugin_parameters_holder, 
+                                              plugin_state_holder, 
+                                              audio_parameters.num_channels,
+                                              audio_parameters.sample_rate, 
+                                              &malloc_allocator
+                                              );
+                    
+                    for(auto param_idx = 0; param_idx < handle.descriptor.num_parameters; param_idx++)
                     {
-                        parameter_values_ui_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
-                        parameter_values_audio_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
-                    }break;
-                    case Float : 
-                    {
-                        parameter_values_ui_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
-                        parameter_values_audio_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
-                    }break;
-                    case Enum : 
-                    {
-                        parameter_values_ui_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
-                        parameter_values_audio_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
-                        
-                    }break;
+                        auto param_descriptor = handle.descriptor.parameters[param_idx];
+                        auto offset = param_descriptor.offset;
+                        switch(param_descriptor.type){
+                            case Int :
+                            {
+                                parameter_values_ui_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
+                                parameter_values_audio_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
+                            }break;
+                            case Float : 
+                            {
+                                parameter_values_ui_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
+                                parameter_values_audio_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
+                            }break;
+                            case Enum : 
+                            {
+                                parameter_values_ui_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
+                                parameter_values_audio_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
+                                
+                            }break;
+                        }
+                    }
+                    ring = plugin_parameters_ring_buffer_initialize(handle.descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
+                    
+                    audio_context.ring = &ring;
+                    audio_context.audio_callback_f = handle.audio_callback_f;
+                    audio_context.plugin_state_holder = plugin_state_holder;
+                    audio_context.plugin_parameters_holder = plugin_parameters_holder;
+                    audio_context.parameter_values_audio_side = parameter_values_audio_side;
+                    audio_context.descriptor = &handle.descriptor;
+                    InterlockedExchange8(&audio_context.plugin_valid, 1);
+                    
+                    //~ IR initialization
+                    
+                    compute_IR(handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, parameter_values_ui_side);
+                    
+                    fft_perform(&fft);
+                    
+                    memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
+                    memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
+                    
+                    win32_print_elapsed(time_program_begin, "time to loaded");
+                    ui_stage = UI_STAGE_LIVE;
+                }
+                else
+                {
+                    ui_stage = UI_STAGE_FAILED;
                 }
             }
-            ring = plugin_parameters_ring_buffer_initialize(handle.descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
-            
-            audio_context.ring = &ring;
-            audio_context.audio_callback_f = handle.audio_callback_f;
-            audio_context.plugin_state_holder = plugin_state_holder;
-            audio_context.plugin_parameters_holder = plugin_parameters_holder;
-            audio_context.parameter_values_audio_side = parameter_values_audio_side;
-            audio_context.descriptor = &handle.descriptor;
-            InterlockedExchange8(&audio_context.plugin_valid, 1);
-            
-            //~ IR initialization
-            
-            compute_IR(handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, parameter_values_ui_side);
-            
-            fft_perform(&fft);
-            
-            memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
-            memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
-            
-            plugin_is_loaded = true;
-            
-            win32_print_elapsed(time_program_begin, "time to loaded");
+            else 
+            {
+                draw_text(StringLit("Loading"), { Vec2{0.0f, 0.0f}, graphics_ctx.window_dim }, Color_Front, &graphics_ctx.atlas);
+            }
         }
-        else if(plugin_is_loaded)
+        
+        if(ui_stage == UI_STAGE_LIVE)
         {
             
             bool parameters_were_tweaked = false;
@@ -365,17 +388,22 @@ i32 main(i32 argc, char** argv)
                 memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
                 memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
             }
+            
+            //TODO hack
+            if(ui_state.selected_parameter_id != -1 && ui_state.selected_parameter_id < 255 && frame_io.mouse_clicked)
+            {
+                ShowCursor(FALSE);
+            }
+            else if(ui_state.previous_selected_parameter_id != -1 && frame_io.mouse_released && ui_state.previous_selected_parameter_id < 255)
+            {
+                ShowCursor(TRUE);
+            }
+        }
+        else if(ui_stage == UI_STAGE_FAILED)
+        {
+            draw_text(StringLit("Compilation Error"), { Vec2{0.0f, 0.0f}, graphics_ctx.window_dim }, Color_Front, &graphics_ctx.atlas);
         }
         
-        //TODO hack
-        if(ui_state.selected_parameter_id != -1 && ui_state.selected_parameter_id < 255 && frame_io.mouse_clicked)
-        {
-            ShowCursor(FALSE);
-        }
-        else if(ui_state.previous_selected_parameter_id != -1 && frame_io.mouse_released && ui_state.previous_selected_parameter_id < 255)
-        {
-            ShowCursor(TRUE);
-        }
         
         opengl_render_ui(&opengl_ctx, &graphics_ctx);
         i64 current_time;
