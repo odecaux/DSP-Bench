@@ -42,9 +42,8 @@ IO io_initial_state()
         
         /*
         .mouse_position,
-        .mouse_pos_prev,
-        .mouse_delta,
-        */ // TODO(octave): on peut les initialiser ici en vrai
+        .mouse_pos_prev, */
+        .mouse_delta = {0.0f, 0.0f},
         
         .mouse_double_click_time = 175.0f,
         .mouse_down_time = -1.0f,
@@ -64,7 +63,6 @@ IO io_state_advance(IO io)
     if(io.mouse_position.x < 0.0f && io.mouse_position.y < 0.0f)
         io.mouse_position = Vec2(-99999.0f, -99999.0f);
     
-    //?
     if((io.mouse_position.x < 0.0f && io.mouse_position.y < 0.0f) ||
        (io.mouse_pos_prev.x < 0.0f && io.mouse_pos_prev.y < 0.0f))
         io.mouse_delta = Vec2{0.0f, 0.0f};
@@ -298,6 +296,7 @@ void frame(Plugin_Descriptor& descriptor,
 {
     if(frame_io.mouse_released)
     {
+        ui_state.previous_selected_parameter_id = ui_state.selected_parameter_id;
         ui_state.selected_parameter_id = -1;
     }
     
@@ -449,7 +448,8 @@ void frame(Plugin_Descriptor& descriptor,
             }break;
         }
         
-        parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN;
+        //TODO fix
+        parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN * 2;
     }
     
     

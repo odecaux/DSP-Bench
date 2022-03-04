@@ -251,10 +251,7 @@ i32 main(i32 argc, char** argv)
     while(!done)
     {
         win32_message_dispatch(&window, &frame_io, &done);
-        
-        // TODO(octave): hack ?
-        if(done)
-            break;
+        if(done) break;
         
         graphics_ctx.atlas.draw_vertices_count = 0;
         graphics_ctx.atlas.draw_indices_count = 0;
@@ -280,8 +277,7 @@ i32 main(i32 argc, char** argv)
         
         if(compilation_is_over && !plugin_is_loaded)
         {
-            i32 time_to_compiled = win32_get_elapsed_ms_since(time_program_begin);
-            printf("time to compilation end : %d\n", time_to_compiled);
+            win32_print_elapsed(time_program_begin, "time to compilation end");
             
             parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
             
@@ -342,8 +338,7 @@ i32 main(i32 argc, char** argv)
             
             plugin_is_loaded = true;
             
-            i32 time_to_loaded = win32_get_elapsed_ms_since(time_program_begin);
-            printf("time to loaded : %d\n", time_to_loaded);
+            win32_print_elapsed(time_program_begin, "time to loaded");
         }
         else if(plugin_is_loaded)
         {
@@ -377,14 +372,14 @@ i32 main(i32 argc, char** argv)
         {
             ShowCursor(FALSE);
         }
-        else if(frame_io.mouse_released)
+        else if(ui_state.previous_selected_parameter_id != -1 && frame_io.mouse_released && ui_state.previous_selected_parameter_id < 255)
         {
             ShowCursor(TRUE);
         }
         
         opengl_render_ui(&opengl_ctx, &graphics_ctx);
         i64 current_time;
-        win32_pace_60_fps(last_time, &current_time, &frame_io.delta_time);
+        win32_get_elapsed_ms_since(last_time, &current_time, &frame_io.delta_time);
         last_time = current_time;
     }
     

@@ -221,7 +221,7 @@ enum Colors : u32 {
 
 typedef struct{
     i64 selected_parameter_id;
-    //i64 hovered_id;
+    i64 previous_selected_parameter_id;
 } UI_State;
 
 
