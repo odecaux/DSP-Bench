@@ -14,8 +14,8 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 Easy : \
 \
-No plugin parameter -> Load Plugin File prompt \
-Parameter skew factor \
+No plugin parameter -> Load Plugin File \
+Linear vs Logarithmic slider customization \
 Display Compiler errors \
 FFT processing available to the plugins \
 plugin optional hot swap \
@@ -35,6 +35,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+~~logarithmic normalization~~ \
 ~~wav swap~~ \
 ~~file browsing~~
 ~~Zoomable IR~~ \
