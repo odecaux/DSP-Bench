@@ -109,7 +109,7 @@ DWORD audio_thread_fn(LPVOID Context)
         // update parameters
         
         //TODO mettre un memcopy ici ??? comme ça on a peut faire des trucs comme log sans que ça interfère avec le machin bidule
-        if(audio_context->plugin_valid){
+        if(MemoryBarrier(); *audio_context->plugin_stage == Asset_File_Stage_IN_USE){
             Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_buffer_pull(*ring);
             if(maybe_new_parameter_values)
             {

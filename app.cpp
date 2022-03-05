@@ -513,37 +513,60 @@ void frame(Plugin_Descriptor& descriptor,
     
     
     //~footer
-    
-    if(audio_ctx->audio_file_valid)
+    MemoryBarrier();
+    auto audio_file_stage = *audio_ctx->audio_file_stage;
+    MemoryBarrier();
+    switch(audio_file_stage)
     {
-        Rect play_loop_bounds = rect_take_right(footer_bounds, TITLE_HEIGHT * 2);
-        footer_bounds = rect_drop_right(footer_bounds, TITLE_HEIGHT * 2);
-        
-        draw_rectangle(play_loop_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-        
-        Rect play_stop_bounds = rect_take_left(play_loop_bounds, TITLE_HEIGHT);
-        Rect loop_bounds = rect_move_by(play_stop_bounds, {TITLE_HEIGHT, 0.0f});
-        
-        if(button(play_stop_bounds, StringLit("Play/Stop"), 256, graphics_ctx, &ui_state, &frame_io))
+        case Asset_File_Stage_IN_USE :
         {
-            if(audio_ctx->audio_file_play){
-                audio_ctx->audio_file_play = 0;
-                MemoryBarrier();
-                audio_ctx->audio_file_read_cursor = 0;
+            Rect play_loop_bounds = rect_take_right(footer_bounds, TITLE_HEIGHT * 2);
+            footer_bounds = rect_drop_right(footer_bounds, TITLE_HEIGHT * 2);
+            
+            draw_rectangle(play_loop_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            
+            Rect play_stop_bounds = rect_take_left(play_loop_bounds, TITLE_HEIGHT);
+            Rect loop_bounds = rect_move_by(play_stop_bounds, {TITLE_HEIGHT, 0.0f});
+            
+            if(button(play_stop_bounds, StringLit("Play/Stop"), 256, graphics_ctx, &ui_state, &frame_io))
+            {
+                if(audio_ctx->audio_file_play){
+                    audio_ctx->audio_file_play = 0;
+                    MemoryBarrier();
+                    audio_ctx->audio_file_read_cursor = 0;
+                }
+                else{
+                    audio_ctx->audio_file_play = 1;
+                    MemoryBarrier();
+                }
             }
-            else{
-                audio_ctx->audio_file_play = 1;
-                MemoryBarrier();
+            if(button(loop_bounds, StringLit("Loop"), 257, graphics_ctx, &ui_state, &frame_io))
+            {
+                audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
             }
-        }
-        if(button(loop_bounds, StringLit("Loop"), 257, graphics_ctx, &ui_state, &frame_io))
+            
+            draw_text(StringLit("todo : get filename, or IR, idk"), footer_bounds, Color_Front, &graphics_ctx->atlas);
+            
+        }break;
+        case Asset_File_Stage_STAGE_LOADING :
+        case Asset_File_Stage_SIDE_LOADING :
+        case Asset_File_Stage_SIDE_LOADED :
+        case Asset_File_Stage_VALIDATING :
+        case Asset_File_Stage_STAGE_USAGE :
         {
-            audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
-        }
-    }
-    else
-    {
-        draw_text(StringLit("No audio file"), footer_bounds, Color_Front, &graphics_ctx->atlas);
+            draw_text(StringLit("Loading"), footer_bounds, Color_Front, &graphics_ctx->atlas);
+        }break;
+        case Asset_File_Stage_STAGE_UNLOADING :
+        case Asset_File_Stage_OK_TO_UNLOAD :
+        case Asset_File_Stage_UNLOADING :
+        {
+            draw_text(StringLit("Unloading"), footer_bounds, Color_Front, &graphics_ctx->atlas);
+            
+        }break;
+        case Asset_File_Stage_NONE :
+        {
+            draw_text(StringLit("No audio file"), footer_bounds, Color_Front, &graphics_ctx->atlas);
+        }break;
     }
     Rect load_button_bounds = rect_take_left(footer_bounds, TITLE_HEIGHT * 2);
     footer_bounds = rect_drop_left(footer_bounds, TITLE_HEIGHT * 2);

@@ -13,17 +13,29 @@
 
 void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Context* ctx)
 {
-    u8 file_is_valid = ctx->audio_file_valid;
-    u8 plugin_is_valid = ctx->plugin_valid;
+    InterlockedCompareExchange((LONG volatile *) ctx->audio_file_stage,
+                               Asset_File_Stage_IN_USE,
+                               Asset_File_Stage_STAGE_USAGE);
+    InterlockedCompareExchange((LONG volatile *) ctx->plugin_stage,
+                               Asset_File_Stage_IN_USE,
+                               Asset_File_Stage_STAGE_USAGE);
+    
+    for(auto channel = 0; channel < parameters.num_channels; channel++)
+    {
+        memset(output_buffer[channel], 0, parameters.num_samples * sizeof(real32));
+    }
+    
+    auto plugin_stage = *ctx->plugin_stage;
+    auto audio_file_stage = *ctx->audio_file_stage;
+    
     MemoryBarrier();
     
+    u8 plugin_play = ctx->plugin_play;
     u8 audio_file_play = ctx->audio_file_play;
     u8 audio_file_loop = ctx->audio_file_loop;
-    u8 plugin_play = ctx->plugin_play;
     
-    MemoryBarrier();
-    
-    if(file_is_valid && audio_file_play)
+    if(ctx->audio_file_stage == Asset_File_Stage_IN_USE &&
+       audio_file_play)
     {
         real32** audio_file_buffer = ctx->audio_file_buffer;
         u64 channels_to_write = octave_min(ctx->audio_file_num_channels, parameters.num_channels);
@@ -33,7 +45,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
         
         MemoryBarrier();
         
-        if(!audio_file_loop)
+        if(audio_file_loop == 0)
         {
             u64 samples_left_in_file = audio_file_length - read_cursor;
             u64 samples_to_write  = octave_min(samples_left_in_file, parameters.num_samples);
@@ -95,7 +107,6 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
             }
         }
         
-        MemoryBarrier();
         InterlockedCompareExchange64((LONG64 volatile *)&ctx->audio_file_read_cursor,
                                      read_cursor,
                                      original_read_cursor);
@@ -105,13 +116,9 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
             memset(output_buffer[channel], 0, parameters.num_samples * sizeof(real32));
         }
     }
-    else
-    {
-        for(auto channel = 0; channel < parameters.num_channels; channel++)
-            memset(output_buffer[channel], 0, parameters.num_samples * sizeof(real32));
-    }
     
-    if(plugin_is_valid && plugin_play)
+    if(plugin_stage == Asset_File_Stage_IN_USE && 
+       plugin_play == 1)
     {
         ctx->audio_callback_f(ctx->plugin_parameters_holder,
                               ctx->plugin_state_holder,
@@ -119,7 +126,15 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
                               parameters.num_channels,
                               parameters.num_samples,
                               parameters.sample_rate);
+        
     }
+    
+    InterlockedCompareExchange((LONG volatile *) ctx->audio_file_stage,
+                               Asset_File_Stage_OK_TO_UNLOAD,
+                               Asset_File_Stage_STAGE_UNLOADING);
+    InterlockedCompareExchange((LONG volatile *) ctx->plugin_stage,
+                               Asset_File_Stage_OK_TO_UNLOAD,
+                               Asset_File_Stage_STAGE_UNLOADING);
 }
 
 

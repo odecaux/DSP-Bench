@@ -14,6 +14,23 @@ internal void* malloc_allocator(u32 byte_size)
     return malloc(byte_size);
 }
 
+
+enum Asset_File_Stage : u32 {
+    Asset_File_Stage_NONE,
+    Asset_File_Stage_STAGE_LOADING,
+    Asset_File_Stage_SIDE_LOADING,
+    Asset_File_Stage_SIDE_LOADED,
+    Asset_File_Stage_VALIDATING,
+    Asset_File_Stage_STAGE_USAGE,
+    Asset_File_Stage_IN_USE,
+    Asset_File_Stage_STAGE_UNLOADING,
+    Asset_File_Stage_OK_TO_UNLOAD,
+    Asset_File_Stage_UNLOADING,
+};
+
+
+
+
 //TODO should be a struct, and include data, like which parameter is wrong
 //I do it the other way around for now : each handle says which type of error it has
 //the use case where it doesn't work is signature checking, I don't have a separate handle for every parameter of the signature, but I still want to report the details of what went wrong
@@ -157,7 +174,7 @@ typedef struct
 
 typedef struct 
 {
-    i8 audio_file_valid;
+    Asset_File_Stage *audio_file_stage;
     i8 audio_file_play;
     i8 audio_file_loop;
     
@@ -166,7 +183,7 @@ typedef struct
     u64 audio_file_read_cursor;
     u64 audio_file_num_channels;
     
-    i8 plugin_valid;
+    Asset_File_Stage *plugin_stage;
     i8 plugin_play;
     audio_callback_t audio_callback_f;
     

@@ -21,6 +21,7 @@ Display Compiler errors \
 FFT processing available to the plugins \
 plugin optional hot swap \
 Plugin allocator and tracking -> automatic collection \
+Draggable IR \
 \
 Hard : \
 \

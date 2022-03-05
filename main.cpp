@@ -37,31 +37,42 @@ typedef struct {
     void *clang_ctx;
     try_compile_t try_compile_f;
     
-    bool *return_flag;
+    Asset_File_Stage *stage;
 } Compiler_Thread_Param;
 
 DWORD compiler_thread_proc(void *void_param)
 {
     Compiler_Thread_Param *param = (Compiler_Thread_Param*)void_param;
+    assert(InterlockedExchange((LONG volatile*) param->stage,
+                               Asset_File_Stage_SIDE_LOADING)
+           == Asset_File_Stage_STAGE_LOADING);
+    
     *param->handle = param->try_compile_f(param->source_filename, param->clang_ctx, param->errors);
-    MemoryBarrier();
-    *param->return_flag = true;
+    
+    assert(InterlockedExchange((LONG volatile*) param->stage,
+                               Asset_File_Stage_SIDE_LOADED)
+           == Asset_File_Stage_SIDE_LOADING);
     return 1;
 }
 
 typedef struct {
     const char *filename;
     WavData *file;
-    bool *return_flag;
+    Asset_File_Stage *stage;
 } Wav_Loader_Thread_Param;
 
 DWORD wav_loader_thread_proc(void *void_param)
 {
     Wav_Loader_Thread_Param *param = (Wav_Loader_Thread_Param*)void_param;
+    assert(InterlockedExchange((LONG volatile*) param->stage,
+                               Asset_File_Stage_SIDE_LOADING)
+           == Asset_File_Stage_STAGE_LOADING);
     
     *param->file = windows_load_wav(param->filename);
-    MemoryBarrier();
-    *param->return_flag = true;
+    
+    assert(InterlockedExchange((LONG volatile*) param->stage,
+                               Asset_File_Stage_SIDE_LOADED)
+           == Asset_File_Stage_SIDE_LOADING);
     return 1;
 }
 
@@ -145,14 +156,17 @@ i32 main(i32 argc, char** argv)
     
     OpenGL_Context opengl_ctx = opengl_initialize(&window, &graphics_ctx.atlas.font);
     
-    
     win32_print_elapsed(time_program_begin, "time to graphics");
     
     //~ Audio Init
+    Asset_File_Stage wav_stage = Asset_File_Stage_NONE;
+    Asset_File_Stage plugin_stage = Asset_File_Stage_NONE;
     
     void* platform_audio_context;
     Audio_Context audio_context = {};
-    audio_context.audio_file_play = 1;
+    audio_context.audio_file_play = 0;
+    audio_context.audio_file_stage = &wav_stage;
+    audio_context.plugin_stage = &plugin_stage;
     Audio_Parameters audio_parameters = {};
     MemoryBarrier();
     
@@ -167,14 +181,14 @@ i32 main(i32 argc, char** argv)
     //~ Wav Init
     
     WavData wav_file;
-    bool wav_loading_thread_has_returned = false;
-    bool wav_is_already_loaded = false;
     Wav_Loader_Thread_Param wav_thread_param = {
         .filename = audio_filename,
         .file = &wav_file,
-        .return_flag = &wav_loading_thread_has_returned
+        .stage = &wav_stage
     };
     HANDLE wav_loader_thread_handle;
+    wav_stage = Asset_File_Stage_STAGE_LOADING;
+    MemoryBarrier();
     
     if(audio_filename != nullptr)
     {
@@ -212,7 +226,7 @@ i32 main(i32 argc, char** argv)
     };
     
     App_Stage app_stage = App_Stage_LOADING;
-    bool compiler_thread_has_returned = false;
+    
     Plugin_Handle handle;
     
     Plugin_Parameter_Value *parameter_values_audio_side;
@@ -225,8 +239,10 @@ i32 main(i32 argc, char** argv)
         .errors = &errors,
         .clang_ctx = clang_ctx,
         .try_compile_f = try_compile_f,
-        .return_flag = &compiler_thread_has_returned
+        .stage= &plugin_stage
     };
+    
+    plugin_stage = Asset_File_Stage_STAGE_LOADING;
     MemoryBarrier();
     
     HANDLE compiler_thread_handle = 
@@ -272,9 +288,10 @@ i32 main(i32 argc, char** argv)
         frame_io = io_state_advance(frame_io);
         frame_io.mouse_position = win32_get_mouse_position(&window);
         
-        MemoryBarrier(); //TODO ???
-        
-        if(wav_loading_thread_has_returned && !wav_is_already_loaded)
+        if(InterlockedCompareExchange((LONG volatile *) &wav_stage,
+                                      Asset_File_Stage_VALIDATING,
+                                      Asset_File_Stage_SIDE_LOADED)
+           == Asset_File_Stage_SIDE_LOADED)
         {
             if(wav_file.error == Wav_Success)
             {
@@ -282,93 +299,108 @@ i32 main(i32 argc, char** argv)
                 audio_context.audio_file_length = wav_file.samples_by_channel;
                 audio_context.audio_file_read_cursor = 0;
                 audio_context.audio_file_num_channels = wav_file.num_channels;
-                MemoryBarrier();
-                audio_context.audio_file_valid = 1;
-            }
-            wav_is_already_loaded = true;
-        }
-        
-        if(app_stage == App_Stage_LOADING)
-        {
-            if(compiler_thread_has_returned)
-            {
-                win32_print_elapsed(time_program_begin, "time to compilation end");
                 
-                if(handle.error == Compiler_Success)
-                {
-                    
-                    parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
-                    
-                    parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
-                    
-                    char* plugin_parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
-                    char* plugin_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
-                    
-                    handle.default_parameters_f(plugin_parameters_holder);
-                    handle.initialize_state_f(plugin_parameters_holder, 
-                                              plugin_state_holder, 
-                                              audio_parameters.num_channels,
-                                              audio_parameters.sample_rate, 
-                                              &malloc_allocator
-                                              );
-                    
-                    for(auto param_idx = 0; param_idx < handle.descriptor.num_parameters; param_idx++)
-                    {
-                        auto param_descriptor = handle.descriptor.parameters[param_idx];
-                        auto offset = param_descriptor.offset;
-                        switch(param_descriptor.type){
-                            case Int :
-                            {
-                                parameter_values_ui_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
-                                parameter_values_audio_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
-                            }break;
-                            case Float : 
-                            {
-                                parameter_values_ui_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
-                                parameter_values_audio_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
-                            }break;
-                            case Enum : 
-                            {
-                                parameter_values_ui_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
-                                parameter_values_audio_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
-                                
-                            }break;
-                        }
-                    }
-                    ring = plugin_parameters_ring_buffer_initialize(handle.descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
-                    
-                    audio_context.ring = &ring;
-                    audio_context.audio_callback_f = handle.audio_callback_f;
-                    audio_context.plugin_state_holder = plugin_state_holder;
-                    audio_context.plugin_parameters_holder = plugin_parameters_holder;
-                    audio_context.parameter_values_audio_side = parameter_values_audio_side;
-                    audio_context.descriptor = &handle.descriptor;
-                    InterlockedExchange8(&audio_context.plugin_valid, 1);
-                    
-                    //~ IR initialization
-                    compute_IR(handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, parameter_values_ui_side);
-                    
-                    fft_perform(&fft);
-                    
-                    memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
-                    memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
-                    
-                    win32_print_elapsed(time_program_begin, "time to loaded");
-                    app_stage = App_Stage_LIVE;
-                }
-                else
-                {
-                    app_stage = App_Stage_FAILED;
-                }
+                assert(InterlockedExchange((LONG volatile *) &wav_stage,
+                                           Asset_File_Stage_STAGE_USAGE)
+                       == Asset_File_Stage_VALIDATING);
             }
-            else 
+            else
             {
-                draw_text(StringLit("Loading"), { Vec2{0.0f, 0.0f}, graphics_ctx.window_dim }, Color_Front, &graphics_ctx.atlas);
-                opengl_render_generic(&opengl_ctx, &graphics_ctx);
+                assert(InterlockedExchange((LONG volatile *) &wav_stage,
+                                           Asset_File_Stage_NONE)
+                       == Asset_File_Stage_VALIDATING);
+                MessageBox( NULL , "", "Error reading wav file" , MB_OK);
             }
         }
         
-        if(app_stage == App_Stage_LIVE)
+        if(InterlockedCompareExchange((LONG volatile *) &plugin_stage,
+                                      Asset_File_Stage_VALIDATING,
+                                      Asset_File_Stage_SIDE_LOADED)
+           == Asset_File_Stage_SIDE_LOADED)
+        {
+            win32_print_elapsed(time_program_begin, "time to compilation end");
+            
+            if(handle.error == Compiler_Success)
+            {
+                
+                parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
+                
+                parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
+                
+                char* plugin_parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
+                char* plugin_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
+                
+                handle.default_parameters_f(plugin_parameters_holder);
+                handle.initialize_state_f(plugin_parameters_holder, 
+                                          plugin_state_holder, 
+                                          audio_parameters.num_channels,
+                                          audio_parameters.sample_rate, 
+                                          &malloc_allocator
+                                          );
+                
+                for(auto param_idx = 0; param_idx < handle.descriptor.num_parameters; param_idx++)
+                {
+                    auto param_descriptor = handle.descriptor.parameters[param_idx];
+                    auto offset = param_descriptor.offset;
+                    switch(param_descriptor.type){
+                        case Int :
+                        {
+                            parameter_values_ui_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
+                            parameter_values_audio_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
+                        }break;
+                        case Float : 
+                        {
+                            parameter_values_ui_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
+                            parameter_values_audio_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
+                        }break;
+                        case Enum : 
+                        {
+                            parameter_values_ui_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
+                            parameter_values_audio_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
+                            
+                        }break;
+                    }
+                }
+                ring = plugin_parameters_ring_buffer_initialize(handle.descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
+                
+                audio_context.ring = &ring;
+                audio_context.audio_callback_f = handle.audio_callback_f;
+                audio_context.plugin_state_holder = plugin_state_holder;
+                audio_context.plugin_parameters_holder = plugin_parameters_holder;
+                audio_context.parameter_values_audio_side = parameter_values_audio_side;
+                audio_context.descriptor = &handle.descriptor;
+                
+                assert(InterlockedExchange((LONG volatile *) &plugin_stage,
+                                           Asset_File_Stage_STAGE_USAGE)
+                       == Asset_File_Stage_VALIDATING);
+                
+                //~ IR initialization
+                compute_IR(handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, parameter_values_ui_side);
+                
+                fft_perform(&fft);
+                
+                memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
+                memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
+                
+                win32_print_elapsed(time_program_begin, "time to loaded");
+                app_stage = App_Stage_LIVE;
+            }
+            else
+            {
+                assert(InterlockedExchange((LONG volatile *) &wav_stage,
+                                           Asset_File_Stage_NONE)
+                       == Asset_File_Stage_VALIDATING);
+                
+                app_stage = App_Stage_FAILED;
+            }
+        }
+        
+        if(app_stage == App_Stage_LOADING) 
+        {
+            draw_text(StringLit("Loading"), { Vec2{0.0f, 0.0f}, graphics_ctx.window_dim }, Color_Front, &graphics_ctx.atlas);
+            opengl_render_generic(&opengl_ctx, &graphics_ctx);
+        }
+        else if(app_stage == App_Stage_LIVE)
         {
             
             bool parameters_were_tweaked = false;
@@ -424,7 +456,15 @@ i32 main(i32 argc, char** argv)
     typedef void(*release_jit_t)(Plugin_Handle*);
     release_jit_t release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
     
-    InterlockedExchange8(&audio_context.plugin_valid, 0);
+    
+    InterlockedExchange((LONG volatile *)&plugin_stage, Asset_File_Stage_STAGE_UNLOADING);
+    
+    do{
+        Sleep(4);
+    } while(InterlockedCompareExchange((LONG volatile *) &plugin_stage,
+                                       Asset_File_Stage_UNLOADING,
+                                       Asset_File_Stage_OK_TO_UNLOAD)
+            != Asset_File_Stage_OK_TO_UNLOAD);
     
     release_jit(&handle);
     
