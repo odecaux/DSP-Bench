@@ -16,7 +16,7 @@
 #include "draw.h"
 #include "app.h"
 
-
+#include "win32_helpers.h"
 
 //#define log printf
 #define log noop_log
@@ -335,7 +335,7 @@ bool button(Rect bounds,
 void frame(Plugin_Descriptor& descriptor, 
            Graphics_Context *graphics_ctx, 
            UI_State& ui_state, 
-           IO frame_io, 
+           IO& frame_io, 
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Context *audio_ctx,
            bool& parameters_were_tweaked)
@@ -514,35 +514,49 @@ void frame(Plugin_Descriptor& descriptor,
     
     //~footer
     
-    
-    Rect play_loop_bounds = rect_take_right(footer_bounds, TITLE_HEIGHT * 2);
-    footer_bounds = rect_drop_right(footer_bounds, TITLE_HEIGHT * 2);
+    if(audio_ctx->audio_file_valid)
+    {
+        Rect play_loop_bounds = rect_take_right(footer_bounds, TITLE_HEIGHT * 2);
+        footer_bounds = rect_drop_right(footer_bounds, TITLE_HEIGHT * 2);
+        
+        draw_rectangle(play_loop_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+        
+        Rect play_stop_bounds = rect_take_left(play_loop_bounds, TITLE_HEIGHT);
+        Rect loop_bounds = rect_move_by(play_stop_bounds, {TITLE_HEIGHT, 0.0f});
+        
+        if(button(play_stop_bounds, StringLit("Play/Stop"), 256, graphics_ctx, &ui_state, &frame_io))
+        {
+            if(audio_ctx->audio_file_play){
+                audio_ctx->audio_file_play = 0;
+                MemoryBarrier();
+                audio_ctx->audio_file_read_cursor = 0;
+            }
+            else{
+                audio_ctx->audio_file_play = 1;
+                MemoryBarrier();
+            }
+        }
+        if(button(loop_bounds, StringLit("Loop"), 257, graphics_ctx, &ui_state, &frame_io))
+        {
+            audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
+        }
+    }
+    else
+    {
+        draw_text(StringLit("No audio file"), footer_bounds, Color_Front, &graphics_ctx->atlas);
+    }
+    Rect load_button_bounds = rect_take_left(footer_bounds, TITLE_HEIGHT * 2);
+    footer_bounds = rect_drop_left(footer_bounds, TITLE_HEIGHT * 2);
+    if(button(load_button_bounds, StringLit("Load"), 1024, graphics_ctx, &ui_state, &frame_io))
+    {
+        char buffer[256];
+        char filter[] = "Wav File\0*.wav\0";
+        if(win32_open_file(buffer, sizeof(buffer), filter))
+        {
+            MessageBox( NULL , buffer, "File Name" , MB_OK);
+        }
+        frame_io.mouse_down = false;
+    }
     draw_rectangle(footer_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    
-    draw_rectangle(play_loop_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    
-    Rect play_stop_bounds = rect_take_left(play_loop_bounds, TITLE_HEIGHT);
-    Rect loop_bounds = rect_move_by(play_stop_bounds, {TITLE_HEIGHT, 0.0f});
-    
-    
-    //TODO synchronization
-    if(button(play_stop_bounds, StringLit("Play/Stop"), 256, graphics_ctx, &ui_state, &frame_io))
-    {
-        if(audio_ctx->audio_file_play){
-            audio_ctx->audio_file_play = 0;
-            MemoryBarrier();
-            audio_ctx->audio_file_read_cursor = 0;
-        }
-        else{
-            audio_ctx->audio_file_play = 1;
-            MemoryBarrier();
-        }
-    }
-    if(button(loop_bounds, StringLit("Loop"), 257, graphics_ctx, &ui_state, &frame_io))
-    {
-        audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
-    }
-    
-    
 }
 

@@ -14,15 +14,17 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 Easy : \
 \
+wav swap \
+No plugin parameter -> Load Plugin File prompt \
 Parameter skew factor \
 Display Compiler errors \
 FFT processing available to the plugins \
-Options Blackman, Hamming, etc \
-Audio and Source file browsing -> swap -> hot swap \
+plugin optional hot swap \
 Plugin allocator and tracking -> automatic collection \
 \
 Hard : \
 \
+Options Blackman, Hamming, etc \
 Command queue to audio thread : play, stop, parameter change (? full parameter state ?) \
 Reset State button \
 Font sizes system (load multiple font sizes or stretch uv) \
@@ -33,6 +35,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+~~file browsing~~
 ~~Zoomable IR~~ \
 ~~don't call opengl_render_fft/ir when plugin isn't live~~ \
 ~~Loading screen~~ \

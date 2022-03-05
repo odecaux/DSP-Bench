@@ -1,2 +1,0 @@
-je suis pas sûr qu'on ait besoin de garder compiler_instance et tous les pass_manager; 
-faut qu'on benchmark si ça fait une différence

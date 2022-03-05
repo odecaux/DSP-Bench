@@ -3,7 +3,7 @@
 #ifndef WIN32_HELPERS_H
 #define WIN32_HELPERS_H
 
-internal i64 file_get_size(const char* filename)
+function i64 file_get_size(const char* filename)
 {
     HANDLE handle = CreateFileA(filename,
                                 GENERIC_READ,
@@ -33,7 +33,7 @@ internal i64 file_get_size(const char* filename)
 }
 
 //TODO cleanup
-internal bool load_file_to_memory(const char* filename, u8* out_buffer)
+function bool load_file_to_memory(const char* filename, u8* out_buffer)
 {
     HANDLE handle = CreateFileA(filename,
                                 GENERIC_READ,
@@ -64,5 +64,26 @@ internal bool load_file_to_memory(const char* filename, u8* out_buffer)
     return true;
 }
 
+function bool win32_open_file(char *out_buffer, u32 max_buffer_size, char *filter)
+{
+    assert(max_buffer_size > 0);
+    out_buffer[0] = '\0';
+    OPENFILENAME open_file_ctx = {
+        .lStructSize = sizeof(open_file_ctx),
+        .hwndOwner = NULL ,
+        .lpstrFilter = filter,
+        .nFilterIndex = 0,
+        .lpstrFile = out_buffer,
+        .nMaxFile = max_buffer_size,
+        .lpstrFileTitle = NULL,
+        .nMaxFileTitle = 0,
+        .lpstrInitialDir = NULL,
+        .Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST,
+    };
+	if(GetOpenFileName(&open_file_ctx) == TRUE)
+        return true;
+    else 
+        return false;
+}
 
 #endif //WIN32_HELPERS_H

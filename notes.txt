@@ -1,0 +1,26 @@
+synchronization flags
+
+///////////////////
+main et audio thread
+audio_file_valid -> buffer, length, read,channel
+plugin_valid -> descriptor, ring 
+audio_file_play/loop
+plugin_play
+
+////////////////////
+main et loop :
+wav_thread_has_returned
+compiler_thread_has_returned
+wav_already_loaded
+ui_stage
+
+
+
+
+
+TODO : 
+ir_context -> waveform_ctx
+cleaner les constantes verticales des paramètres
+
+formaliser app_stage
+utiliser clang comme compilateur

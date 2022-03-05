@@ -10,7 +10,9 @@ IO io_state_advance(const IO old_io);
 void frame(Plugin_Descriptor& descriptor, 
            Graphics_Context *graphics_ctx, 
            UI_State& ui_state, 
-           IO frame_io, 
+           IO& frame_io, 
+           //TODO frame_io should not be a reference,
+           //that's a hack : open_file_prompt steals the wm_mouse_up message 
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Context *audio_ctx,
            bool& parameters_were_tweaked);
