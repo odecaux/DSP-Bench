@@ -9,8 +9,6 @@
 #include "audio.h"
 
 
-
-
 void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Context* ctx)
 {
     

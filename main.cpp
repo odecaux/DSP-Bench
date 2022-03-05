@@ -495,13 +495,13 @@ i32 main(i32 argc, char** argv)
         last_time = current_time;
     }
     
+    exit(1);
     
     opengl_uninitialize(&opengl_ctx);
     
     
     typedef void(*release_jit_t)(Plugin_Handle*);
     release_jit_t release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
-    
     
     InterlockedExchange((LONG volatile *)&plugin_stage, Asset_File_Stage_STAGE_UNLOADING);
     

@@ -1,5 +1,6 @@
 #include "hardcoded_values.h"
 
+
 #include "stdlib.h"
 #include "assert.h"
 #include "stdio.h"
@@ -19,7 +20,7 @@
 #include "win32_helpers.h"
 
 //#define log printf
-#define log noop_log
+//#define log noop_log
 
 int noop_log(const char *__restrict __format, ...){
     return 1;
@@ -261,34 +262,6 @@ real32 slider(real32 normalized_value, i32 id,
     }
 }
 
-//TODO stereo 
-void integrate_fft(real32* magnitude_buffer, u32 sample_count, real32* pixel_buffer, u32 pixel_count)
-{
-    if(pixel_count == sample_count)
-    {
-        memcpy(pixel_buffer, magnitude_buffer, pixel_count * sizeof(real32));
-    }
-    else if(pixel_count < sample_count)
-    {
-        for(u32 sample_idx = 0; sample_idx < sample_count; sample_idx++)
-        {
-            
-            //NOTE overflow error
-            u32 pixel_idx = sample_idx * pixel_count / sample_count;
-            real32 value = magnitude_buffer[sample_idx];
-            if(value > pixel_buffer[pixel_idx])
-                pixel_buffer[pixel_idx] = value;
-        }
-    }
-    else {
-        for(u32 pixel_idx = 0; pixel_idx < pixel_count; pixel_idx++)
-        {
-            //NOTE overflow error
-            u32 sample_idx = pixel_idx * sample_count / pixel_count ;
-            pixel_buffer[pixel_idx] = magnitude_buffer[sample_idx];
-        }
-    }
-}
 
 
 bool button(Rect bounds, 
@@ -332,6 +305,7 @@ bool button(Rect bounds,
     return clicked;
 }
 
+
 void frame(Plugin_Descriptor& descriptor, 
            Graphics_Context *graphics_ctx, 
            UI_State& ui_state, 
@@ -341,6 +315,7 @@ void frame(Plugin_Descriptor& descriptor,
            bool *parameters_were_tweaked,
            bool *load_wav_was_clicked)
 {
+    
     if(frame_io.mouse_released)
     {
         ui_state.previous_selected_parameter_id = ui_state.selected_parameter_id;
