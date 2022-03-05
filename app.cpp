@@ -158,7 +158,7 @@ void compute_IR(Plugin_Handle& handle,
                               IR_state_holder, 
                               audio_parameters.num_channels, 
                               audio_parameters.sample_rate, 
-                              &malloc_allocator);
+                              nullptr);
     
     handle.audio_callback_f(IR_parameters_holder, 
                             IR_state_holder, 
@@ -335,10 +335,11 @@ bool button(Rect bounds,
 void frame(Plugin_Descriptor& descriptor, 
            Graphics_Context *graphics_ctx, 
            UI_State& ui_state, 
-           IO& frame_io, 
+           IO frame_io, 
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Context *audio_ctx,
-           bool& parameters_were_tweaked)
+           bool *parameters_were_tweaked,
+           bool *load_wav_was_clicked)
 {
     if(frame_io.mouse_released)
     {
@@ -411,7 +412,7 @@ void frame(Plugin_Descriptor& descriptor,
                 
                 if(new_normalized_value != current_normalized_value )
                 {
-                    parameters_were_tweaked = true;
+                    *parameters_were_tweaked = true;
                     auto new_int_value = denormalize_int_value(parameter_descriptor.int_param, new_normalized_value);
                     current_parameter_value.int_value = new_int_value;
                 }
@@ -446,7 +447,7 @@ void frame(Plugin_Descriptor& descriptor,
                 
                 if(new_normalized_value != current_normalized_value)
                 {
-                    parameters_were_tweaked = true;
+                    *parameters_were_tweaked = true;
                     auto new_float_value = denormalize_float_value(parameter_descriptor.float_param, new_normalized_value);
                     current_parameter_value.float_value = new_float_value;
                 }
@@ -465,7 +466,7 @@ void frame(Plugin_Descriptor& descriptor,
                 
                 if(new_normalized_value != current_normalized_value)
                 {
-                    parameters_were_tweaked = true;
+                    *parameters_were_tweaked = true;
                     auto new_index = denormalize_enum_index(parameter_descriptor.enum_param, new_normalized_value);
                     auto new_value = enum_index_to_value(parameter_descriptor.enum_param, new_index);
                     current_parameter_value.enum_value = new_value;
@@ -572,13 +573,7 @@ void frame(Plugin_Descriptor& descriptor,
     footer_bounds = rect_drop_left(footer_bounds, TITLE_HEIGHT * 2);
     if(button(load_button_bounds, StringLit("Load"), 1024, graphics_ctx, &ui_state, &frame_io))
     {
-        char buffer[256];
-        char filter[] = "Wav File\0*.wav\0";
-        if(win32_open_file(buffer, sizeof(buffer), filter))
-        {
-            MessageBox( NULL , buffer, "File Name" , MB_OK);
-        }
-        frame_io.mouse_down = false;
+        *load_wav_was_clicked = true;
     }
     draw_rectangle(footer_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
 }

@@ -10,7 +10,6 @@
 
 #define ENUM_ARAM(enum_name)  __attribute__(( annotate( "Enum" ) )) enum_name
 
-typedef void*(*allocator_t)(unsigned int);
 
 
 const float inv_two_pi = 0.1591549f;
@@ -21,6 +20,10 @@ const float half_pi = 1.570796f;
 const float quarter_pi = 0.7853982f;
 
 extern "C" { 
+    
+    float *allocate_buffer(int num_sample, void* allocator);
+    float **allocate_buffers(int num_samples, int num_channels, void* allocator);
+    void *allocate_bytes(int num_bytes, void* allocator);
     
     double sin_64(double d1);
     double cos_64(double d1);

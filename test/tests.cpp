@@ -185,7 +185,7 @@ bool test_initialization()
                                   plugin_state_holder, 
                                   1,
                                   44100.0f, 
-                                  &malloc_allocator
+                                  nullptr
                                   );
         
         int ish = *(int*)(plugin_parameters_holder);
@@ -266,8 +266,7 @@ bool test_static_gain_callback()
                                   plugin_state_holder, 
                                   1,
                                   44100.0f, 
-                                  &malloc_allocator
-                                  );
+                                  nullptr);
         
         float* buffer = (float*) malloc(sizeof(float) * 512);
         

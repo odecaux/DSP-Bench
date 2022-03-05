@@ -104,7 +104,7 @@ void win32_print_elapsed(i64 last_time, const char* text)
 {
     real32 elapsed_time;
     win32_get_elapsed_ms_since(last_time, nullptr, &elapsed_time);
-    printf("%s : %f\n", text, elapsed_time);
+    //printf("%s : %f\n", text, elapsed_time);
 }
 
 LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param)

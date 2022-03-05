@@ -8,7 +8,7 @@ Parameters default_parameters() { return Parameters(); }
 State initialize_state(Parameters& param, 
                        const unsigned int num_channels, 
                        const float sample_rate,
-                       allocator_t allocator) { return State(); }
+                       void *allocator) { return State(); }
 
 void audio_callback(const Parameters& param,
                     State& state,

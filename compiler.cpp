@@ -430,9 +430,7 @@ Decl_Handle find_initialize_state(clang::ASTContext& ast_ctx)
         const auto& parameters_type = *initialize_state_decl->getParamDecl(0)->getType().getCanonicalType();
         const auto& num_channels_type = *initialize_state_decl->getParamDecl(1)->getType().getCanonicalType();
         const auto& sample_rate_type = *initialize_state_decl->getParamDecl(2)->getType().getCanonicalType();
-        const auto& allocator_type = *initialize_state_decl->getParamDecl(3)->getType().getCanonicalType();
-        
-        
+        const auto& allocator_type = *initialize_state_decl->getParamDecl(3)->getType();
         
         if(!num_channels_type.isSpecificBuiltinType(clang::BuiltinType::UInt))
         {
@@ -447,25 +445,9 @@ Decl_Handle find_initialize_state(clang::ASTContext& ast_ctx)
             return false;
         }
         
-        auto allocator_has_the_right_signature = [&]() -> bool {
-            if(!allocator_type.isFunctionPointerType()) return false;
-            const auto* pt = llvm::dyn_cast<clang::PointerType>(&allocator_type);
-            const auto* ft = pt->getPointeeType()->getAs<clang::FunctionProtoType>();
-            
-            auto allocator_num_params = ft->getNumParams();
-            if(allocator_num_params != 1) return false;
-            
-            const auto& num_samples_param_type = *ft->getParamType(0);
-            if(!num_samples_param_type.isSpecificBuiltinType(clang::BuiltinType::UInt)) return false;
-            
-            if(!ft->getReturnType()->isVoidPointerType()) return false;
-            
-            return true;
-        }();
-        
-        if(!allocator_has_the_right_signature)
+        if(!allocator_type.isVoidPointerType())
         {
-            std::cout << "fourth parameter should be allocator (unsigned int num_samples) -> void*\n"; 
+            std::cout << "fourth parameter should be void *allocator\n"; 
             return false;
         }
         return true;
@@ -791,11 +773,11 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
         "*out_parameters = default_parameters();\n"
         "}\n";
     
-    std::string initialize_state_wrapper_declaration = "\nextern \"C\" void initialize_state_wrapper(void* parameters, void* out_initial_state, unsigned int num_channels, float sample_rate, allocator_t allocator);\n"
+    std::string initialize_state_wrapper_declaration = "\nextern \"C\" void initialize_state_wrapper(void* parameters, void* out_initial_state, unsigned int num_channels, float sample_rate, void *allocator);\n"
         "";
     
     std::string initialize_state_wrapper_definition = "\n"
-        "void initialize_state_wrapper(void* parameters_ptr, void* out_initial_state_ptr, unsigned int num_channels, float sample_rate, allocator_t allocator)\n"
+        "void initialize_state_wrapper(void* parameters_ptr, void* out_initial_state_ptr, unsigned int num_channels, float sample_rate, void *allocator)\n"
         "{\n"
         + parameters_struct_name + "* parameters = (" + parameters_struct_name + "*)parameters_ptr;\n"
         

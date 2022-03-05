@@ -3,16 +3,9 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
 
-typedef void*(*buffer_allocator_t)(unsigned int);
-
 typedef void(*audio_callback_t)(void*, void*, float**, unsigned int, unsigned int, float);
 typedef void(*default_parameters_t)(void*);
-typedef void(*initialize_state_t)(void*, void*, unsigned int, float, buffer_allocator_t);
-
-internal void* malloc_allocator(u32 byte_size)
-{
-    return malloc(byte_size);
-}
+typedef void(*initialize_state_t)(void*, void*, unsigned int, float, void*);
 
 
 enum Asset_File_Stage : u32 {
@@ -26,6 +19,9 @@ enum Asset_File_Stage : u32 {
     Asset_File_Stage_STAGE_UNLOADING,
     Asset_File_Stage_OK_TO_UNLOAD,
     Asset_File_Stage_UNLOADING,
+    Asset_File_Stage_STAGE_SWITCHING,
+    Asset_File_Stage_OK_TO_SWITCH,
+    Asset_File_Stage_SWITCHING,
 };
 
 
@@ -194,6 +190,13 @@ typedef struct
     Plugin_Descriptor* descriptor; 
     Plugin_Parameter_Value* parameter_values_audio_side;
     Plugin_Parameters_Ring_Buffer* ring;
+    
+    
+    real32** new_audio_file_buffer;
+    u64 new_audio_file_length;
+    u64 new_audio_file_read_cursor;
+    u64 new_audio_file_num_channels;
+    
 } Audio_Context;
 
 

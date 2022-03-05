@@ -14,7 +14,6 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 Easy : \
 \
-wav swap \
 No plugin parameter -> Load Plugin File prompt \
 Parameter skew factor \
 Display Compiler errors \
@@ -36,6 +35,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+~~wav swap~~ \
 ~~file browsing~~
 ~~Zoomable IR~~ \
 ~~don't call opengl_render_fft/ir when plugin isn't live~~ \

@@ -18,7 +18,7 @@ Parameters default_parameters() {
 State initialize_state(Parameters& param, 
                        const unsigned int num_channels, 
                        const float sample_rate,
-                       allocator_t allocator) {
+                       void *allocator) {
     State state = {0.1f};
     return state; 
 }

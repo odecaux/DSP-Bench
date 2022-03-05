@@ -22,7 +22,6 @@
 #include "win32_platform.h"
 #include "opengl.h"
 
-
 //NOTE hack ? is this a good idea ?
 enum App_Stage {
     App_Stage_LOADING,
@@ -60,6 +59,10 @@ typedef struct {
     WavData *file;
     Asset_File_Stage *stage;
 } Wav_Loader_Thread_Param;
+
+
+//TODO should not be a global
+char new_wav_buffer[1024];
 
 DWORD wav_loader_thread_proc(void *void_param)
 {
@@ -187,11 +190,11 @@ i32 main(i32 argc, char** argv)
         .stage = &wav_stage
     };
     HANDLE wav_loader_thread_handle;
-    wav_stage = Asset_File_Stage_STAGE_LOADING;
-    MemoryBarrier();
     
     if(audio_filename != nullptr)
     {
+        wav_stage = Asset_File_Stage_STAGE_LOADING;
+        MemoryBarrier();
         wav_loader_thread_handle = CreateThread(0, 0,
                                                 &wav_loader_thread_proc,
                                                 &wav_thread_param,
@@ -295,10 +298,10 @@ i32 main(i32 argc, char** argv)
         {
             if(wav_file.error == Wav_Success)
             {
-                audio_context.audio_file_buffer = wav_file.deinterleaved_buffer;
-                audio_context.audio_file_length = wav_file.samples_by_channel;
-                audio_context.audio_file_read_cursor = 0;
-                audio_context.audio_file_num_channels = wav_file.num_channels;
+                audio_context.new_audio_file_buffer = wav_file.deinterleaved_buffer;
+                audio_context.new_audio_file_length = wav_file.samples_by_channel;
+                audio_context.new_audio_file_read_cursor = 0;
+                audio_context.new_audio_file_num_channels = wav_file.num_channels;
                 
                 assert(InterlockedExchange((LONG volatile *) &wav_stage,
                                            Asset_File_Stage_STAGE_USAGE)
@@ -310,7 +313,33 @@ i32 main(i32 argc, char** argv)
                                            Asset_File_Stage_NONE)
                        == Asset_File_Stage_VALIDATING);
                 MessageBox( NULL , "", "Error reading wav file" , MB_OK);
+                //TODO y a pas à cleanup un buffer ici ?
             }
+        }
+        else if(InterlockedCompareExchange((LONG volatile *) &wav_stage,
+                                           Asset_File_Stage_SWITCHING,
+                                           Asset_File_Stage_OK_TO_SWITCH)
+                == Asset_File_Stage_OK_TO_SWITCH) 
+        {
+            for(i32 channel = 0; channel < wav_file.num_channels; channel++)
+                m_free(wav_file.deinterleaved_buffer[channel]);
+            m_free(wav_file.deinterleaved_buffer);
+            
+            wav_thread_param = {
+                .filename = new_wav_buffer,
+                .file = &wav_file,
+                .stage = &wav_stage
+            };
+            wav_loader_thread_handle;
+            assert(InterlockedExchange((LONG volatile *) &wav_stage,
+                                       Asset_File_Stage_STAGE_LOADING)
+                   == Asset_File_Stage_SWITCHING);
+            
+            wav_loader_thread_handle = CreateThread(0, 0,
+                                                    &wav_loader_thread_proc,
+                                                    &wav_thread_param,
+                                                    0, 0);
+            
         }
         
         if(InterlockedCompareExchange((LONG volatile *) &plugin_stage,
@@ -335,8 +364,7 @@ i32 main(i32 argc, char** argv)
                                           plugin_state_holder, 
                                           audio_parameters.num_channels,
                                           audio_parameters.sample_rate, 
-                                          &malloc_allocator
-                                          );
+                                          nullptr);
                 
                 for(auto param_idx = 0; param_idx < handle.descriptor.num_parameters; param_idx++)
                 {
@@ -387,7 +415,7 @@ i32 main(i32 argc, char** argv)
             }
             else
             {
-                assert(InterlockedExchange((LONG volatile *) &wav_stage,
+                assert(InterlockedExchange((LONG volatile *) &plugin_stage,
                                            Asset_File_Stage_NONE)
                        == Asset_File_Stage_VALIDATING);
                 
@@ -404,6 +432,7 @@ i32 main(i32 argc, char** argv)
         {
             
             bool parameters_were_tweaked = false;
+            bool load_wav_was_clicked = false;
             
             frame(handle.descriptor, 
                   &graphics_ctx, 
@@ -411,7 +440,8 @@ i32 main(i32 argc, char** argv)
                   frame_io, 
                   parameter_values_ui_side, 
                   &audio_context, 
-                  parameters_were_tweaked);
+                  &parameters_were_tweaked,
+                  &load_wav_was_clicked);
             
             if(parameters_were_tweaked)
             {
@@ -426,8 +456,23 @@ i32 main(i32 argc, char** argv)
                 memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
             }
             
-            //TODO hack
-            if(ui_state.selected_parameter_id != -1 && ui_state.selected_parameter_id < 255 && frame_io.mouse_clicked)
+            if(load_wav_was_clicked)
+            {
+                char filter[] = "Wav File\0*.wav\0";
+                if(win32_open_file(new_wav_buffer, sizeof(new_wav_buffer), filter))
+                {
+                    //Auto old_wave_stage = 
+                    InterlockedExchange((LONG volatile *) &wav_stage,
+                                        Asset_File_Stage_STAGE_SWITCHING);
+                    //TODO assert, dans quels états peut être old_wav_stage qui nous foutraient dans la merde ?
+                }
+                frame_io.mouse_down = false;
+            }
+            
+            //TODO les id c'est un hack
+            if(ui_state.selected_parameter_id != -1 && 
+               ui_state.selected_parameter_id < 255 && 
+               frame_io.mouse_clicked)
             {
                 ShowCursor(FALSE);
             }
@@ -435,6 +480,7 @@ i32 main(i32 argc, char** argv)
             {
                 ShowCursor(TRUE);
             }
+            
             opengl_render_ui(&opengl_ctx, &graphics_ctx);
         }
         else if(app_stage == App_Stage_FAILED)
