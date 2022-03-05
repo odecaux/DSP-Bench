@@ -17,7 +17,6 @@ Easy : \
 Parameter skew factor \
 Display Compiler errors \
 FFT processing available to the plugins \
-Zoomable IR \
 Options Blackman, Hamming, etc \
 Audio and Source file browsing -> swap -> hot swap \
 Plugin allocator and tracking -> automatic collection \
@@ -34,6 +33,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+~~Zoomable IR~~ \
 ~~don't call opengl_render_fft/ir when plugin isn't live~~ \
 ~~Loading screen~~ \
 ~~Self contained slider widget~~ \

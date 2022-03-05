@@ -281,6 +281,7 @@ typedef struct {
     Rect bounds;
     real32 *IR_buffer;
     u32 IR_sample_count;
+    real32 zoom_state;
 } Graphics_Context_IR;
 
 typedef struct {

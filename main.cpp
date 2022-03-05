@@ -24,10 +24,10 @@
 
 
 //NOTE hack ? is this a good idea ?
-enum UI_STAGE {
-    UI_STAGE_LOADING,
-    UI_STAGE_LIVE,
-    UI_STAGE_FAILED
+enum App_Stage {
+    App_Stage_LOADING,
+    App_Stage_LIVE,
+    App_Stage_FAILED
 };
 
 typedef struct {
@@ -37,7 +37,7 @@ typedef struct {
     void *clang_ctx;
     try_compile_t try_compile_f;
     
-    bool *compilation_is_over;
+    bool *return_flag;
 } Compiler_Thread_Param;
 
 DWORD compiler_thread_proc(void *void_param)
@@ -45,14 +45,14 @@ DWORD compiler_thread_proc(void *void_param)
     Compiler_Thread_Param *param = (Compiler_Thread_Param*)void_param;
     *param->handle = param->try_compile_f(param->source_filename, param->clang_ctx, param->errors);
     MemoryBarrier();
-    *param->compilation_is_over = true;
+    *param->return_flag = true;
     return 1;
 }
 
 typedef struct {
     const char *filename;
     WavData *file;
-    bool *loading_is_over;
+    bool *return_flag;
 } Wav_Loader_Thread_Param;
 
 DWORD wav_loader_thread_proc(void *void_param)
@@ -61,7 +61,7 @@ DWORD wav_loader_thread_proc(void *void_param)
     
     *param->file = windows_load_wav(param->filename);
     MemoryBarrier();
-    *param->loading_is_over = true;
+    *param->return_flag = true;
     return 1;
 }
 
@@ -130,7 +130,8 @@ i32 main(i32 argc, char** argv)
     CoInitializeEx(NULL, COINIT_MULTITHREADED); 
     
     Graphics_Context graphics_ctx = {};
-    graphics_ctx.window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT, }; 
+    graphics_ctx.window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT}; 
+    graphics_ctx.ir.zoom_state = 1.0f;
     
     Window_Context window = win32_init_window(&graphics_ctx.window_dim);
     
@@ -166,12 +167,12 @@ i32 main(i32 argc, char** argv)
     //~ Wav Init
     
     WavData wav_file;
-    bool wav_loading_is_over = false;
+    bool wav_loading_thread_has_returned = false;
     bool wav_is_already_loaded = false;
     Wav_Loader_Thread_Param wav_thread_param = {
         .filename = audio_filename,
         .file = &wav_file,
-        .loading_is_over = &wav_loading_is_over
+        .return_flag = &wav_loading_thread_has_returned
     };
     HANDLE wav_loader_thread_handle;
     
@@ -210,8 +211,8 @@ i32 main(i32 argc, char** argv)
         1024
     };
     
-    UI_STAGE ui_stage = UI_STAGE_LOADING;
-    bool compilation_is_over = false;
+    App_Stage app_stage = App_Stage_LOADING;
+    bool compiler_thread_has_returned = false;
     Plugin_Handle handle;
     
     Plugin_Parameter_Value *parameter_values_audio_side;
@@ -224,7 +225,7 @@ i32 main(i32 argc, char** argv)
         .errors = &errors,
         .clang_ctx = clang_ctx,
         .try_compile_f = try_compile_f,
-        .compilation_is_over = &compilation_is_over
+        .return_flag = &compiler_thread_has_returned
     };
     MemoryBarrier();
     
@@ -273,7 +274,7 @@ i32 main(i32 argc, char** argv)
         
         MemoryBarrier(); //TODO ???
         
-        if(wav_loading_is_over && !wav_is_already_loaded)
+        if(wav_loading_thread_has_returned && !wav_is_already_loaded)
         {
             if(wav_file.error == Wav_Success)
             {
@@ -287,9 +288,9 @@ i32 main(i32 argc, char** argv)
             wav_is_already_loaded = true;
         }
         
-        if(ui_stage == UI_STAGE_LOADING)
+        if(app_stage == App_Stage_LOADING)
         {
-            if(compilation_is_over)
+            if(compiler_thread_has_returned)
             {
                 win32_print_elapsed(time_program_begin, "time to compilation end");
                 
@@ -345,7 +346,6 @@ i32 main(i32 argc, char** argv)
                     InterlockedExchange8(&audio_context.plugin_valid, 1);
                     
                     //~ IR initialization
-                    
                     compute_IR(handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, parameter_values_ui_side);
                     
                     fft_perform(&fft);
@@ -354,11 +354,11 @@ i32 main(i32 argc, char** argv)
                     memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
                     
                     win32_print_elapsed(time_program_begin, "time to loaded");
-                    ui_stage = UI_STAGE_LIVE;
+                    app_stage = App_Stage_LIVE;
                 }
                 else
                 {
-                    ui_stage = UI_STAGE_FAILED;
+                    app_stage = App_Stage_FAILED;
                 }
             }
             else 
@@ -368,7 +368,7 @@ i32 main(i32 argc, char** argv)
             }
         }
         
-        if(ui_stage == UI_STAGE_LIVE)
+        if(app_stage == App_Stage_LIVE)
         {
             
             bool parameters_were_tweaked = false;
@@ -405,7 +405,7 @@ i32 main(i32 argc, char** argv)
             }
             opengl_render_ui(&opengl_ctx, &graphics_ctx);
         }
-        else if(ui_stage == UI_STAGE_FAILED)
+        else if(app_stage == App_Stage_FAILED)
         {
             draw_text(StringLit("Compilation Error"), { Vec2{0.0f, 0.0f}, graphics_ctx.window_dim }, Color_Front, &graphics_ctx.atlas);
             opengl_render_generic(&opengl_ctx, &graphics_ctx);

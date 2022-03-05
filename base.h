@@ -112,6 +112,19 @@ internal Rect rect_move_by(Rect bounds, Vec2 delta)
     return bounds;
 }
 
+internal Rect rect_drop_bottom(Rect rect, real32 margin_bottom)
+{
+    rect.dim.y -= margin_bottom;
+    return rect;
+}
+
+internal Rect rect_take_bottom(Rect rect, real32 margin_bottom)
+{
+    rect.origin.y += rect.dim.y - margin_bottom;
+    rect.dim.y = margin_bottom;
+    return rect;
+}
+
 internal Rect rect_drop_top(Rect rect, real32 margin_top)
 {
     rect.dim.y -= margin_top;

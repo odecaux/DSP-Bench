@@ -171,6 +171,43 @@ void compute_IR(Plugin_Handle& handle,
     m_free(IR_state_holder);
 }
 
+real32 simple_slider(real32 normalized_value, i32 id, 
+                     Rect bounds, IO io, 
+                     UI_State *ui_state, Graphics_Context *graphics_ctx)
+{
+    
+    draw_rectangle(bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    draw_slider(bounds, normalized_value, &graphics_ctx->atlas);
+    
+    if(io.mouse_clicked && rect_contains(bounds, io.mouse_position))
+    {
+        assert(ui_state->selected_parameter_id == -1);
+        ui_state->selected_parameter_id = id;
+    }
+    
+    bool dragging = io.mouse_down && (io.mouse_delta.x != 0.0f
+                                      || io.mouse_delta.y != 0.0f);
+    
+    if(ui_state->selected_parameter_id == id && io.mouse_clicked)
+    {
+        real32 mouse_x = io.mouse_position.x;
+        real32 normalized_mouse_value = (mouse_x - bounds.origin.x - (SLIDER_WIDTH / 2)) / (bounds.dim.x - SLIDER_WIDTH);
+        
+        return octave_clamp(normalized_mouse_value, 0.0f, 1.0f);
+    }
+    else if(ui_state->selected_parameter_id == id && dragging)
+    {
+        
+        real32 mouse_delta_x = (io.left_ctrl_down) ? io.mouse_delta.x / 4 : io.mouse_delta.x;
+        real32 normalized_delta = (mouse_delta_x) / (bounds.dim.x - SLIDER_WIDTH);
+        return octave_clamp(normalized_delta + normalized_value, 0.0f, 1.0f);
+    }
+    else
+    {
+        return normalized_value;
+    }
+}
+
 real32 slider(real32 normalized_value, i32 id, 
               String title, String current_value_label, String min_label, String max_label, Rect bounds, IO io, 
               UI_State *ui_state, Graphics_Context *graphics_ctx)
@@ -261,8 +298,7 @@ bool button(Rect bounds,
             UI_State *ui_state,
             IO *io)
 {
-    fill_rectangle(bounds, 0xffffffff, &graphics_ctx->atlas);
-    bounds = rect_remove_padding(bounds, 3.0f, 3.0f);
+    Rect outline_bounds = rect_remove_padding(bounds, 2.0f, 2.0f);
     
     bool hovered = rect_contains(bounds,io->mouse_position); 
     bool clicked = false;
@@ -273,16 +309,26 @@ bool button(Rect bounds,
     }
     bool down = ui_state->selected_parameter_id == id;
     
+    Rect text_bounds = rect_remove_padding(bounds, 10.0f, 10.0f);
     if(down)
-        draw_rectangle(bounds, 5.0f, 0xff007700, &graphics_ctx->atlas);
+    {
+        fill_rectangle(bounds, Color_Front, &graphics_ctx->atlas); 
+        draw_rectangle(outline_bounds, 3.0f, 0xff000000, &graphics_ctx->atlas);
+        draw_text(text, text_bounds, 0xff000000, &graphics_ctx->atlas);
+    }
     else if(hovered)
-        draw_rectangle(bounds, 5.0f, 0xff770000, &graphics_ctx->atlas);
+    {
+        fill_rectangle(bounds, 0xff000000, &graphics_ctx->atlas); 
+        draw_rectangle(outline_bounds, 3.0f, Color_Front, &graphics_ctx->atlas);
+        draw_text(text, text_bounds, Color_Front, &graphics_ctx->atlas);
+    }
     else
-        draw_rectangle(bounds, 4.0f, 0xff000000, &graphics_ctx->atlas);
+    {
+        fill_rectangle(bounds, 0xff000000, &graphics_ctx->atlas); 
+        draw_text(text, text_bounds, Color_Front, &graphics_ctx->atlas);
+    }
     
-    bounds = rect_remove_padding(bounds, 5.0f, 5.0f);
-    draw_text(text, bounds, 0xff000000, &graphics_ctx->atlas);
-    
+    draw_rectangle(bounds, 2.0f, Color_Front, &graphics_ctx->atlas);
     return clicked;
 }
 
@@ -301,38 +347,18 @@ void frame(Plugin_Descriptor& descriptor,
     }
     
     Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };
-    Rect header_bounds = rect_remove_padding(rect_take_top(window_bounds, TITLE_HEIGHT), 10.0f, 10.0f);
+    Rect header_bounds = rect_remove_padding(rect_take_top(window_bounds, TITLE_HEIGHT + 10.0f), 5.0f, 10.0f);
     window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT);
+    Rect footer_bounds = rect_remove_padding(rect_take_bottom(window_bounds, TITLE_HEIGHT + 10.0f
+                                                              ), 5.0f, 10.0f);
+    window_bounds = rect_drop_bottom(window_bounds, TITLE_HEIGHT);
     
     
-    
-    Rect title_bounds = rect_drop_right(header_bounds,  TITLE_HEIGHT * 3);
+    Rect title_bounds = rect_drop_right(header_bounds,  TITLE_HEIGHT);
     draw_rectangle(title_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     draw_text(descriptor.name, title_bounds, Color_Front, &graphics_ctx->atlas);
+    Rect plugin_play_stop_bounds = rect_take_right(header_bounds, TITLE_HEIGHT);
     
-    Rect audio_buttons_panel_bounds = rect_take_right(header_bounds, TITLE_HEIGHT * 3);
-    draw_rectangle(audio_buttons_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    Rect play_stop_bounds = rect_take_left(audio_buttons_panel_bounds, TITLE_HEIGHT);
-    Rect loop_bounds = rect_move_by(play_stop_bounds, {TITLE_HEIGHT, 0.0f});
-    Rect plugin_play_stop_bounds = rect_move_by(loop_bounds, {TITLE_HEIGHT, 0.0f});
-    
-    //TODO synchronization
-    if(button(play_stop_bounds, StringLit("Play/Stop"), 256, graphics_ctx, &ui_state, &frame_io))
-    {
-        if(audio_ctx->audio_file_play){
-            audio_ctx->audio_file_play = 0;
-            MemoryBarrier();
-            audio_ctx->audio_file_read_cursor = 0;
-        }
-        else{
-            audio_ctx->audio_file_play = 1;
-            MemoryBarrier();
-        }
-    }
-    if(button(loop_bounds, StringLit("Loop"), 257, graphics_ctx, &ui_state, &frame_io))
-    {
-        audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
-    }
     
     if(button(plugin_play_stop_bounds, StringLit("Plugin"), 258, graphics_ctx, &ui_state, &frame_io))
     {
@@ -340,8 +366,8 @@ void frame(Plugin_Descriptor& descriptor,
     }
     
     
-    Rect left_panel_bounds = rect_remove_padding(rect_take_left(window_bounds, PARAMETER_PANEL_WIDTH), 10.0f, 10.0f);
-    Rect right_panel_bounds = rect_remove_padding(rect_drop_left(window_bounds, PARAMETER_PANEL_WIDTH), 10.0f, 10.0f);
+    Rect left_panel_bounds = rect_remove_padding(rect_take_left(window_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
+    Rect right_panel_bounds = rect_remove_padding(rect_drop_left(window_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
     
     draw_rectangle(left_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     
@@ -455,30 +481,68 @@ void frame(Plugin_Descriptor& descriptor,
     
     draw_rectangle(right_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     
+    
     Rect ir_panel_bounds;
     Rect fft_panel_bounds;
     rect_split_vert_middle(right_panel_bounds, &ir_panel_bounds, &fft_panel_bounds);
     
+    //~IR
+    
     draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
-    Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
-    
-    
     draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &graphics_ctx->atlas); 
     
+    Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
+    Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
+    ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
+    
+    graphics_ctx->ir.zoom_state = simple_slider(graphics_ctx->ir.zoom_state, 600, zoom_slider_bounds, frame_io, &ui_state, graphics_ctx);
+    
     draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    //draw_IR(ir_graph_bounds /*, IR_min_buffer, IR_max_buffer, IR_pixel_count*/ , &graphics_ctx->ir);
     graphics_ctx->ir.bounds = ir_graph_bounds;
     
     
+    //~fft
     draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
     Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
     
-    
     draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &graphics_ctx->atlas); 
     draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    //draw_fft(fft_graph_bounds, &graphics_ctx->fft);
     graphics_ctx->fft.bounds = fft_graph_bounds;
+    
+    
+    //~footer
+    
+    
+    Rect play_loop_bounds = rect_take_right(footer_bounds, TITLE_HEIGHT * 2);
+    footer_bounds = rect_drop_right(footer_bounds, TITLE_HEIGHT * 2);
+    draw_rectangle(footer_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    
+    draw_rectangle(play_loop_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    
+    Rect play_stop_bounds = rect_take_left(play_loop_bounds, TITLE_HEIGHT);
+    Rect loop_bounds = rect_move_by(play_stop_bounds, {TITLE_HEIGHT, 0.0f});
+    
+    
+    //TODO synchronization
+    if(button(play_stop_bounds, StringLit("Play/Stop"), 256, graphics_ctx, &ui_state, &frame_io))
+    {
+        if(audio_ctx->audio_file_play){
+            audio_ctx->audio_file_play = 0;
+            MemoryBarrier();
+            audio_ctx->audio_file_read_cursor = 0;
+        }
+        else{
+            audio_ctx->audio_file_play = 1;
+            MemoryBarrier();
+        }
+    }
+    if(button(loop_bounds, StringLit("Loop"), 257, graphics_ctx, &ui_state, &frame_io))
+    {
+        audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
+    }
+    
+    
 }
 

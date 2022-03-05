@@ -847,8 +847,8 @@ void opengl_render_ir(OpenGL_Context_IR* opengl_ctx, Graphics_Context_IR* graphi
     
     
     i32 pixel_count = bounds.dim.x;
-    i32 sample_count = IR_BUFFER_LENGTH;
     assert(pixel_count >= 0);
+    i32 sample_count = i32(IR_BUFFER_LENGTH * graphics_ctx->zoom_state);
     
     Vec2 *temp = opengl_ctx->ir_integrate_temp_buffer;
     
@@ -908,7 +908,7 @@ void opengl_render_ir(OpenGL_Context_IR* opengl_ctx, Graphics_Context_IR* graphi
                         6 * sizeof(IR_Vertex),
                         ir_vertices);
         glBufferSubData(GL_TEXTURE_BUFFER, 0, 
-                        graphics_ctx->IR_sample_count * sizeof(real32), 
+                        i32(graphics_ctx->IR_sample_count * graphics_ctx->zoom_state)* sizeof(real32), 
                         graphics_ctx->IR_buffer);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         
