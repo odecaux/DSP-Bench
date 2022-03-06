@@ -14,15 +14,16 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 Easy : \
 \
+Time and frequency markers on the graphs \
 No plugin parameter -> Load Plugin File \
 Display Compiler errors \
 FFT processing available to the plugins \
-plugin optional hot swap \
 Plugin allocator and tracking -> automatic collection \
 Draggable IR \
 \
 Hard : \
 \
+plugin hot swap (optional) \
 Options Blackman, Hamming, etc \
 Command queue to audio thread : play, stop, parameter change (? full parameter state ?) \
 Reset State button \

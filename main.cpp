@@ -145,7 +145,6 @@ i32 main(i32 argc, char** argv)
     
     Graphics_Context graphics_ctx = {};
     graphics_ctx.window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT}; 
-    graphics_ctx.ir.zoom_state = 1.0f;
     
     Window_Context window = win32_init_window(&graphics_ctx.window_dim);
     
@@ -261,7 +260,8 @@ i32 main(i32 argc, char** argv)
     
     graphics_ctx.ir = {
         .IR_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH),
-        .IR_sample_count = IR_BUFFER_LENGTH
+        .IR_sample_count = IR_BUFFER_LENGTH,
+        .zoom_state = 1.0f
     };
     graphics_ctx.fft = {
         .fft_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH * 2),

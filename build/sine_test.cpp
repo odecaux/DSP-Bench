@@ -10,8 +10,8 @@ enum random_enum{
 
 struct Parameters{
     //INT_ARAM(0, 4) test_int_param;
-    //FLOAT_ARAM(0.0f, 1.0f) gain;
-    FLOAT_ARAM_LOG(500.0f, 20000.0f) frequency;
+    FLOAT_ARAM(0.0f, 1.0f) gain;
+    FLOAT_ARAM(500.0f, 20000.0f) frequency;
     //ENUM_ARAM(random_enum) test_enum_param;
 };
 
@@ -22,7 +22,7 @@ struct State{
 
 Parameters default_parameters()
 {
-    Parameters initial_state = {1000.0f};//, 2000.0f};
+    Parameters initial_state = {0.1f, 1000.0f};//, 2000.0f};
     return initial_state;
 }
 
