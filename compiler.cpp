@@ -113,8 +113,6 @@ Clang_Context* create_clang_context_impl()
     llvm::initializeInstrumentation(Registry);
     llvm::initializeTarget(Registry);
     
-    
-    
     auto* clang_ctx = new Clang_Context();
     
     
@@ -132,40 +130,6 @@ Clang_Context* create_clang_context_impl()
     
     clang_ctx->module_pass_manager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
     
-    
-    clang::LangOptions language_options;
-    language_options.Bool = 1;
-    language_options.CPlusPlus = 1;
-    language_options.RTTI = 0;
-    language_options.CXXExceptions = 0;
-    language_options.MSVCCompat = 1;
-    language_options.MicrosoftExt = 1;
-    
-    
-    
-    clang_ctx->compiler_instance.createDiagnostics();
-    
-    auto triple = llvm::sys::getDefaultTargetTriple();
-    auto triple_str = "-triple=" + triple;
-    
-    clang::CompilerInvocation::CreateFromArgs(clang_ctx->compiler_instance.getInvocation(),
-                                              {
-                                                  triple_str.c_str(),
-                                                  "-Ofast", 
-                                                  "-fcxx-exceptions", 
-                                                  "-fms-extensions", 
-                                                  "-ffast-math", 
-                                                  "-fdenormal-fp-math=positive-zero"
-                                              }, 
-                                              clang_ctx->compiler_instance.getDiagnostics());
-    
-    
-    clang_ctx->compiler_instance.getTargetOpts().Triple = triple;
-    clang_ctx->compiler_instance.getLangOpts() = language_options;
-    
-    auto& header_opts = clang_ctx->compiler_instance.getHeaderSearchOpts();
-    //header_opts.Verbose = true;
-    header_opts.AddPath(".", clang::frontend::Quoted , false, false);
     
     
     
@@ -186,7 +150,39 @@ void errors_push(Compiler_Errors *errors, Compiler_Error new_error)
 
 Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx, Compiler_Errors *errors)
 {
-    auto& compiler_instance = clang_ctx->compiler_instance;
+    
+    clang::LangOptions language_options{};
+    language_options.Bool = 1;
+    language_options.CPlusPlus = 1;
+    language_options.RTTI = 0;
+    language_options.CXXExceptions = 0;
+    language_options.MSVCCompat = 1;
+    language_options.MicrosoftExt = 1;
+    
+    clang::CompilerInstance compiler_instance{};
+    compiler_instance.createDiagnostics();
+    
+    auto triple = llvm::sys::getDefaultTargetTriple();
+    auto triple_str = "-triple=" + triple;
+    
+    clang::CompilerInvocation::CreateFromArgs(compiler_instance.getInvocation(),
+                                              {
+                                                  triple_str.c_str(),
+                                                  "-Ofast", 
+                                                  "-fcxx-exceptions", 
+                                                  "-fms-extensions", 
+                                                  "-ffast-math", 
+                                                  "-fdenormal-fp-math=positive-zero"
+                                              }, 
+                                              compiler_instance.getDiagnostics());
+    
+    
+    compiler_instance.getTargetOpts().Triple = triple;
+    compiler_instance.getLangOpts() = language_options;
+    
+    auto& header_opts = compiler_instance.getHeaderSearchOpts();
+    //header_opts.Verbose = true;
+    header_opts.AddPath(".", clang::frontend::Quoted , false, false);
     
     compiler_instance.getFrontendOpts().Inputs.clear();
     auto kind = clang::InputKind(clang::Language::CXX);
@@ -194,7 +190,7 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx, C
     
     bool initial_compilation_succeeded = false;
     
-    String plugin_filename =  allocate_and_copy_llvm_stringref(compiler_instance.getFrontendOpts().Inputs.back().getFile());
+    String plugin_filename =  allocate_and_copy_llvm_stringref(compiler_instance.getFrontendOpts().Inputs.back().getFile().rsplit('\\').second);
     
     Compiler_Error error = Compiler_Initial_Compilation_Error;
     Plugin_Descriptor descriptor = {
@@ -249,6 +245,8 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx, C
     
     if(error == Compiler_Success) 
     {
+        
+        compiler_instance.getDiagnostics().Clear();
         //TODO buffer ref as a rvalue ? no bug ? 
         Plugin_Handle handle = jit_compile(new_buffer->getMemBufferRef(), 
                                            compiler_instance, 
@@ -560,19 +558,35 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
     
     
     //TODO c'est une liste I guess ?
-    u32 num_fields = 0;
-    for(const auto* _ : parameters_struct_decl->fields())
+    u32 num_annotated_parameters = 0;
+    for(const auto* field : parameters_struct_decl->fields())
     {
-        num_fields++;
+        if (field->hasAttr<clang::AnnotateAttr>()) 
+            num_annotated_parameters++;
+    }
+    
+    if(num_annotated_parameters == 0)
+    {
+        return {
+            .error = Compiler_Success,
+            .parameters_struct = {
+                .size = parameters_struct_size.getQuantity(),
+                .alignment = parameters_struct_alignment.getQuantity()
+            },
+            .state_struct = {
+                .size = state_struct_size.getQuantity(),
+                .alignment = state_struct_alignment.getQuantity()
+            },
+            .parameters = nullptr,
+            .num_parameters = 0
+        };
     }
     
     bool there_was_an_error = false;
-    
-    auto *anotated_parameters = (Plugin_Descriptor_Parameter*)malloc(sizeof(Plugin_Descriptor_Parameter) * num_fields);
+    auto *anotated_parameters = (Plugin_Descriptor_Parameter*)malloc(sizeof(Plugin_Descriptor_Parameter) * num_annotated_parameters);
     u32 anotated_parameter_idx = 0;
     for(const auto* field : parameters_struct_decl->fields())
     {
-        
         if (field->hasAttr<clang::AnnotateAttr>()) {
             
             clang::AnnotateAttr* attr = field->getAttr<clang::AnnotateAttr>();
@@ -679,12 +693,10 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
                     
                     if(param_strings.size() == 3)
                     {
-                        std::cout << "3 params\n";
                         parameter.float_param.log = false;
                     }
                     else
                     {
-                        std::cout << "4 params\n";
                         if(param_strings[3] == "log"){
                             parameter.float_param.log = true;
                         }
@@ -711,7 +723,6 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
                     for(auto _: maybe_enum->getDecl()->enumerators())
                         enum_param.num_entries++;
                     
-                    //TODO est-ce que je vais avoir le droit de le free dans l'exe, différentes heap
                     enum_param.entries = new Parameter_Enum_Entry[enum_param.num_entries];
                     
                     auto i = 0;
@@ -736,10 +747,6 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
         }
     }
     
-    u32 anotated_parameter_count = anotated_parameter_idx;
-    anotated_parameters = (Plugin_Descriptor_Parameter*) realloc(anotated_parameters, sizeof(Plugin_Descriptor_Parameter) * anotated_parameter_count);
-    
-    
     return {
         .error = there_was_an_error ? Compiler_Generic_Error : Compiler_Success,
         .parameters_struct = {
@@ -751,7 +758,7 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
             .alignment = state_struct_alignment.getQuantity()
         },
         .parameters = anotated_parameters,
-        .num_parameters = anotated_parameter_count
+        .num_parameters = num_annotated_parameters
     };
 }
 
@@ -849,8 +856,9 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
         return { .error = Compiler_Rewritten_Compilation_Error };
     
     if(compiler_instance.getDiagnostics().getNumErrors() != 0)
+    {
         return { .error = Compiler_Rewritten_Compilation_Error };
-    
+    }
     std::unique_ptr<llvm::Module> module = compile_action->takeModule();
     
     if(!module) 
@@ -893,14 +901,42 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
 extern "C" __declspec(dllexport) 
 void release_jit(Plugin_Handle *plugin)
 {
-    //delete engine;
-    //delete module;
-    //delete llvm;
     
-    delete (llvm::ExecutionEngine *)plugin->llvm_jit_engine;
-    plugin->audio_callback_f = nullptr;
-    plugin->default_parameters_f = nullptr;
-    plugin->initialize_state_f = nullptr;
+    Plugin_Descriptor_Parameter *params = plugin->descriptor.parameters;
+    
+    delete plugin->descriptor.name.str;
+    
+    if(plugin->descriptor.num_parameters == 0)
+    {
+        assert(plugin->descriptor.parameters == nullptr);
+    }
+    else{
+        for(i32 i = 0; i < plugin->descriptor.num_parameters; i++)
+        {
+            if(params[i].type == Enum)
+            {
+                if(params[i].enum_param.num_entries != 0)
+                {
+                    for(i32 j = 0; j < params[i].enum_param.num_entries; j++)
+                        delete params[i].enum_param.entries[j].name.str;
+                    delete params[i].enum_param.entries;
+                }
+                else
+                {
+                    assert(params[i].enum_param.entries == nullptr);
+                }
+            }
+            delete params[i].name.str;
+        }
+        delete plugin->descriptor.parameters;
+    }
+    
+    
+    if(plugin->llvm_jit_engine)
+        delete (llvm::ExecutionEngine *)plugin->llvm_jit_engine;
+    
+    *plugin = {};
+    assert(plugin->audio_callback_f == nullptr);
 }
 
 

@@ -22,6 +22,7 @@ enum Asset_File_Stage : u32 {
     Asset_File_Stage_STAGE_SWITCHING,
     Asset_File_Stage_OK_TO_SWITCH,
     Asset_File_Stage_SWITCHING,
+    Asset_File_Stage_FAILED,
 };
 
 
@@ -69,7 +70,7 @@ struct Compiler_Errors{
 };
 
 
-enum Plugin_Parameter_Type{
+enum  Plugin_Parameter_Type{
     Int,
     Float,
     Enum

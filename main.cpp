@@ -22,13 +22,6 @@
 #include "win32_platform.h"
 #include "opengl.h"
 
-//NOTE hack ? is this a good idea ?
-enum App_Stage {
-    App_Stage_LOADING,
-    App_Stage_LIVE,
-    App_Stage_FAILED
-};
-
 typedef struct {
     const char* source_filename;
     Plugin_Handle *handle;
@@ -47,7 +40,6 @@ DWORD compiler_thread_proc(void *void_param)
            == Asset_File_Stage_STAGE_LOADING);
     
     *param->handle = param->try_compile_f(param->source_filename, param->clang_ctx, param->errors);
-    
     assert(InterlockedExchange((LONG volatile*) param->stage,
                                Asset_File_Stage_SIDE_LOADED)
            == Asset_File_Stage_SIDE_LOADING);
@@ -62,7 +54,7 @@ typedef struct {
 
 
 //TODO should not be a global
-char new_wav_buffer[1024];
+char new_file_string[1024];
 
 DWORD wav_loader_thread_proc(void *void_param)
 {
@@ -218,6 +210,9 @@ i32 main(i32 argc, char** argv)
         return -1;
     }
     
+    typedef void(*release_jit_t)(Plugin_Handle*);
+    release_jit_t release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
+    
     typedef void*(*create_clang_context_t)();
     void* clang_ctx = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context")();
     
@@ -226,8 +221,6 @@ i32 main(i32 argc, char** argv)
         0,
         1024
     };
-    
-    App_Stage app_stage = App_Stage_LOADING;
     
     Plugin_Handle handle;
     
@@ -326,11 +319,10 @@ i32 main(i32 argc, char** argv)
             m_free(wav_file.deinterleaved_buffer);
             
             wav_thread_param = {
-                .filename = new_wav_buffer,
+                .filename = new_file_string,
                 .file = &wav_file,
                 .stage = &wav_stage
             };
-            wav_loader_thread_handle;
             assert(InterlockedExchange((LONG volatile *) &wav_stage,
                                        Asset_File_Stage_STAGE_LOADING)
                    == Asset_File_Stage_SWITCHING);
@@ -351,7 +343,7 @@ i32 main(i32 argc, char** argv)
             
             if(handle.error == Compiler_Success)
             {
-                
+                //release_jit(&handle);
                 parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
                 
                 parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
@@ -411,84 +403,114 @@ i32 main(i32 argc, char** argv)
                 memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
                 
                 win32_print_elapsed(time_program_begin, "time to loaded");
-                app_stage = App_Stage_LIVE;
             }
             else
             {
                 assert(InterlockedExchange((LONG volatile *) &plugin_stage,
-                                           Asset_File_Stage_NONE)
+                                           Asset_File_Stage_FAILED)
                        == Asset_File_Stage_VALIDATING);
-                
-                app_stage = App_Stage_FAILED;
             }
+        }
+        else if(InterlockedCompareExchange((LONG volatile *) &plugin_stage,
+                                           Asset_File_Stage_SWITCHING,
+                                           Asset_File_Stage_OK_TO_SWITCH)
+                == Asset_File_Stage_OK_TO_SWITCH) 
+        {
+            
+            release_jit(&handle);
+            handle = Plugin_Handle{};
+            
+            errors.count = 0;
+            compiler_thread_param = {
+                .source_filename = new_file_string,
+                .handle = &handle,
+                .errors = &errors, //TODO reset errors
+                .clang_ctx = clang_ctx,
+                .try_compile_f = try_compile_f,
+                .stage= &plugin_stage
+            };
+            
+            assert(InterlockedExchange((LONG volatile *) &plugin_stage,
+                                       Asset_File_Stage_STAGE_LOADING)
+                   == Asset_File_Stage_SWITCHING);
+            
+            compiler_thread_handle = 
+                CreateThread(0, 0,
+                             &compiler_thread_proc,
+                             &compiler_thread_param,
+                             0, 0);
+            
+            
         }
         
-        if(app_stage == App_Stage_LOADING) 
+        
+        bool parameters_were_tweaked = false;
+        bool load_wav_was_clicked = false;
+        bool load_plugin_was_clicked = false;
+        frame(handle.descriptor, 
+              &graphics_ctx, 
+              ui_state, 
+              frame_io, 
+              parameter_values_ui_side, 
+              &audio_context, 
+              &parameters_were_tweaked,
+              &load_wav_was_clicked,
+              &load_plugin_was_clicked);
+        
+        if(parameters_were_tweaked)
         {
-            draw_text(StringLit("Loading"), { Vec2{0.0f, 0.0f}, graphics_ctx.window_dim }, Color_Front, &graphics_ctx.atlas);
-            opengl_render_generic(&opengl_ctx, &graphics_ctx);
+            plugin_parameters_buffer_push(ring, parameter_values_ui_side);
+            compute_IR(handle, fft.IR_buffer, 
+                       IR_BUFFER_LENGTH, 
+                       audio_parameters, 
+                       parameter_values_ui_side);
+            fft_perform(&fft);
+            
+            memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
+            memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
         }
-        else if(app_stage == App_Stage_LIVE)
+        
+        if(load_wav_was_clicked)
         {
-            
-            bool parameters_were_tweaked = false;
-            bool load_wav_was_clicked = false;
-            
-            frame(handle.descriptor, 
-                  &graphics_ctx, 
-                  ui_state, 
-                  frame_io, 
-                  parameter_values_ui_side, 
-                  &audio_context, 
-                  &parameters_were_tweaked,
-                  &load_wav_was_clicked);
-            
-            if(parameters_were_tweaked)
+            char filter[] = "Wav File\0*.wav\0";
+            if(win32_open_file(new_file_string, sizeof(new_file_string), filter))
             {
-                plugin_parameters_buffer_push(ring, parameter_values_ui_side);
-                compute_IR(handle, fft.IR_buffer, 
-                           IR_BUFFER_LENGTH, 
-                           audio_parameters, 
-                           parameter_values_ui_side);
-                fft_perform(&fft);
-                
-                memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
-                memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
+                //Auto old_wave_stage = 
+                InterlockedExchange((LONG volatile *) &wav_stage,
+                                    Asset_File_Stage_STAGE_SWITCHING);
+                //TODO assert, dans quels états peut être old_wav_stage qui nous foutraient dans la merde ?
             }
-            
-            if(load_wav_was_clicked)
+            frame_io.mouse_down = false;
+        }
+        else if(load_plugin_was_clicked)
+        {
+            char filter[] = "C++ File\0*.cpp\0";
+            if(win32_open_file(new_file_string, sizeof(new_file_string), filter))
             {
-                char filter[] = "Wav File\0*.wav\0";
-                if(win32_open_file(new_wav_buffer, sizeof(new_wav_buffer), filter))
-                {
-                    //Auto old_wave_stage = 
-                    InterlockedExchange((LONG volatile *) &wav_stage,
-                                        Asset_File_Stage_STAGE_SWITCHING);
-                    //TODO assert, dans quels états peut être old_wav_stage qui nous foutraient dans la merde ?
-                }
-                frame_io.mouse_down = false;
+                //Auto old_wave_stage = 
+                InterlockedExchange((LONG volatile *) &plugin_stage,
+                                    Asset_File_Stage_STAGE_SWITCHING);
+                //TODO assert, dans quels états peut être old_wav_stage qui nous foutraient dans la merde ?
             }
-            
-            //TODO les id c'est un hack
-            if(ui_state.selected_parameter_id != -1 && 
-               ui_state.selected_parameter_id < 255 && 
-               frame_io.mouse_clicked)
-            {
-                ShowCursor(FALSE);
-            }
-            else if(ui_state.previous_selected_parameter_id != -1 && frame_io.mouse_released && ui_state.previous_selected_parameter_id < 255)
-            {
-                ShowCursor(TRUE);
-            }
-            
+            frame_io.mouse_down = false;
+        }
+        
+        //TODO les id c'est un hack
+        if(ui_state.selected_parameter_id != -1 && 
+           ui_state.selected_parameter_id < 255 && 
+           frame_io.mouse_clicked)
+        {
+            ShowCursor(FALSE);
+        }
+        else if(ui_state.previous_selected_parameter_id != -1 && frame_io.mouse_released && ui_state.previous_selected_parameter_id < 255)
+        {
+            ShowCursor(TRUE);
+        }
+        
+        if(plugin_stage == Asset_File_Stage_IN_USE)
             opengl_render_ui(&opengl_ctx, &graphics_ctx);
-        }
-        else if(app_stage == App_Stage_FAILED)
-        {
-            draw_text(StringLit("Compilation Error"), { Vec2{0.0f, 0.0f}, graphics_ctx.window_dim }, Color_Front, &graphics_ctx.atlas);
+        else
             opengl_render_generic(&opengl_ctx, &graphics_ctx);
-        }
-        
         
         i64 current_time;
         win32_get_elapsed_ms_since(last_time, &current_time, &frame_io.delta_time);
@@ -499,9 +521,6 @@ i32 main(i32 argc, char** argv)
     
     opengl_uninitialize(&opengl_ctx);
     
-    
-    typedef void(*release_jit_t)(Plugin_Handle*);
-    release_jit_t release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
     
     InterlockedExchange((LONG volatile *)&plugin_stage, Asset_File_Stage_STAGE_UNLOADING);
     

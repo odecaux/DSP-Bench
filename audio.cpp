@@ -139,7 +139,6 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
                               parameters.sample_rate);
         
     }
-    
     InterlockedCompareExchange((LONG volatile *) ctx->audio_file_stage,
                                Asset_File_Stage_OK_TO_UNLOAD,
                                Asset_File_Stage_STAGE_UNLOADING);
@@ -153,7 +152,6 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
     InterlockedCompareExchange((LONG volatile *) ctx->plugin_stage,
                                Asset_File_Stage_OK_TO_SWITCH,
                                Asset_File_Stage_STAGE_SWITCHING);
-    
 }
 
 

@@ -16,7 +16,8 @@ void frame(Plugin_Descriptor& descriptor,
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Context *audio_ctx,
            bool *parameters_were_tweaked,
-           bool *load_was_clicked);
+           bool *load_was_clicked,
+           bool *load_plugin_was_clicked);
 
 void compute_IR(Plugin_Handle& handle, 
                 real32** IR_buffer, 

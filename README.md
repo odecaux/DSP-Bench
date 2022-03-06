@@ -23,8 +23,8 @@ Draggable IR \
 \
 Hard : \
 \
-plugin hot swap (optional) \
-Options Blackman, Hamming, etc \
+plugin browser \
+plugin hot swap \
 Command queue to audio thread : play, stop, parameter change (? full parameter state ?) \
 Reset State button \
 Font sizes system (load multiple font sizes or stretch uv) \
@@ -35,10 +35,11 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+~~Plugin cold swap~~
 ~~Linear vs Logarithmic slider customization~~ \
 ~~logarithmic normalization~~ \
-~~wav swap~~ \
-~~file browsing~~
+~~Wav swap~~ \
+~~open file prompt~~
 ~~Zoomable IR~~ \
 ~~don't call opengl_render_fft/ir when plugin isn't live~~ \
 ~~Loading screen~~ \

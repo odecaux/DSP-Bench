@@ -58,7 +58,7 @@
 
 struct Clang_Context {
     bool succeeded = true;
-    clang::CompilerInstance compiler_instance;
+    //clang::CompilerInstance compiler_instance;
     llvm::LLVMContext llvm_context;
     
     llvm::ModulePassManager module_pass_manager;
@@ -94,8 +94,8 @@ internal String allocate_and_copy_llvm_stringref(llvm::StringRef llvm_stringref)
 {
     String new_string;
     new_string.size = llvm_stringref.size();
-    new_string.str = new char[llvm_stringref.size()]; //TODO string type
-    strcpy(new_string.str, llvm_stringref.data());
+    new_string.str = new char[llvm_stringref.size()]; 
+    strncpy(new_string.str, llvm_stringref.data(), new_string.size);
     return new_string;
 }
 

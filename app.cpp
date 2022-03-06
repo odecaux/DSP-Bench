@@ -313,7 +313,8 @@ void frame(Plugin_Descriptor& descriptor,
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Context *audio_ctx,
            bool *parameters_were_tweaked,
-           bool *load_wav_was_clicked)
+           bool *load_wav_was_clicked,
+           bool *load_plugin_was_clicked)
 {
     
     if(frame_io.mouse_released)
@@ -327,166 +328,224 @@ void frame(Plugin_Descriptor& descriptor,
     window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT);
     Rect footer_bounds = rect_remove_padding(rect_take_bottom(window_bounds, TITLE_HEIGHT + 10.0f
                                                               ), 5.0f, 10.0f);
-    window_bounds = rect_drop_bottom(window_bounds, TITLE_HEIGHT);
+    Rect main_panel_bounds = rect_drop_bottom(window_bounds, TITLE_HEIGHT);
     
     
-    Rect title_bounds = rect_drop_right(header_bounds,  TITLE_HEIGHT);
-    draw_rectangle(title_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    draw_text(descriptor.name, title_bounds, Color_Front, &graphics_ctx->atlas);
-    Rect plugin_play_stop_bounds = rect_take_right(header_bounds, TITLE_HEIGHT);
+    MemoryBarrier();
+    auto plugin_stage = *audio_ctx->plugin_stage;
+    MemoryBarrier();
     
-    
-    if(button(plugin_play_stop_bounds, StringLit("Plugin"), 258, graphics_ctx, &ui_state, &frame_io))
+    switch(plugin_stage)
     {
-        audio_ctx->plugin_play = audio_ctx->plugin_play == 0 ? 1 : 0;
-    }
-    
-    
-    Rect left_panel_bounds = rect_remove_padding(rect_take_left(window_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
-    Rect right_panel_bounds = rect_remove_padding(rect_drop_left(window_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
-    
-    draw_rectangle(left_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    
-    Rect parameter_bounds = left_panel_bounds;
-    parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
-    
-    for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters; parameter_idx++)
-    {
-        auto& current_parameter_value = current_parameter_values[parameter_idx];
-        auto& parameter_descriptor = descriptor.parameters[parameter_idx];
-        
-        switch(parameter_descriptor.type)
+        case Asset_File_Stage_IN_USE:
         {
-            case Int :
+            
+            Rect title_bounds = rect_drop_right(header_bounds,  TITLE_HEIGHT);
+            
+            Rect load_plugin_button_bounds = rect_take_left(title_bounds, TITLE_HEIGHT * 3);
+            title_bounds = rect_drop_left(title_bounds, TITLE_HEIGHT * 3);
+            
+            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, &ui_state, &frame_io))
             {
-                int current_value = current_parameter_value.int_value; 
-                char current_value_text[256];
-                int text_size = sprintf(current_value_text, "%d", current_value);
-                assert(text_size >= 0);
-                String current_value_label = {.str = current_value_text, .size = (u64)text_size};
+                *load_plugin_was_clicked = true;
+            }
+            
+            draw_rectangle(footer_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            
+            draw_rectangle(title_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            
+            draw_text(descriptor.name, title_bounds, Color_Front, &graphics_ctx->atlas);
+            Rect plugin_play_stop_bounds = rect_take_right(header_bounds, TITLE_HEIGHT);
+            
+            
+            if(button(plugin_play_stop_bounds, StringLit("Plugin"), 258, graphics_ctx, &ui_state, &frame_io))
+            {
+                audio_ctx->plugin_play = audio_ctx->plugin_play == 0 ? 1 : 0;
+            }
+            
+            Rect left_panel_bounds = rect_remove_padding(rect_take_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
+            Rect right_panel_bounds = rect_remove_padding(rect_drop_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
+            
+            draw_rectangle(left_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            
+            Rect parameter_bounds = left_panel_bounds;
+            parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
+            
+            for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters; parameter_idx++)
+            {
+                auto& current_parameter_value = current_parameter_values[parameter_idx];
+                auto& parameter_descriptor = descriptor.parameters[parameter_idx];
                 
-                real32 current_normalized_value = normalize_parameter_int_value(parameter_descriptor.int_param, current_value);
-                
-                
-                i32 min_value = parameter_descriptor.int_param.min;
-                char min_value_text[256];
-                text_size = sprintf(min_value_text, "%d", min_value);
-                assert(text_size >= 0);
-                String min_label = {.str = min_value_text, .size = (u64)text_size};
-                
-                i32 max_value = parameter_descriptor.int_param.max;
-                char max_value_text[256];
-                text_size = sprintf(max_value_text, "%d", max_value);
-                assert(text_size >= 0);
-                String max_label = {.str = max_value_text, .size = (u64)text_size};
-                
-                real32 new_normalized_value =
-                    slider(current_normalized_value, parameter_idx, 
-                           parameter_descriptor.name, current_value_label, min_label, max_label, 
-                           parameter_bounds, frame_io, &ui_state, graphics_ctx);
-                
-                if(new_normalized_value != current_normalized_value )
+                switch(parameter_descriptor.type)
                 {
-                    *parameters_were_tweaked = true;
-                    auto new_int_value = denormalize_int_value(parameter_descriptor.int_param, new_normalized_value);
-                    current_parameter_value.int_value = new_int_value;
+                    case Int :
+                    {
+                        int current_value = current_parameter_value.int_value; 
+                        char current_value_text[256];
+                        int text_size = sprintf(current_value_text, "%d", current_value);
+                        assert(text_size >= 0);
+                        String current_value_label = {.str = current_value_text, .size = (u64)text_size};
+                        
+                        real32 current_normalized_value = normalize_parameter_int_value(parameter_descriptor.int_param, current_value);
+                        
+                        
+                        i32 min_value = parameter_descriptor.int_param.min;
+                        char min_value_text[256];
+                        text_size = sprintf(min_value_text, "%d", min_value);
+                        assert(text_size >= 0);
+                        String min_label = {.str = min_value_text, .size = (u64)text_size};
+                        
+                        i32 max_value = parameter_descriptor.int_param.max;
+                        char max_value_text[256];
+                        text_size = sprintf(max_value_text, "%d", max_value);
+                        assert(text_size >= 0);
+                        String max_label = {.str = max_value_text, .size = (u64)text_size};
+                        
+                        real32 new_normalized_value =
+                            slider(current_normalized_value, parameter_idx, 
+                                   parameter_descriptor.name, current_value_label, min_label, max_label, 
+                                   parameter_bounds, frame_io, &ui_state, graphics_ctx);
+                        
+                        if(new_normalized_value != current_normalized_value )
+                        {
+                            *parameters_were_tweaked = true;
+                            auto new_int_value = denormalize_int_value(parameter_descriptor.int_param, new_normalized_value);
+                            current_parameter_value.int_value = new_int_value;
+                        }
+                        
+                    }break;
+                    case Float : 
+                    {
+                        real32 current_value = current_parameter_value.float_value; 
+                        char current_value_text[256];
+                        int text_size = sprintf(current_value_text, "%.3f", current_value);
+                        assert(text_size >= 0);
+                        String current_value_label = {.str = current_value_text, .size = (u64)text_size};
+                        
+                        real32 current_normalized_value = normalize_parameter_float_value(parameter_descriptor.float_param, current_value);
+                        
+                        real32 min_value = parameter_descriptor.float_param.min;
+                        char min_value_text[256];
+                        text_size = sprintf(min_value_text, "%.3f", min_value);
+                        assert(text_size >= 0);
+                        String min_label = {.str = min_value_text, .size = (u64)text_size};
+                        
+                        real32 max_value = parameter_descriptor.float_param.max;
+                        char max_value_text[256];
+                        text_size = sprintf(max_value_text, "%.3f", max_value);
+                        assert(text_size >= 0);
+                        String max_label = {.str = max_value_text, .size = (u64)text_size};
+                        
+                        real32 new_normalized_value =
+                            slider(current_normalized_value, parameter_idx, 
+                                   parameter_descriptor.name, current_value_label, min_label, max_label, 
+                                   parameter_bounds, frame_io, &ui_state, graphics_ctx);
+                        
+                        if(new_normalized_value != current_normalized_value)
+                        {
+                            *parameters_were_tweaked = true;
+                            auto new_float_value = denormalize_float_value(parameter_descriptor.float_param, new_normalized_value);
+                            current_parameter_value.float_value = new_float_value;
+                        }
+                        
+                    }break;
+                    case Enum : 
+                    {
+                        i32 index = current_parameter_value.enum_value;
+                        real32 current_normalized_value = normalize_parameter_enum_index(parameter_descriptor.enum_param, index);
+                        Parameter_Enum_Entry value = parameter_descriptor.enum_param.entries[index];
+                        
+                        real32 new_normalized_value =
+                            slider(current_normalized_value, parameter_idx, 
+                                   parameter_descriptor.name, value.name, {}, {}, 
+                                   parameter_bounds, frame_io, &ui_state, graphics_ctx);
+                        
+                        if(new_normalized_value != current_normalized_value)
+                        {
+                            *parameters_were_tweaked = true;
+                            auto new_index = denormalize_enum_index(parameter_descriptor.enum_param, new_normalized_value);
+                            auto new_value = enum_index_to_value(parameter_descriptor.enum_param, new_index);
+                            current_parameter_value.enum_value = new_value;
+                        }
+                        
+                    }break;
                 }
                 
-            }break;
-            case Float : 
-            {
-                real32 current_value = current_parameter_value.float_value; 
-                char current_value_text[256];
-                int text_size = sprintf(current_value_text, "%.3f", current_value);
-                assert(text_size >= 0);
-                String current_value_label = {.str = current_value_text, .size = (u64)text_size};
-                
-                real32 current_normalized_value = normalize_parameter_float_value(parameter_descriptor.float_param, current_value);
-                
-                real32 min_value = parameter_descriptor.float_param.min;
-                char min_value_text[256];
-                text_size = sprintf(min_value_text, "%.3f", min_value);
-                assert(text_size >= 0);
-                String min_label = {.str = min_value_text, .size = (u64)text_size};
-                
-                real32 max_value = parameter_descriptor.float_param.max;
-                char max_value_text[256];
-                text_size = sprintf(max_value_text, "%.3f", max_value);
-                assert(text_size >= 0);
-                String max_label = {.str = max_value_text, .size = (u64)text_size};
-                
-                real32 new_normalized_value =
-                    slider(current_normalized_value, parameter_idx, 
-                           parameter_descriptor.name, current_value_label, min_label, max_label, 
-                           parameter_bounds, frame_io, &ui_state, graphics_ctx);
-                
-                if(new_normalized_value != current_normalized_value)
-                {
-                    *parameters_were_tweaked = true;
-                    auto new_float_value = denormalize_float_value(parameter_descriptor.float_param, new_normalized_value);
-                    current_parameter_value.float_value = new_float_value;
-                }
-                
-            }break;
-            case Enum : 
-            {
-                i32 index = current_parameter_value.enum_value;
-                real32 current_normalized_value = normalize_parameter_enum_index(parameter_descriptor.enum_param, index);
-                Parameter_Enum_Entry value = parameter_descriptor.enum_param.entries[index];
-                
-                real32 new_normalized_value =
-                    slider(current_normalized_value, parameter_idx, 
-                           parameter_descriptor.name, value.name, {}, {}, 
-                           parameter_bounds, frame_io, &ui_state, graphics_ctx);
-                
-                if(new_normalized_value != current_normalized_value)
-                {
-                    *parameters_were_tweaked = true;
-                    auto new_index = denormalize_enum_index(parameter_descriptor.enum_param, new_normalized_value);
-                    auto new_value = enum_index_to_value(parameter_descriptor.enum_param, new_index);
-                    current_parameter_value.enum_value = new_value;
-                }
-                
-            }break;
-        }
+                //TODO fix
+                parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN * 2;
+            }
+            
+            
+            draw_rectangle(right_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            
+            
+            Rect ir_panel_bounds;
+            Rect fft_panel_bounds;
+            rect_split_vert_middle(right_panel_bounds, &ir_panel_bounds, &fft_panel_bounds);
+            
+            //~IR
+            
+            draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
+            draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &graphics_ctx->atlas); 
+            
+            Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
+            Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
+            ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
+            
+            graphics_ctx->ir.zoom_state = simple_slider(graphics_ctx->ir.zoom_state, 600, zoom_slider_bounds, frame_io, &ui_state, graphics_ctx);
+            
+            draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            graphics_ctx->ir.bounds = ir_graph_bounds;
+            
+            
+            //~fft
+            draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
+            Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
+            
+            draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &graphics_ctx->atlas); 
+            draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            graphics_ctx->fft.bounds = fft_graph_bounds;
+        } break;
+        case Asset_File_Stage_STAGE_LOADING :
+        case Asset_File_Stage_SIDE_LOADING :
+        case Asset_File_Stage_SIDE_LOADED :
+        case Asset_File_Stage_VALIDATING :
+        case Asset_File_Stage_STAGE_USAGE :
+        {
+            draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            draw_text(StringLit("Loading"), header_bounds, Color_Front, &graphics_ctx->atlas);
+        }break;
+        case Asset_File_Stage_STAGE_UNLOADING :
+        case Asset_File_Stage_OK_TO_UNLOAD :
+        case Asset_File_Stage_UNLOADING :
+        {
+            draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            draw_text(StringLit("Unloading"), header_bounds, Color_Front, &graphics_ctx->atlas);
+        }break;
+        case Asset_File_Stage_NONE :
+        {
+            draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            draw_text(StringLit("No plugin file"), header_bounds, Color_Front, &graphics_ctx->atlas);
+        }break;
         
-        //TODO fix
-        parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN * 2;
+        case Asset_File_Stage_FAILED :
+        {
+            
+            Rect load_plugin_button_bounds = rect_take_left(header_bounds, TITLE_HEIGHT * 3);
+            header_bounds = rect_drop_left(header_bounds, TITLE_HEIGHT * 3);
+            
+            draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            draw_text(StringLit("Compilation Error"), header_bounds, Color_Front, &graphics_ctx->atlas);
+            
+            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, &ui_state, &frame_io))
+            {
+                *load_plugin_was_clicked = true;
+            }
+            
+        }break;
     }
-    
-    
-    draw_rectangle(right_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    
-    
-    Rect ir_panel_bounds;
-    Rect fft_panel_bounds;
-    rect_split_vert_middle(right_panel_bounds, &ir_panel_bounds, &fft_panel_bounds);
-    
-    //~IR
-    
-    draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
-    draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &graphics_ctx->atlas); 
-    
-    Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
-    Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
-    ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
-    
-    graphics_ctx->ir.zoom_state = simple_slider(graphics_ctx->ir.zoom_state, 600, zoom_slider_bounds, frame_io, &ui_state, graphics_ctx);
-    
-    draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    graphics_ctx->ir.bounds = ir_graph_bounds;
-    
-    
-    //~fft
-    draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
-    Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
-    
-    draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &graphics_ctx->atlas); 
-    draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-    graphics_ctx->fft.bounds = fft_graph_bounds;
-    
     
     //~footer
     MemoryBarrier();
@@ -521,7 +580,7 @@ void frame(Plugin_Descriptor& descriptor,
                 audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
             }
             
-            draw_text(StringLit("todo : get filename, or IR, idk"), footer_bounds, Color_Front, &graphics_ctx->atlas);
+            draw_text(StringLit("todo : draw filename, waveform idk"), footer_bounds, Color_Front, &graphics_ctx->atlas);
             
         }break;
         case Asset_File_Stage_STAGE_LOADING :
@@ -543,9 +602,13 @@ void frame(Plugin_Descriptor& descriptor,
         {
             draw_text(StringLit("No audio file"), footer_bounds, Color_Front, &graphics_ctx->atlas);
         }break;
+        case Asset_File_Stage_FAILED :
+        {
+            draw_text(StringLit("Bad audio file"), footer_bounds, Color_Front, &graphics_ctx->atlas);
+        }break;
     }
-    Rect load_button_bounds = rect_take_left(footer_bounds, TITLE_HEIGHT * 2);
-    footer_bounds = rect_drop_left(footer_bounds, TITLE_HEIGHT * 2);
+    Rect load_button_bounds = rect_take_left(footer_bounds, TITLE_HEIGHT * 3);
+    footer_bounds = rect_drop_left(footer_bounds, TITLE_HEIGHT * 3);
     if(button(load_button_bounds, StringLit("Load"), 1024, graphics_ctx, &ui_state, &frame_io))
     {
         *load_wav_was_clicked = true;
