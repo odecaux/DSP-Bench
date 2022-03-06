@@ -36,6 +36,7 @@ typedef double real64;
 #define octave_min(x, y) (((x) < (y)) ? (x) : (y))
 #define octave_clamp(x, low, high) (((x) > (low)) ? (((x) < (high)) ? (x) : (high)) : (low))
 #define octave_abs(x) ((x > 0) ? (x) : -(x))
+#define octave_lerp(val, in_min, in_max, out_min, out_max) (out_min)+ ((out_max) - (out_min)) * ((val) - (in_min)) / ((in_max)- (in_min))
 
 typedef struct{
     union { 

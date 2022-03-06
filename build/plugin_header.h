@@ -8,6 +8,8 @@
 
 #define FLOAT_ARAM(min_value, max_value) __attribute__(( annotate( "Float " #min_value " " #max_value ) )) float
 
+#define FLOAT_ARAM_LOG(min_value, max_value) __attribute__(( annotate( "Float " #min_value " " #max_value " " "log") )) float
+
 #define ENUM_ARAM(enum_name)  __attribute__(( annotate( "Enum" ) )) enum_name
 
 

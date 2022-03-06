@@ -49,20 +49,15 @@ function real32 normalize_parameter_int_value(Parameter_Int param, real32 value)
 }
 
 
-function real32 normalize_parameter_float_value_log(Parameter_Float param, real32 value)
+
+function real32 normalize_parameter_float_value(Parameter_Float param, real32 value)
 {
     value = octave_clamp(value, param.min, param.max);
     
     if(value == param.min)
         return 0.0f;
-    else
+    else if(param.log == true)
         return log(value/param.min) / log(param.max/param.min);
-}
-
-function real32 normalize_parameter_float_value(Parameter_Float param, real32 value)
-{
-    if(value == param.min)
-        return 0.0f;
     else
         return (value - param.min)/(param.max - param.min);
 }
@@ -82,15 +77,12 @@ function i32 denormalize_int_value(Parameter_Int& parameter, real32 normalized_v
     return i32(normalized_value * (parameter.max - parameter.min) + parameter.min);
 }
 
-function real32 denormalize_float_value_log(Parameter_Float& parameter, real32 normalized_value)
-{
-    //in = octave_clamp(in, 0.0f, 1.0f);
-    return parameter.min* exp(normalized_value * log(parameter.max/parameter.min));
-}
-
 function real32 denormalize_float_value(Parameter_Float& parameter, real32 normalized_value)
 {
-    return normalized_value * (parameter.max - parameter.min) + parameter.min;
+    if(parameter.log == true)
+        return parameter.min* exp(normalized_value * log(parameter.max/parameter.min));
+    else
+        return normalized_value * (parameter.max - parameter.min) + parameter.min;
 }
 
 function u32 denormalize_enum_index(Parameter_Enum& parameter, real32 normalized_value)

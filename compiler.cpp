@@ -611,7 +611,7 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
                         return parameter;
                     }
                     
-                    if(param_strings.size() != 3) 
+                    if(param_strings.size() != 3 ) 
                     {
                         parameter.error = Compiler_Missing_Min_Max;
                         return parameter;
@@ -641,6 +641,7 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
                     {
                         parameter.error = Compiler_Min_Greater_Than_Max;
                     }
+                    
                 }
                 else if (param_strings[0] == "Float") 
                 {
@@ -651,7 +652,7 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
                         parameter.error = Compiler_Annotation_Type_Mismatch;
                         return parameter;
                     }
-                    if(param_strings.size() != 3) 
+                    if(param_strings.size() != 3 && param_strings.size() != 4) 
                     {
                         parameter.error = Compiler_Missing_Min_Max;
                         return parameter;
@@ -673,6 +674,24 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
                     if(min_end_ptr && max_end_ptr && min >= max)
                     {
                         parameter.error = Compiler_Min_Greater_Than_Max;
+                    }
+                    
+                    
+                    if(param_strings.size() == 3)
+                    {
+                        std::cout << "3 params\n";
+                        parameter.float_param.log = false;
+                    }
+                    else
+                    {
+                        std::cout << "4 params\n";
+                        if(param_strings[3] == "log"){
+                            parameter.float_param.log = true;
+                        }
+                        else
+                        {
+                            parameter.error = Compiler_Invalid_Annotation;
+                        }
                     }
                 }
                 else if (param_strings[0] == "Enum") 

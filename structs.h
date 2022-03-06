@@ -84,6 +84,7 @@ typedef struct{
 typedef struct {
     real32 min;
     real32 max;
+    bool log;
 } Parameter_Float;
 
 typedef struct{
