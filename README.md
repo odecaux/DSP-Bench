@@ -14,21 +14,21 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 Easy : \
 \
-Time and frequency markers on the graphs \
 No plugin parameter -> Load Plugin File \
 Display Compiler errors \
 FFT processing available to the plugins \
 Plugin allocator and tracking -> automatic collection \
 Draggable IR \
+Time and frequency markers on the graphs \
+Release assertions \
 \
 Hard : \
 \
-plugin browser \
-plugin hot swap \
+Plugin browser \
+Plugin hot swap \
 Command queue to audio thread : play, stop, parameter change (? full parameter state ?) \
 Reset State button \
 Font sizes system (load multiple font sizes or stretch uv) \
-Review Synchronization code \
 Proper memory layer \
 Beautiful UI \
 Plugin chain, maybe graph \

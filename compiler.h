@@ -32,7 +32,8 @@
 #include <clang/Basic/TargetInfo.h>
 #include <clang/CodeGen/CodeGenAction.h>
 
-#include <clang/Frontend/TextDiagnosticPrinter.h>
+
+#include "clang/Frontend/TextDiagnosticBuffer.h"
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Frontend/FrontendActions.h>
 #include <clang/Frontend/CompilerInstance.h>
@@ -70,7 +71,7 @@ struct Clang_Context {
 };
 
 struct Decl_Handle{
-    Compiler_Error error;
+    Custom_Error error;
     union {
         const clang::FunctionDecl* fun;
         const clang::CXXRecordDecl* record;
@@ -78,7 +79,7 @@ struct Decl_Handle{
 };
 
 struct Plugin_Required_Decls{
-    Compiler_Error error;
+    Custom_Error error;
     Decl_Handle audio_callback;
     Decl_Handle default_parameters;
     Decl_Handle initialize_state;
@@ -96,6 +97,16 @@ internal String allocate_and_copy_llvm_stringref(llvm::StringRef llvm_stringref)
     new_string.size = llvm_stringref.size();
     new_string.str = new char[llvm_stringref.size()]; 
     strncpy(new_string.str, llvm_stringref.data(), new_string.size);
+    return new_string;
+}
+
+
+internal String allocate_and_copy_std_string(const std::string& std_string)
+{
+    String new_string;
+    new_string.size = std_string.size();
+    new_string.str = new char[std_string.size()]; 
+    strncpy(new_string.str, std_string.data(), new_string.size);
     return new_string;
 }
 
@@ -186,6 +197,27 @@ internal void match_node(Matcher& matcher, Exec& exec, const Node& node, clang::
 } 
 
 
+Compiler_Location fun_to_return_loc(const clang::FunctionDecl& fun, const clang::SourceManager& source_manager)
+{
+    auto location = fun.getReturnTypeSourceRange().getBegin();
+    auto [file_id, offset] = source_manager.getDecomposedLoc(location);
+    return{
+        .line = source_manager.getLineNumber(file_id, offset),
+        .column = source_manager.getColumnNumber(file_id, offset)
+    };
+};
+
+
+Compiler_Location decl_to_loc(const clang::Decl& decl, const clang::SourceManager& source_manager)
+{
+    
+    clang::SourceLocation location = decl.getLocation();
+    auto [file_id, offset] = source_manager.getDecomposedLoc(location);
+    return{
+        .line = source_manager.getLineNumber(file_id, offset),
+        .column = source_manager.getColumnNumber(file_id, offset)
+    };
+};
 
 internal void print_parameter(Plugin_Descriptor_Parameter parameter)
 {
@@ -219,7 +251,8 @@ internal void print_parameter(Plugin_Descriptor_Parameter parameter)
 Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx);
 
 Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
-                                          const clang::CXXRecordDecl* state_struct_decl);
+                                          const clang::CXXRecordDecl* state_struct_decl,
+                                          const clang::SourceManager& source_manager);
 
 std::unique_ptr<llvm::MemoryBuffer> 
 rewrite_plugin_source(Plugin_Required_Decls decls,
@@ -232,9 +265,11 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
                           llvm::LLVMContext *llvm_context,
                           llvm::ModulePassManager& module_pass_manager,
                           llvm::ModuleAnalysisManager& module_analysis_manager,
-                          Compiler_Errors *errors);
+                          Compiler_Error_Log *error_log);
 
-Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_cts, Compiler_Errors *errors);
+Plugin_Handle try_compile_impl(const char* filename, 
+                               Clang_Context* clang_cts,
+                               Compiler_Error_Log *error_log);
 
 
 #if _WIN32

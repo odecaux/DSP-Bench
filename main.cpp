@@ -25,7 +25,7 @@
 typedef struct {
     const char* source_filename;
     Plugin_Handle *handle;
-    Compiler_Errors *errors;
+    Compiler_Error_Log *error_log;
     void *clang_ctx;
     try_compile_t try_compile_f;
     
@@ -39,7 +39,7 @@ DWORD compiler_thread_proc(void *void_param)
                                Asset_File_Stage_SIDE_LOADING)
            == Asset_File_Stage_STAGE_LOADING);
     
-    *param->handle = param->try_compile_f(param->source_filename, param->clang_ctx, param->errors);
+    *param->handle = param->try_compile_f(param->source_filename, param->clang_ctx, param->error_log);
     assert(InterlockedExchange((LONG volatile*) param->stage,
                                Asset_File_Stage_SIDE_LOADED)
            == Asset_File_Stage_SIDE_LOADING);
@@ -216,7 +216,7 @@ i32 main(i32 argc, char** argv)
     typedef void*(*create_clang_context_t)();
     void* clang_ctx = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context")();
     
-    Compiler_Errors errors = {
+    Compiler_Error_Log error_log = {
         m_allocate_array(Compiler_Error, 1024),
         0,
         1024
@@ -224,14 +224,14 @@ i32 main(i32 argc, char** argv)
     
     Plugin_Handle handle;
     
-    Plugin_Parameter_Value *parameter_values_audio_side;
-    Plugin_Parameter_Value *parameter_values_ui_side;
-    Plugin_Parameters_Ring_Buffer ring;
+    Plugin_Parameter_Value *parameter_values_audio_side = nullptr;
+    Plugin_Parameter_Value *parameter_values_ui_side = nullptr;
+    Plugin_Parameters_Ring_Buffer ring = {};
     
     Compiler_Thread_Param compiler_thread_param = {
         .source_filename = source_filename,
         .handle = &handle,
-        .errors = &errors,
+        .error_log = &error_log,
         .clang_ctx = clang_ctx,
         .try_compile_f = try_compile_f,
         .stage= &plugin_stage
@@ -283,6 +283,7 @@ i32 main(i32 argc, char** argv)
         
         frame_io = io_state_advance(frame_io);
         frame_io.mouse_position = win32_get_mouse_position(&window);
+        
         
         if(InterlockedCompareExchange((LONG volatile *) &wav_stage,
                                       Asset_File_Stage_VALIDATING,
@@ -341,7 +342,7 @@ i32 main(i32 argc, char** argv)
         {
             win32_print_elapsed(time_program_begin, "time to compilation end");
             
-            if(handle.error == Compiler_Success)
+            if(handle.error.flag == Compiler_Success)
             {
                 //release_jit(&handle);
                 parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
@@ -418,16 +419,32 @@ i32 main(i32 argc, char** argv)
         {
             
             release_jit(&handle);
-            handle = Plugin_Handle{};
             
-            errors.count = 0;
+            if(parameter_values_audio_side != nullptr)
+            {
+                m_free(parameter_values_audio_side);
+                parameter_values_audio_side = nullptr;
+            }
+            if(parameter_values_ui_side != nullptr)
+            {
+                m_free(parameter_values_ui_side);
+                parameter_values_ui_side = nullptr;
+            }
+            
+            if(ring.buffer != nullptr)
+            {
+                m_free(ring.buffer);
+                ring.buffer = nullptr;
+            }
+            
+            error_log.count = 0;
             compiler_thread_param = {
                 .source_filename = new_file_string,
                 .handle = &handle,
-                .errors = &errors, //TODO reset errors
+                .error_log = &error_log, //TODO reset errors
                 .clang_ctx = clang_ctx,
                 .try_compile_f = try_compile_f,
-                .stage= &plugin_stage
+                .stage = &plugin_stage
             };
             
             assert(InterlockedExchange((LONG volatile *) &plugin_stage,
@@ -453,9 +470,11 @@ i32 main(i32 argc, char** argv)
               frame_io, 
               parameter_values_ui_side, 
               &audio_context, 
+              &error_log,
               &parameters_were_tweaked,
               &load_wav_was_clicked,
-              &load_plugin_was_clicked);
+              &load_plugin_was_clicked
+              );
         
         if(parameters_were_tweaked)
         {

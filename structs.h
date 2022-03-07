@@ -10,21 +10,25 @@ typedef void(*initialize_state_t)(void*, void*, unsigned int, float, void*);
 
 enum Asset_File_Stage : u32 {
     Asset_File_Stage_NONE,
+    
     Asset_File_Stage_STAGE_LOADING,
     Asset_File_Stage_SIDE_LOADING,
     Asset_File_Stage_SIDE_LOADED,
     Asset_File_Stage_VALIDATING,
+    
     Asset_File_Stage_STAGE_USAGE,
     Asset_File_Stage_IN_USE,
+    
     Asset_File_Stage_STAGE_UNLOADING,
     Asset_File_Stage_OK_TO_UNLOAD,
     Asset_File_Stage_UNLOADING,
+    
     Asset_File_Stage_STAGE_SWITCHING,
     Asset_File_Stage_OK_TO_SWITCH,
     Asset_File_Stage_SWITCHING,
+    
     Asset_File_Stage_FAILED,
 };
-
 
 
 
@@ -33,16 +37,13 @@ enum Asset_File_Stage : u32 {
 //the use case where it doesn't work is signature checking, I don't have a separate handle for every parameter of the signature, but I still want to report the details of what went wrong
 //mayber I just need the location of the problem in the source ?
 
-enum Compiler_Error{
+enum Compiler_Error_Flag{
     Compiler_Success,
-    Compiler_Generic_Error,
-    
-    Compiler_Initial_Compilation_Error,
+    Compiler_Generic_Error, //TODO c'est pour aller voir plus loin dans le tree des erreurs, rename sub_error or smth
     
     Compiler_Too_Many_Fun,
     Compiler_No_Fun,
     Compiler_Wrong_Signature_Fun,
-    
     Compiler_Types_Mismatch,
     Compiler_Not_Record_Type,
     Compiler_Polymorphic,
@@ -59,11 +60,44 @@ enum Compiler_Error{
     
     Compiler_Struct_Parsing_Error,
     
-    Compiler_Rewritten_Compilation_Error,
+    Compiler_Clang_Error,
+    Compiler_Cant_Take_Module,
     Compiler_Cant_Launch_Jit,
 };
 
-struct Compiler_Errors{
+
+enum Compiler_Error_Type{
+    Compiler_Error_Type_Clang,
+    Compiler_Error_Type_Custom,
+    Compiler_Error_Type_Success
+};
+
+struct Compiler_Location{
+    u32 line;
+    u32 column;
+};
+
+struct Custom_Error{
+    Compiler_Error_Flag flag;
+    Compiler_Location location;
+    Compiler_Location location_2;
+    Compiler_Location location_3;
+};
+
+
+struct Clang_Error{
+    String error_message;
+};
+
+struct Compiler_Error {
+    Compiler_Error_Type type;
+    union{
+        Custom_Error custom;
+        Clang_Error clang;
+    };
+};
+
+struct Compiler_Error_Log{
     Compiler_Error *errors;
     u32 count;
     u32 capacity;
@@ -100,7 +134,7 @@ typedef struct {
 } Parameter_Enum;
 
 typedef struct {
-    Compiler_Error error;
+    Custom_Error error;
     String name;
     u32 offset;
     
@@ -116,7 +150,7 @@ typedef struct {
 typedef struct {
     String name;
     //le nom c'est le filename ?
-    Compiler_Error error;
+    Custom_Error error;
     struct { 
         i64 size;
         i64 alignment;
@@ -151,7 +185,7 @@ typedef struct{
 
 
 typedef struct {
-    Compiler_Error error;
+    Custom_Error error;
     Plugin_Descriptor descriptor;
     
     void* llvm_jit_engine;
@@ -160,7 +194,7 @@ typedef struct {
     initialize_state_t initialize_state_f;
 } Plugin_Handle;
 
-typedef Plugin_Handle(*try_compile_t)(const char*, const void*, Compiler_Errors*);
+typedef Plugin_Handle(*try_compile_t)(const char*, const void*, Compiler_Error_Log*);
 
 typedef struct 
 {

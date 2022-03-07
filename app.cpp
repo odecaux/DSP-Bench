@@ -312,6 +312,7 @@ void frame(Plugin_Descriptor& descriptor,
            IO frame_io, 
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Context *audio_ctx,
+           Compiler_Error_Log *error_log,
            bool *parameters_were_tweaked,
            bool *load_wav_was_clicked,
            bool *load_plugin_was_clicked)
@@ -538,6 +539,20 @@ void frame(Plugin_Descriptor& descriptor,
             
             draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
             draw_text(StringLit("Compilation Error"), header_bounds, Color_Front, &graphics_ctx->atlas);
+            
+            Rect error_message_bounds = rect_take_top(main_panel_bounds, TITLE_HEIGHT);
+            for(i32 i = 0; i < error_log->count; i++)
+            {
+                Compiler_Error *error = &error_log->errors[i];
+                if(error->type == Compiler_Error_Type_Clang)
+                    draw_text(error->clang.error_message, error_message_bounds, Color_Front, &graphics_ctx->atlas);
+                else if(error->type == Compiler_Error_Type_Custom)
+                    draw_text(StringLit("custom"), error_message_bounds, Color_Front, &graphics_ctx->atlas);
+                else
+                    assert(false);
+                
+                error_message_bounds = rect_move_by(error_message_bounds, {0.0f, TITLE_HEIGHT});
+            }
             
             if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, &ui_state, &frame_io))
             {
