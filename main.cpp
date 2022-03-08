@@ -22,34 +22,41 @@
 #include "win32_platform.h"
 #include "opengl.h"
 
+#ifdef DEBUG
+try_compile_t try_compile = nullptr;
+release_jit_t release_jit = nullptr;
+create_clang_context_t create_clang_context = nullptr;
+release_clang_context_t release_clang_context = nullptr; 
+
+#endif
+#ifdef RELEASE
+#include "compiler.h"
+#endif
+
 typedef struct {
     const char* source_filename;
-    Plugin_Handle *handle;
-    Compiler_Error_Log *error_log;
+    Plugin *handle;
     void *clang_ctx;
-    try_compile_t try_compile_f;
     
-    Asset_File_Stage *stage;
+    Asset_File_State *stage;
 } Compiler_Thread_Param;
 
 DWORD compiler_thread_proc(void *void_param)
 {
     Compiler_Thread_Param *param = (Compiler_Thread_Param*)void_param;
-    assert(InterlockedExchange((LONG volatile*) param->stage,
-                               Asset_File_Stage_SIDE_LOADING)
-           == Asset_File_Stage_STAGE_LOADING);
+    assert(exchange_32(param->stage, Asset_File_State_BACKGROUND_LOADING)
+           == Asset_File_State_STAGE_BACKGROUND_LOADING);
     
-    *param->handle = param->try_compile_f(param->source_filename, param->clang_ctx, param->error_log);
-    assert(InterlockedExchange((LONG volatile*) param->stage,
-                               Asset_File_Stage_SIDE_LOADED)
-           == Asset_File_Stage_SIDE_LOADING);
+    try_compile(param->source_filename, param->clang_ctx, param->handle);
+    assert(exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION)
+           == Asset_File_State_BACKGROUND_LOADING);
     return 1;
 }
 
 typedef struct {
     const char *filename;
     WavData *file;
-    Asset_File_Stage *stage;
+    Asset_File_State *stage;
 } Wav_Loader_Thread_Param;
 
 
@@ -59,15 +66,13 @@ char new_file_string[1024];
 DWORD wav_loader_thread_proc(void *void_param)
 {
     Wav_Loader_Thread_Param *param = (Wav_Loader_Thread_Param*)void_param;
-    assert(InterlockedExchange((LONG volatile*) param->stage,
-                               Asset_File_Stage_SIDE_LOADING)
-           == Asset_File_Stage_STAGE_LOADING);
+    assert(exchange_32(param->stage, Asset_File_State_BACKGROUND_LOADING)
+           == Asset_File_State_STAGE_BACKGROUND_LOADING);
     
     *param->file = windows_load_wav(param->filename);
     
-    assert(InterlockedExchange((LONG volatile*) param->stage,
-                               Asset_File_Stage_SIDE_LOADED)
-           == Asset_File_Stage_SIDE_LOADING);
+    assert(exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION)
+           == Asset_File_State_BACKGROUND_LOADING);
     return 1;
 }
 
@@ -153,14 +158,14 @@ i32 main(i32 argc, char** argv)
     win32_print_elapsed(time_program_begin, "time to graphics");
     
     //~ Audio Init
-    Asset_File_Stage wav_stage = Asset_File_Stage_NONE;
-    Asset_File_Stage plugin_stage = Asset_File_Stage_NONE;
+    Asset_File_State wav_state = Asset_File_State_NONE;
+    Asset_File_State plugin_state = Asset_File_State_NONE;
     
     void* platform_audio_context;
-    Audio_Context audio_context = {};
+    Audio_Thread_Context audio_context = {};
     audio_context.audio_file_play = 0;
-    audio_context.audio_file_stage = &wav_stage;
-    audio_context.plugin_stage = &plugin_stage;
+    audio_context.audio_file_state = &wav_state;
+    audio_context.plugin_state = &plugin_state;
     Audio_Parameters audio_parameters = {};
     MemoryBarrier();
     
@@ -178,13 +183,13 @@ i32 main(i32 argc, char** argv)
     Wav_Loader_Thread_Param wav_thread_param = {
         .filename = audio_filename,
         .file = &wav_file,
-        .stage = &wav_stage
+        .stage = &wav_state
     };
     HANDLE wav_loader_thread_handle;
     
     if(audio_filename != nullptr)
     {
-        wav_stage = Asset_File_Stage_STAGE_LOADING;
+        wav_state = Asset_File_State_STAGE_BACKGROUND_LOADING;
         MemoryBarrier();
         wav_loader_thread_handle = CreateThread(0, 0,
                                                 &wav_loader_thread_proc,
@@ -195,49 +200,34 @@ i32 main(i32 argc, char** argv)
     win32_print_elapsed(time_program_begin, "time to wav");
     
     //~ Compiler Init
-    
+#ifdef DEBUG
     HMODULE compiler_dll = LoadLibraryA("compiler.dll");
-    if(compiler_dll == NULL)
-    {
-        printf("couldn't find compiler.dll\n");
-        return -1;
-    }
+    assert(compiler_dll && "couldn't find compiler.dll");
     
-    auto try_compile_f = (try_compile_t)GetProcAddress(compiler_dll, "try_compile");
-    if(try_compile_f == NULL)
-    {
-        printf("couldnt find try_compile\n");
-        return -1;
-    }
+    try_compile = (try_compile_t)GetProcAddress(compiler_dll, "try_compile");
+    release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
+    create_clang_context = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context");
+    release_clang_context = (release_clang_context_t)GetProcAddress(compiler_dll, "release_clang_context");
     
-    typedef void(*release_jit_t)(Plugin_Handle*);
-    release_jit_t release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
+#endif
+    void* clang_ctx = create_clang_context();
     
-    typedef void*(*create_clang_context_t)();
-    void* clang_ctx = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context")();
-    
-    Compiler_Error_Log error_log = {
-        m_allocate_array(Compiler_Error, 1024),
-        0,
-        1024
-    };
-    
-    Plugin_Handle handle;
-    
-    Plugin_Parameter_Value *parameter_values_audio_side = nullptr;
-    Plugin_Parameter_Value *parameter_values_ui_side = nullptr;
-    Plugin_Parameters_Ring_Buffer ring = {};
+    Plugin handle {
+        .error_log = {
+            m_allocate_array(Compiler_Error, 1024),
+            0,
+            1024
+        }
+    }; 
     
     Compiler_Thread_Param compiler_thread_param = {
         .source_filename = source_filename,
         .handle = &handle,
-        .error_log = &error_log,
         .clang_ctx = clang_ctx,
-        .try_compile_f = try_compile_f,
-        .stage= &plugin_stage
+        .stage = &plugin_state
     };
     
-    plugin_stage = Asset_File_Stage_STAGE_LOADING;
+    plugin_state = Asset_File_State_STAGE_BACKGROUND_LOADING;
     MemoryBarrier();
     
     HANDLE compiler_thread_handle = 
@@ -285,35 +275,31 @@ i32 main(i32 argc, char** argv)
         frame_io.mouse_position = win32_get_mouse_position(&window);
         
         
-        if(InterlockedCompareExchange((LONG volatile *) &wav_stage,
-                                      Asset_File_Stage_VALIDATING,
-                                      Asset_File_Stage_SIDE_LOADED)
-           == Asset_File_Stage_SIDE_LOADED)
+        if(compare_exchange_32(&wav_state,
+                               Asset_File_State_VALIDATING,
+                               Asset_File_State_STAGE_VALIDATION))
         {
             if(wav_file.error == Wav_Success)
             {
+                /*
                 audio_context.new_audio_file_buffer = wav_file.deinterleaved_buffer;
                 audio_context.new_audio_file_length = wav_file.samples_by_channel;
                 audio_context.new_audio_file_read_cursor = 0;
                 audio_context.new_audio_file_num_channels = wav_file.num_channels;
-                
-                assert(InterlockedExchange((LONG volatile *) &wav_stage,
-                                           Asset_File_Stage_STAGE_USAGE)
-                       == Asset_File_Stage_VALIDATING);
+                */
+                assert(exchange_32(&wav_state, Asset_File_State_STAGE_USAGE)
+                       == Asset_File_State_VALIDATING);
             }
             else
             {
-                assert(InterlockedExchange((LONG volatile *) &wav_stage,
-                                           Asset_File_Stage_NONE)
-                       == Asset_File_Stage_VALIDATING);
-                MessageBox( NULL , "", "Error reading wav file" , MB_OK);
+                assert(exchange_32(&wav_state, Asset_File_State_FAILED)
+                       == Asset_File_State_VALIDATING);
                 //TODO y a pas à cleanup un buffer ici ?
             }
         }
-        else if(InterlockedCompareExchange((LONG volatile *) &wav_stage,
-                                           Asset_File_Stage_SWITCHING,
-                                           Asset_File_Stage_OK_TO_SWITCH)
-                == Asset_File_Stage_OK_TO_SWITCH) 
+        else if(compare_exchange_32(&wav_state,
+                                    Asset_File_State_COLD_RELOAD_UNLOADING,
+                                    Asset_File_State_COLD_RELOAD_STAGE_UNLOAD)) 
         {
             for(i32 channel = 0; channel < wav_file.num_channels; channel++)
                 m_free(wav_file.deinterleaved_buffer[channel]);
@@ -322,11 +308,11 @@ i32 main(i32 argc, char** argv)
             wav_thread_param = {
                 .filename = new_file_string,
                 .file = &wav_file,
-                .stage = &wav_stage
+                .stage = &wav_state
             };
-            assert(InterlockedExchange((LONG volatile *) &wav_stage,
-                                       Asset_File_Stage_STAGE_LOADING)
-                   == Asset_File_Stage_SWITCHING);
+            assert(exchange_32(&wav_state,
+                               Asset_File_State_STAGE_BACKGROUND_LOADING)
+                   == Asset_File_State_COLD_RELOAD_UNLOADING);
             
             wav_loader_thread_handle = CreateThread(0, 0,
                                                     &wav_loader_thread_proc,
@@ -335,68 +321,39 @@ i32 main(i32 argc, char** argv)
             
         }
         
-        if(InterlockedCompareExchange((LONG volatile *) &plugin_stage,
-                                      Asset_File_Stage_VALIDATING,
-                                      Asset_File_Stage_SIDE_LOADED)
-           == Asset_File_Stage_SIDE_LOADED)
+        if(compare_exchange_32(&plugin_state,
+                               Asset_File_State_VALIDATING,
+                               Asset_File_State_STAGE_VALIDATION))
         {
             win32_print_elapsed(time_program_begin, "time to compilation end");
             
             if(handle.error.flag == Compiler_Success)
             {
-                //release_jit(&handle);
-                parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
+                handle.parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
                 
-                parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
+                handle.parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, handle.descriptor.num_parameters);
                 
-                char* plugin_parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
-                char* plugin_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
+                handle.parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
+                handle.state_holder = (char*) malloc(handle.descriptor.state_struct.size);
                 
-                handle.default_parameters_f(plugin_parameters_holder);
-                handle.initialize_state_f(plugin_parameters_holder, 
-                                          plugin_state_holder, 
+                handle.default_parameters_f(handle.parameters_holder);
+                handle.initialize_state_f(handle.parameters_holder, 
+                                          handle.state_holder, 
                                           audio_parameters.num_channels,
                                           audio_parameters.sample_rate, 
                                           nullptr);
                 
-                for(auto param_idx = 0; param_idx < handle.descriptor.num_parameters; param_idx++)
-                {
-                    auto param_descriptor = handle.descriptor.parameters[param_idx];
-                    auto offset = param_descriptor.offset;
-                    switch(param_descriptor.type){
-                        case Int :
-                        {
-                            parameter_values_ui_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
-                            parameter_values_audio_side[param_idx].int_value = *(int*)(plugin_parameters_holder + offset);
-                        }break;
-                        case Float : 
-                        {
-                            parameter_values_ui_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
-                            parameter_values_audio_side[param_idx].float_value = *(float*)(plugin_parameters_holder + offset);
-                        }break;
-                        case Enum : 
-                        {
-                            parameter_values_ui_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
-                            parameter_values_audio_side[param_idx].enum_value = *(int*)(plugin_parameters_holder + offset);
-                            
-                        }break;
-                    }
-                }
-                ring = plugin_parameters_ring_buffer_initialize(handle.descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
+                plugin_set_parameter_values_from_holder(&handle.descriptor, handle.parameter_values_ui_side, handle.parameters_holder);
+                plugin_set_parameter_values_from_holder(&handle.descriptor, handle.parameter_values_audio_side, handle.parameters_holder);
+                handle.ring = plugin_parameters_ring_buffer_initialize(handle.descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
                 
-                audio_context.ring = &ring;
-                audio_context.audio_callback_f = handle.audio_callback_f;
-                audio_context.plugin_state_holder = plugin_state_holder;
-                audio_context.plugin_parameters_holder = plugin_parameters_holder;
-                audio_context.parameter_values_audio_side = parameter_values_audio_side;
-                audio_context.descriptor = &handle.descriptor;
+                audio_context.plugin = &handle;
                 
-                assert(InterlockedExchange((LONG volatile *) &plugin_stage,
-                                           Asset_File_Stage_STAGE_USAGE)
-                       == Asset_File_Stage_VALIDATING);
+                assert(exchange_32(&plugin_state, Asset_File_State_STAGE_USAGE)
+                       == Asset_File_State_VALIDATING);
                 
                 //~ IR initialization
-                compute_IR(handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, parameter_values_ui_side);
+                compute_IR(handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, handle.parameter_values_ui_side);
                 
                 fft_perform(&fft);
                 
@@ -407,49 +364,39 @@ i32 main(i32 argc, char** argv)
             }
             else
             {
-                assert(InterlockedExchange((LONG volatile *) &plugin_stage,
-                                           Asset_File_Stage_FAILED)
-                       == Asset_File_Stage_VALIDATING);
+                assert(exchange_32(&plugin_state, Asset_File_State_FAILED)
+                       == Asset_File_State_VALIDATING);
             }
         }
-        else if(InterlockedCompareExchange((LONG volatile *) &plugin_stage,
-                                           Asset_File_Stage_SWITCHING,
-                                           Asset_File_Stage_OK_TO_SWITCH)
-                == Asset_File_Stage_OK_TO_SWITCH) 
+        else if(compare_exchange_32(&plugin_state,
+                                    Asset_File_State_UNLOADING,
+                                    Asset_File_State_COLD_RELOAD_STAGE_UNLOAD)) 
         {
             
+            m_safe_free(handle.parameter_values_audio_side);
+            m_safe_free(handle.parameter_values_ui_side);
+            m_safe_free(handle.ring.buffer);
+            Compiler_Error *old_error_log_buffer = handle.error_log.errors;
+            
             release_jit(&handle);
+            handle = {};
             
-            if(parameter_values_audio_side != nullptr)
-            {
-                m_free(parameter_values_audio_side);
-                parameter_values_audio_side = nullptr;
-            }
-            if(parameter_values_ui_side != nullptr)
-            {
-                m_free(parameter_values_ui_side);
-                parameter_values_ui_side = nullptr;
-            }
+            handle.error_log = {
+                old_error_log_buffer,
+                0,
+                1024
+            };
             
-            if(ring.buffer != nullptr)
-            {
-                m_free(ring.buffer);
-                ring.buffer = nullptr;
-            }
-            
-            error_log.count = 0;
             compiler_thread_param = {
                 .source_filename = new_file_string,
                 .handle = &handle,
-                .error_log = &error_log, //TODO reset errors
                 .clang_ctx = clang_ctx,
-                .try_compile_f = try_compile_f,
-                .stage = &plugin_stage
+                .stage = &plugin_state
             };
             
-            assert(InterlockedExchange((LONG volatile *) &plugin_stage,
-                                       Asset_File_Stage_STAGE_LOADING)
-                   == Asset_File_Stage_SWITCHING);
+            assert(exchange_32(&plugin_state,
+                               Asset_File_State_STAGE_BACKGROUND_LOADING)
+                   == Asset_File_State_UNLOADING);
             
             compiler_thread_handle = 
                 CreateThread(0, 0,
@@ -468,9 +415,9 @@ i32 main(i32 argc, char** argv)
               &graphics_ctx, 
               ui_state, 
               frame_io, 
-              parameter_values_ui_side, 
+              handle.parameter_values_ui_side, 
               &audio_context, 
-              &error_log,
+              &handle.error_log,
               &parameters_were_tweaked,
               &load_wav_was_clicked,
               &load_plugin_was_clicked
@@ -478,11 +425,11 @@ i32 main(i32 argc, char** argv)
         
         if(parameters_were_tweaked)
         {
-            plugin_parameters_buffer_push(ring, parameter_values_ui_side);
+            plugin_parameters_buffer_push(handle.ring, handle.parameter_values_ui_side);
             compute_IR(handle, fft.IR_buffer, 
                        IR_BUFFER_LENGTH, 
                        audio_parameters, 
-                       parameter_values_ui_side);
+                       handle.parameter_values_ui_side);
             fft_perform(&fft);
             
             memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
@@ -494,10 +441,8 @@ i32 main(i32 argc, char** argv)
             char filter[] = "Wav File\0*.wav\0";
             if(win32_open_file(new_file_string, sizeof(new_file_string), filter))
             {
-                //Auto old_wave_stage = 
-                InterlockedExchange((LONG volatile *) &wav_stage,
-                                    Asset_File_Stage_STAGE_SWITCHING);
-                //TODO assert, dans quels états peut être old_wav_stage qui nous foutraient dans la merde ?
+                //Auto old_wave_state = 
+                exchange_32(&wav_state, Asset_File_State_COLD_RELOAD_STAGE_UNUSE);
             }
             frame_io.mouse_down = false;
         }
@@ -506,10 +451,9 @@ i32 main(i32 argc, char** argv)
             char filter[] = "C++ File\0*.cpp\0";
             if(win32_open_file(new_file_string, sizeof(new_file_string), filter))
             {
-                //Auto old_wave_stage = 
-                InterlockedExchange((LONG volatile *) &plugin_stage,
-                                    Asset_File_Stage_STAGE_SWITCHING);
-                //TODO assert, dans quels états peut être old_wav_stage qui nous foutraient dans la merde ?
+                //Auto old_wave_state = 
+                exchange_32(&plugin_state, Asset_File_State_COLD_RELOAD_STAGE_UNUSE);
+                //TODO assert, dans quels états peut être old_wav_state qui nous foutraient dans la merde ?
             }
             frame_io.mouse_down = false;
         }
@@ -526,7 +470,7 @@ i32 main(i32 argc, char** argv)
             ShowCursor(TRUE);
         }
         
-        if(plugin_stage == Asset_File_Stage_IN_USE)
+        if(plugin_state == Asset_File_State_IN_USE)
             opengl_render_ui(&opengl_ctx, &graphics_ctx);
         else
             opengl_render_generic(&opengl_ctx, &graphics_ctx);
@@ -541,14 +485,13 @@ i32 main(i32 argc, char** argv)
     opengl_uninitialize(&opengl_ctx);
     
     
-    InterlockedExchange((LONG volatile *)&plugin_stage, Asset_File_Stage_STAGE_UNLOADING);
+    exchange_32(&plugin_state, Asset_File_State_STAGE_UNLOADING);
     
     do{
         Sleep(4);
-    } while(InterlockedCompareExchange((LONG volatile *) &plugin_stage,
-                                       Asset_File_Stage_UNLOADING,
-                                       Asset_File_Stage_OK_TO_UNLOAD)
-            != Asset_File_Stage_OK_TO_UNLOAD);
+    } while(!compare_exchange_32(&plugin_state,
+                                 Asset_File_State_UNLOADING,
+                                 Asset_File_State_OK_TO_UNLOAD));
     
     release_jit(&handle);
     

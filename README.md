@@ -14,8 +14,9 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 Easy : \
 \
+Plugin hot swap \
+Proper memory layer \
 No plugin parameter -> Load Plugin File \
-Display Compiler errors \
 FFT processing available to the plugins \
 Plugin allocator and tracking -> automatic collection \
 Draggable IR \
@@ -25,16 +26,16 @@ Release assertions \
 Hard : \
 \
 Plugin browser \
-Plugin hot swap \
 Command queue to audio thread : play, stop, parameter change (? full parameter state ?) \
 Reset State button \
 Font sizes system (load multiple font sizes or stretch uv) \
-Proper memory layer \
 Beautiful UI \
 Plugin chain, maybe graph \
 \
 Done : \
 \
+~~Single executable Release build~~ \
+~~Display Compiler errors~~ \
 ~~Plugin cold swap~~
 ~~Linear vs Logarithmic slider customization~~ \
 ~~logarithmic normalization~~ \

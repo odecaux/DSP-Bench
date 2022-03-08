@@ -57,4 +57,6 @@ static void instrumented_free(void* address, const char* file, int line)
 
 #endif
 
+#define m_safe_free(pointer) if(pointer) { m_free(pointer); pointer = 0; }
+
 #endif //MEMORY_H

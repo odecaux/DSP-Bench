@@ -3,34 +3,41 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
 
-typedef void(*audio_callback_t)(void*, void*, float**, unsigned int, unsigned int, float);
-typedef void(*default_parameters_t)(void*);
-typedef void(*initialize_state_t)(void*, void*, unsigned int, float, void*);
+//~ Assets
 
-
-enum Asset_File_Stage : u32 {
-    Asset_File_Stage_NONE,
+enum Asset_File_State : u32 {
+    Asset_File_State_NONE,
     
-    Asset_File_Stage_STAGE_LOADING,
-    Asset_File_Stage_SIDE_LOADING,
-    Asset_File_Stage_SIDE_LOADED,
-    Asset_File_Stage_VALIDATING,
+    Asset_File_State_STAGE_BACKGROUND_LOADING,
+    Asset_File_State_BACKGROUND_LOADING,
+    Asset_File_State_STAGE_VALIDATION,
+    Asset_File_State_VALIDATING,
     
-    Asset_File_Stage_STAGE_USAGE,
-    Asset_File_Stage_IN_USE,
+    Asset_File_State_STAGE_USAGE,
+    Asset_File_State_IN_USE,
+    Asset_File_State_STAGE_UNLOADING,
+    Asset_File_State_OK_TO_UNLOAD,
+    Asset_File_State_UNLOADING,
     
-    Asset_File_Stage_STAGE_UNLOADING,
-    Asset_File_Stage_OK_TO_UNLOAD,
-    Asset_File_Stage_UNLOADING,
+    Asset_File_State_COLD_RELOAD_STAGE_UNUSE,
+    Asset_File_State_COLD_RELOAD_UNUSING,
+    Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
+    Asset_File_State_COLD_RELOAD_UNLOADING,
     
-    Asset_File_Stage_STAGE_SWITCHING,
-    Asset_File_Stage_OK_TO_SWITCH,
-    Asset_File_Stage_SWITCHING,
+    Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING,
+    Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING,
+    Asset_File_State_HOT_RELOAD_STAGE_VALIDATION,
+    Asset_File_State_HOT_RELOAD_VALIDATING,
+    Asset_File_State_HOT_RELOAD_STAGE_SWAP,
+    Asset_File_State_HOT_RELOAD_SWAPPING,
+    Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
+    Asset_File_State_HOT_RELOAD_DISPOSING,
+    Asset_File_State_HOT_RELOAD_STAGE_USAGE,
     
-    Asset_File_Stage_FAILED,
+    Asset_File_State_FAILED,
 };
 
-
+//~ Compiler Error Handling
 
 //TODO should be a struct, and include data, like which parameter is wrong
 //I do it the other way around for now : each handle says which type of error it has
@@ -102,6 +109,32 @@ struct Compiler_Error_Log{
     u32 count;
     u32 capacity;
 };
+
+//~ Audio File
+
+
+enum Wav_Reading_Error{
+    Wav_Success,
+    Wav_Could_Not_Open_File,
+    Wav_Not_A_RIFF,
+    Wav_File_Reading_Error,
+    Wav_Invalid_Format
+};
+
+typedef struct {
+    Wav_Reading_Error error;
+    u32 num_channels;
+    u32 samples_by_channel;
+    real32** deinterleaved_buffer;
+    u32 read_cursor;
+} Audio_File;
+
+
+//~ Plugin
+
+typedef void(*audio_callback_t)(void*, void*, float**, unsigned int, unsigned int, float);
+typedef void(*default_parameters_t)(void*);
+typedef void(*initialize_state_t)(void*, void*, unsigned int, float, void*);
 
 
 enum  Plugin_Parameter_Type{
@@ -186,15 +219,28 @@ typedef struct{
 
 typedef struct {
     Custom_Error error;
+    Compiler_Error_Log error_log;
     Plugin_Descriptor descriptor;
     
     void* llvm_jit_engine;
     audio_callback_t audio_callback_f;
     default_parameters_t default_parameters_f;
     initialize_state_t initialize_state_f;
-} Plugin_Handle;
+    
+    char* parameters_holder;
+    char* state_holder;
+    
+    Plugin_Parameter_Value* parameter_values_audio_side;
+    Plugin_Parameter_Value* parameter_values_ui_side;
+    Plugin_Parameters_Ring_Buffer ring;
+} Plugin;
 
-typedef Plugin_Handle(*try_compile_t)(const char*, const void*, Compiler_Error_Log*);
+typedef void(*try_compile_t)(const char*, const void*, Plugin*);
+typedef void(*release_jit_t)(Plugin*);
+typedef void*(*create_clang_context_t)();
+typedef void(*release_clang_context_t)(void* clang_context_void);
+
+//~ Audio
 
 typedef struct 
 {
@@ -204,37 +250,23 @@ typedef struct
     u32 bit_depth;
 } Audio_Parameters;
 
+
+
 typedef struct 
 {
-    Asset_File_Stage *audio_file_stage;
     i8 audio_file_play;
     i8 audio_file_loop;
-    
-    real32** audio_file_buffer;
-    u64 audio_file_length;
-    u64 audio_file_read_cursor;
-    u64 audio_file_num_channels;
-    
-    Asset_File_Stage *plugin_stage;
     i8 plugin_play;
-    audio_callback_t audio_callback_f;
     
-    char* plugin_parameters_holder;
-    char* plugin_state_holder;
+    Asset_File_State *plugin_state;
+    Asset_File_State *audio_file_state;
     
-    //TODO il se passe quoi si le ui thread s'arrête et que l'audio thread continue ?
-    Plugin_Descriptor* descriptor; 
-    Plugin_Parameter_Value* parameter_values_audio_side;
-    Plugin_Parameters_Ring_Buffer* ring;
-    
-    
-    real32** new_audio_file_buffer;
-    u64 new_audio_file_length;
-    u64 new_audio_file_read_cursor;
-    u64 new_audio_file_num_channels;
-    
-} Audio_Context;
+    Audio_File *audio_file;
+    Plugin *plugin;
+    Plugin *hot_swap_plugin;
+} Audio_Thread_Context;
 
+//~ UI
 
 typedef struct
 {
@@ -266,7 +298,6 @@ typedef struct
     bool left_ctrl_down;
 } IO;
 
-
 typedef u32 Color;
 
 enum Colors : u32 {
@@ -274,12 +305,14 @@ enum Colors : u32 {
     Color_Back = 0x00000000
 };
 
-
 typedef struct{
     i64 selected_parameter_id;
     i64 previous_selected_parameter_id;
 } UI_State;
 
+struct Window_Context;
+
+//~ Fonts
 
 //TODO types 
 typedef struct {
@@ -289,8 +322,6 @@ typedef struct {
     
     u32 codepoint; 
 } Glyph;
-
-
 
 typedef struct{
     float font_size; 
@@ -313,6 +344,7 @@ typedef struct{
     u32 atlas_texture_id;
 } Font;
 
+//~ Graphics
 
 typedef struct {
     Vec2 pos;
@@ -353,7 +385,7 @@ typedef struct {
     Graphics_Context_FFT fft;
 } Graphics_Context;
 
-struct Window_Context;
+//~ DSP/IR/FFT
 
 typedef struct {
     i32 fft_order;

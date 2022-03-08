@@ -5,8 +5,7 @@ call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build
 set my_inc="C:\llvm\debug_msvc\include"
 set my_lib="C:\llvm\debug_msvc\lib"
 
-set release_opts=-FC -GR- -EHa- /nologo /MT /O2 /D "NDEBUG"   /std:c++latest /w44624 /w44530 /w44244 
-set debug_opts=-FC -GR- -EHa- /Zi /nologo /MTd /DEBUG   /std:c++latest /w44624 /w44530 /w44244 
+set debug_opts=-FC -GR- -EHa- /Zi /nologo /MTd /DEBUG /D DEBUG   /std:c++latest /w44624 /w44530 /w44244 
 
 set code=%cd%
 

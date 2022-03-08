@@ -14,13 +14,6 @@ typedef struct {
     unsigned short      bit_depth;  // Number of bits per sample      
 } Wav_Format; 
 
-enum Wav_Reading_Error{
-    Wav_Success,
-    Wav_Could_Not_Open_File,
-    Wav_Not_A_RIFF,
-    Wav_File_Reading_Error,
-    Wav_Invalid_Format
-};
 
 typedef struct{
     char id[4];

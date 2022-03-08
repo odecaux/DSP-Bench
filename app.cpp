@@ -19,13 +19,6 @@
 
 #include "win32_helpers.h"
 
-//#define log printf
-//#define log noop_log
-
-int noop_log(const char *__restrict __format, ...){
-    return 1;
-}
-
 IO io_initial_state()
 {
     return {
@@ -135,7 +128,7 @@ IO io_state_advance(IO io)
     return io;
 }
 
-void compute_IR(Plugin_Handle& handle, 
+void compute_IR(Plugin& handle, 
                 real32** IR_buffer, 
                 u32 IR_length, 
                 Audio_Parameters& audio_parameters,
@@ -153,7 +146,7 @@ void compute_IR(Plugin_Handle& handle,
     char* IR_parameters_holder = (char*) m_allocate(handle.descriptor.parameters_struct.size);
     char* IR_state_holder = (char*) m_allocate(handle.descriptor.state_struct.size);
     
-    update_parameters_holder(&handle.descriptor, current_parameters_values, IR_parameters_holder);
+    plugin_set_parameter_holder_from_values(&handle.descriptor, current_parameters_values, IR_parameters_holder);
     
     handle.initialize_state_f(IR_parameters_holder, 
                               IR_state_holder, 
@@ -311,7 +304,7 @@ void frame(Plugin_Descriptor& descriptor,
            UI_State& ui_state, 
            IO frame_io, 
            Plugin_Parameter_Value* current_parameter_values,
-           Audio_Context *audio_ctx,
+           Audio_Thread_Context *audio_ctx,
            Compiler_Error_Log *error_log,
            bool *parameters_were_tweaked,
            bool *load_wav_was_clicked,
@@ -333,12 +326,12 @@ void frame(Plugin_Descriptor& descriptor,
     
     
     MemoryBarrier();
-    auto plugin_stage = *audio_ctx->plugin_stage;
+    auto plugin_state = *audio_ctx->plugin_state;
     MemoryBarrier();
     
-    switch(plugin_stage)
+    switch(plugin_state)
     {
-        case Asset_File_Stage_IN_USE:
+        case Asset_File_State_IN_USE:
         {
             
             Rect title_bounds = rect_drop_right(header_bounds,  TITLE_HEIGHT);
@@ -509,29 +502,29 @@ void frame(Plugin_Descriptor& descriptor,
             draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
             graphics_ctx->fft.bounds = fft_graph_bounds;
         } break;
-        case Asset_File_Stage_STAGE_LOADING :
-        case Asset_File_Stage_SIDE_LOADING :
-        case Asset_File_Stage_SIDE_LOADED :
-        case Asset_File_Stage_VALIDATING :
-        case Asset_File_Stage_STAGE_USAGE :
+        case Asset_File_State_STAGE_BACKGROUND_LOADING :
+        case Asset_File_State_BACKGROUND_LOADING :
+        case Asset_File_State_STAGE_VALIDATION :
+        case Asset_File_State_VALIDATING :
+        case Asset_File_State_STAGE_USAGE :
         {
             draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
             draw_text(StringLit("Loading"), header_bounds, Color_Front, &graphics_ctx->atlas);
         }break;
-        case Asset_File_Stage_STAGE_UNLOADING :
-        case Asset_File_Stage_OK_TO_UNLOAD :
-        case Asset_File_Stage_UNLOADING :
+        case Asset_File_State_STAGE_UNLOADING :
+        case Asset_File_State_OK_TO_UNLOAD :
+        case Asset_File_State_UNLOADING :
         {
             draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
             draw_text(StringLit("Unloading"), header_bounds, Color_Front, &graphics_ctx->atlas);
         }break;
-        case Asset_File_Stage_NONE :
+        case Asset_File_State_NONE :
         {
             draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
             draw_text(StringLit("No plugin file"), header_bounds, Color_Front, &graphics_ctx->atlas);
         }break;
         
-        case Asset_File_Stage_FAILED :
+        case Asset_File_State_FAILED :
         {
             
             Rect load_plugin_button_bounds = rect_take_left(header_bounds, TITLE_HEIGHT * 3);
@@ -564,11 +557,11 @@ void frame(Plugin_Descriptor& descriptor,
     
     //~footer
     MemoryBarrier();
-    auto audio_file_stage = *audio_ctx->audio_file_stage;
+    auto audio_file_state = *audio_ctx->audio_file_state;
     MemoryBarrier();
-    switch(audio_file_stage)
+    switch(audio_file_state)
     {
-        case Asset_File_Stage_IN_USE :
+        case Asset_File_State_IN_USE :
         {
             Rect play_loop_bounds = rect_take_right(footer_bounds, TITLE_HEIGHT * 2);
             footer_bounds = rect_drop_right(footer_bounds, TITLE_HEIGHT * 2);
@@ -583,7 +576,7 @@ void frame(Plugin_Descriptor& descriptor,
                 if(audio_ctx->audio_file_play){
                     audio_ctx->audio_file_play = 0;
                     MemoryBarrier();
-                    audio_ctx->audio_file_read_cursor = 0;
+                    audio_ctx->audio_file->read_cursor = 0;
                 }
                 else{
                     audio_ctx->audio_file_play = 1;
@@ -598,26 +591,26 @@ void frame(Plugin_Descriptor& descriptor,
             draw_text(StringLit("todo : draw filename, waveform idk"), footer_bounds, Color_Front, &graphics_ctx->atlas);
             
         }break;
-        case Asset_File_Stage_STAGE_LOADING :
-        case Asset_File_Stage_SIDE_LOADING :
-        case Asset_File_Stage_SIDE_LOADED :
-        case Asset_File_Stage_VALIDATING :
-        case Asset_File_Stage_STAGE_USAGE :
+        case Asset_File_State_STAGE_BACKGROUND_LOADING :
+        case Asset_File_State_BACKGROUND_LOADING :
+        case Asset_File_State_STAGE_VALIDATION :
+        case Asset_File_State_VALIDATING :
+        case Asset_File_State_STAGE_USAGE :
         {
             draw_text(StringLit("Loading"), footer_bounds, Color_Front, &graphics_ctx->atlas);
         }break;
-        case Asset_File_Stage_STAGE_UNLOADING :
-        case Asset_File_Stage_OK_TO_UNLOAD :
-        case Asset_File_Stage_UNLOADING :
+        case Asset_File_State_STAGE_UNLOADING :
+        case Asset_File_State_OK_TO_UNLOAD :
+        case Asset_File_State_UNLOADING :
         {
             draw_text(StringLit("Unloading"), footer_bounds, Color_Front, &graphics_ctx->atlas);
             
         }break;
-        case Asset_File_Stage_NONE :
+        case Asset_File_State_NONE :
         {
             draw_text(StringLit("No audio file"), footer_bounds, Color_Front, &graphics_ctx->atlas);
         }break;
-        case Asset_File_Stage_FAILED :
+        case Asset_File_State_FAILED :
         {
             draw_text(StringLit("Bad audio file"), footer_bounds, Color_Front, &graphics_ctx->atlas);
         }break;

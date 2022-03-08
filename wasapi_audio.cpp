@@ -79,14 +79,14 @@ struct WasapiContext{
     real32** user_buffer;
     
     Audio_Parameters param;
-    Audio_Context *audio_context;
+    Audio_Thread_Context *audio_context;
 };
 
 DWORD audio_thread_fn(LPVOID Context)
 {
     WasapiContext *wasapi_context = (WasapiContext*)Context;
     Audio_Parameters audio_parameters = wasapi_context->param;
-    Audio_Context *audio_context = wasapi_context->audio_context;
+    Audio_Thread_Context *audio_context = wasapi_context->audio_context;
     
     bool still_playing = true;
     HANDLE wait_array[2] = {wasapi_context->shutdown_event, wasapi_context->audio_sample_ready_event};
@@ -97,33 +97,6 @@ DWORD audio_thread_fn(LPVOID Context)
     
     while(still_playing)
     {
-        
-        //~pull context
-        Plugin_Parameters_Ring_Buffer* ring = audio_context->ring;
-        Plugin_Parameter_Value* parameter_values_audio_side = audio_context->parameter_values_audio_side;
-        Plugin_Descriptor* descriptor = audio_context->descriptor;
-        char* plugin_state_holder = audio_context->plugin_state_holder;
-        char* plugin_parameters_holder = audio_context->plugin_parameters_holder;
-        
-        //~
-        // update parameters
-        
-        //TODO mettre un memcopy ici ??? comme ça on a peut faire des trucs comme log sans que ça interfère avec le machin bidule
-        if(MemoryBarrier(); *audio_context->plugin_stage == Asset_File_Stage_IN_USE){
-            Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_buffer_pull(*ring);
-            if(maybe_new_parameter_values)
-            {
-                for(auto param_idx = 0; param_idx < ring->num_fields_by_plugin; param_idx++)
-                {
-                    parameter_values_audio_side[param_idx] = maybe_new_parameter_values[param_idx];
-                }
-                
-                MemoryBarrier();
-                assert(ring->num_fields_by_plugin == descriptor->num_parameters);
-                
-                update_parameters_holder(descriptor, parameter_values_audio_side, plugin_parameters_holder);
-            }
-        }
         
         //~
         // soundcard polling
@@ -242,9 +215,8 @@ DWORD audio_thread_fn(LPVOID Context)
 
 bool audio_initialize(void **out_ctx, 
                       Audio_Parameters *out_parameters, 
-                      Audio_Context* audio_context)
+                      Audio_Thread_Context* audio_context)
 {
-    
     auto *ctx = (WasapiContext*) malloc(sizeof(WasapiContext));
     
     
@@ -451,9 +423,6 @@ bool audio_initialize(void **out_ctx,
     
     //~ Thread
     ctx->audio_thread = CreateThread(0,0, audio_thread_fn, (void*)ctx, 0, 0);
-    
-    
-    
     
     *out_ctx = ctx;
     return true;

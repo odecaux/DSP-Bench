@@ -127,7 +127,7 @@ internal Font load_fonts(const char* font_filename)
         1.0f / texture_height
     };
     
-    printf("texture size : %d, %d\n", texture_width, texture_height);
+    //printf("texture size : %d, %d\n", texture_width, texture_height);
     //5) FINALLY RENDER TO A GRAYSCALE BITMAP
     
     u8 *grayscale_pixels = (u8*)m_allocate(texture_width * texture_height);
@@ -154,8 +154,6 @@ internal Font load_fonts(const char* font_filename)
     
     // End packing
     stbtt_PackEnd(&spc);
-    m_free(glyph_rects);
-    glyph_rects = NULL;
     
     const float font_scale = stbtt_ScaleForPixelHeight(&font_info, PIXEL_SIZE);
     int unscaled_ascent, unscaled_descent, unscaled_line_gap;
@@ -208,23 +206,33 @@ internal Font load_fonts(const char* font_filename)
         
         for(u16 x = 0; x < pc.x1 - pc.x0; x++)
         {
-            for(u16 y = 0; y < (pc.y1 - pc.y0 + 1) / 2 ; y++)
+            for(u16 y = 0; y < (pc.y1 - pc.y0) / 2 ; y++)
             {
                 u32 a_x = pc.x0 + x;
                 u32 a_y = pc.y0 + y;
                 u32 a_idx = a_x + texture_width * a_y;
                 u32 b_x = pc.x0 + x;
-                u32 b_y = pc.y1 - y;
+                u32 b_y = pc.y1 - y - 1;
                 u32 b_idx = b_x + texture_width * b_y;
                 
+                if(a_idx >= texture_width * texture_height)
+                {
+                    assert(false && "a_idx");
+                }
+                
+                if(b_idx >= texture_width * texture_height)
+                {
+                    assert(false && "b_idx");
+                }
                 u8 swap = grayscale_pixels[a_idx];
                 grayscale_pixels[a_idx] = grayscale_pixels[b_idx];
                 grayscale_pixels[b_idx] = swap;
             }
         }
-        
-        
     }
+    
+    
+    
     
     
     real32 *codepoint_to_advancex = m_allocate_array(real32, max_codepoint + 1);
@@ -258,10 +266,11 @@ internal Font load_fonts(const char* font_filename)
     
     
     
+    m_free(glyph_rects);
     m_free(font_file_buffer);
     m_free(codepoint_list);
     m_free(packedchars);
-    //m_free(grayscale_pixels);
+    m_free(grayscale_pixels);
     
     return {
         .font_size = PIXEL_SIZE,

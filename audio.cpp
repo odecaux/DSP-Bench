@@ -7,37 +7,31 @@
 #include "structs.h"
 #include "descriptor.h"
 #include "audio.h"
+#include "win32_helpers.h"
 
-
-void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Context* ctx)
+void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thread_Context* ctx)
 {
-    
     for(auto channel = 0; channel < parameters.num_channels; channel++)
     {
         memset(output_buffer[channel], 0, parameters.num_samples * sizeof(real32));
     }
     
-    if(InterlockedCompareExchange((LONG volatile *) ctx->audio_file_stage,
-                                  Asset_File_Stage_IN_USE,
-                                  Asset_File_Stage_STAGE_USAGE)
-       == Asset_File_Stage_STAGE_USAGE)
-    {
-        ctx->audio_file_buffer = ctx->new_audio_file_buffer;
-        ctx->audio_file_length = ctx->new_audio_file_length;
-        ctx->audio_file_read_cursor = ctx->new_audio_file_read_cursor;
-        ctx->audio_file_num_channels = ctx->new_audio_file_num_channels;
-    }
-    
-    if(InterlockedCompareExchange((LONG volatile *) ctx->plugin_stage,
-                                  Asset_File_Stage_IN_USE,
-                                  Asset_File_Stage_STAGE_USAGE)
-       == Asset_File_Stage_STAGE_USAGE)
+    if(compare_exchange_32(ctx->audio_file_state,
+                           Asset_File_State_IN_USE,
+                           Asset_File_State_STAGE_USAGE))
     {
         
     }
     
-    auto plugin_stage = *ctx->plugin_stage;
-    auto audio_file_stage = *ctx->audio_file_stage;
+    if(compare_exchange_32(ctx->plugin_state,
+                           Asset_File_State_IN_USE,
+                           Asset_File_State_STAGE_USAGE))
+    {
+        
+    }
+    
+    auto plugin_state = *ctx->plugin_state;
+    auto audio_file_state = *ctx->audio_file_state;
     
     MemoryBarrier();
     
@@ -45,13 +39,13 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
     u8 audio_file_play = ctx->audio_file_play;
     u8 audio_file_loop = ctx->audio_file_loop;
     
-    if(audio_file_stage == Asset_File_Stage_IN_USE &&
+    if(audio_file_state == Asset_File_State_IN_USE &&
        audio_file_play)
     {
-        real32** audio_file_buffer = ctx->audio_file_buffer;
-        u64 channels_to_write = octave_min(ctx->audio_file_num_channels, parameters.num_channels);
-        u64 audio_file_length = ctx->audio_file_length;
-        u64 read_cursor = ctx->audio_file_read_cursor;
+        real32** audio_file_buffer = ctx->audio_file->deinterleaved_buffer;
+        u64 channels_to_write = octave_min(ctx->audio_file->num_channels, parameters.num_channels);
+        u64 audio_file_length = ctx->audio_file->samples_by_channel;
+        u64 read_cursor = ctx->audio_file->read_cursor;
         u64 original_read_cursor = read_cursor;
         
         MemoryBarrier();
@@ -118,9 +112,9 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
             }
         }
         
-        InterlockedCompareExchange64((LONG64 volatile *)&ctx->audio_file_read_cursor,
-                                     read_cursor,
-                                     original_read_cursor);
+        compare_exchange_32(&ctx->audio_file->read_cursor,
+                            read_cursor,
+                            original_read_cursor);
         //zero buffers that don't map to a channel 
         for(auto channel = channels_to_write; channel < parameters.num_channels; channel++)
         {
@@ -128,30 +122,46 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Con
         }
     }
     
-    if(plugin_stage == Asset_File_Stage_IN_USE && 
-       plugin_play == 1)
+    if(plugin_state == Asset_File_State_IN_USE)
     {
-        ctx->audio_callback_f(ctx->plugin_parameters_holder,
-                              ctx->plugin_state_holder,
-                              output_buffer,
-                              parameters.num_channels,
-                              parameters.num_samples,
-                              parameters.sample_rate);
+        Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_buffer_pull(ctx->plugin->ring);
+        if(maybe_new_parameter_values)
+        {
+            for(auto param_idx = 0; param_idx < ctx->plugin->ring.num_fields_by_plugin; param_idx++)
+            {
+                ctx->plugin->parameter_values_audio_side[param_idx] = maybe_new_parameter_values[param_idx];
+            }
+            
+            MemoryBarrier();
+            assert(ctx->plugin->ring.num_fields_by_plugin == ctx->plugin->descriptor.num_parameters);
+            
+            plugin_set_parameter_holder_from_values(&ctx->plugin->descriptor, 
+                                                    ctx->plugin->parameter_values_audio_side, ctx->plugin->parameters_holder);
+        }
         
+        if(plugin_play == 1)
+        {
+            ctx->plugin->audio_callback_f(ctx->plugin->parameters_holder,
+                                          ctx->plugin->state_holder,
+                                          output_buffer,
+                                          parameters.num_channels,
+                                          parameters.num_samples,
+                                          parameters.sample_rate);
+        }
     }
-    InterlockedCompareExchange((LONG volatile *) ctx->audio_file_stage,
-                               Asset_File_Stage_OK_TO_UNLOAD,
-                               Asset_File_Stage_STAGE_UNLOADING);
-    InterlockedCompareExchange((LONG volatile *) ctx->plugin_stage,
-                               Asset_File_Stage_OK_TO_UNLOAD,
-                               Asset_File_Stage_STAGE_UNLOADING);
+    compare_exchange_32( ctx->audio_file_state,
+                        Asset_File_State_OK_TO_UNLOAD,
+                        Asset_File_State_STAGE_UNLOADING);
+    compare_exchange_32(ctx->plugin_state,
+                        Asset_File_State_OK_TO_UNLOAD,
+                        Asset_File_State_STAGE_UNLOADING);
     
-    InterlockedCompareExchange((LONG volatile *) ctx->audio_file_stage,
-                               Asset_File_Stage_OK_TO_SWITCH,
-                               Asset_File_Stage_STAGE_SWITCHING);
-    InterlockedCompareExchange((LONG volatile *) ctx->plugin_stage,
-                               Asset_File_Stage_OK_TO_SWITCH,
-                               Asset_File_Stage_STAGE_SWITCHING);
+    compare_exchange_32(ctx->audio_file_state,
+                        Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
+                        Asset_File_State_COLD_RELOAD_STAGE_UNUSE);
+    compare_exchange_32(ctx->plugin_state,
+                        Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
+                        Asset_File_State_COLD_RELOAD_STAGE_UNUSE);
 }
 
 

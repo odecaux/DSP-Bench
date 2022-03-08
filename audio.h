@@ -102,9 +102,9 @@ internal void interleave(real32** in, real32* out,
     }
 }
 
-bool audio_initialize(void** ctx, Audio_Parameters* parameters, Audio_Context* audio_context);
+bool audio_initialize(void** ctx, Audio_Parameters* parameters, Audio_Thread_Context* audio_context);
 void audio_uninitialize(void* ctx);
 
-void render_audio(real32** output_buffer, Audio_Parameters audio_parameters, Audio_Context *audio_context);
+void render_audio(real32** output_buffer, Audio_Parameters audio_parameters, Audio_Thread_Context *audio_context);
 
 #endif //AUDIO_H

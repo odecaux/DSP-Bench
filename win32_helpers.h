@@ -3,6 +3,22 @@
 #ifndef WIN32_HELPERS_H
 #define WIN32_HELPERS_H
 
+#define compare_exchange_8(address, new_value, old_value) (InterlockedCompareExchange((CHAR volatile *) address, new_value, old_value) == old_value)
+
+#define compare_exchange_32(address, new_value, old_value) (InterlockedCompareExchange((LONG volatile *) address, new_value, old_value) == old_value)
+#define compare_exchange_64(address, new_value, old_value) (InterlockedCompareExchange64((LONG64 volatile *) address, new_value, old_value) == old_value)
+#define compare_exchange_ptr(address, new_value, old_value) (InterlockedCompareExchangePointer((PVOID  volatile *) address, new_value, old_value) == old_value)
+
+
+#define exchange_8(address, new_value) InterlockedExchange((CHAR volatile *) address, new_value)
+
+#define exchange_32(address, new_value) InterlockedExchange((LONG volatile *) address, new_value)
+
+#define exchange_64(address, new_value) InterlockedExchange64((LONG64 volatile *) address, new_value)
+
+#define exchange_ptr(address, new_value) InterlockedExchangePointer((PVOID  volatile *) address, new_value)
+
+
 function i64 file_get_size(const char* filename)
 {
     HANDLE handle = CreateFileA(filename,

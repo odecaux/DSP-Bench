@@ -4,7 +4,7 @@
 #include "base.h"
 #include "structs.h"
 #include "descriptor.h"
-
+#include "win32_helpers.h"
 
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b)
 {
@@ -64,6 +64,59 @@ Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_f
     };
 }
 
+void plugin_set_parameter_values_from_holder(Plugin_Descriptor *descriptor,
+                                             Plugin_Parameter_Value *parameter_values_out,
+                                             char* holder)
+{
+    for(auto param_idx = 0; param_idx < descriptor->num_parameters; param_idx++)
+    {
+        auto param_descriptor = descriptor->parameters[param_idx];
+        auto offset = param_descriptor.offset;
+        switch(param_descriptor.type){
+            case Int :
+            {
+                parameter_values_out[param_idx].int_value = *(int*)(holder + offset);
+            }break;
+            case Float : 
+            {
+                parameter_values_out[param_idx].float_value = *(float*)(holder+ offset);
+            }break;
+            case Enum : 
+            {
+                parameter_values_out[param_idx].enum_value = *(int*)(holder + offset);
+            }break;
+        }
+    }
+}
+
+
+void plugin_set_parameter_holder_from_values(Plugin_Descriptor* descriptor, 
+                                             Plugin_Parameter_Value* new_values,
+                                             char* plugin_parameters_holder)
+{
+    for(auto param_idx = 0; param_idx < descriptor->num_parameters ; param_idx++)
+    {
+        auto& param_descriptor = descriptor->parameters[param_idx];
+        auto offset = param_descriptor.offset;
+        
+        switch(param_descriptor.type){
+            case Int :
+            {
+                *(int*)(plugin_parameters_holder + offset) = new_values[param_idx].int_value;
+            }break;
+            case Float : 
+            {
+                *(float*)(plugin_parameters_holder + offset) = new_values[param_idx].float_value;
+            }break;
+            case Enum : 
+            {
+                *(int*)(plugin_parameters_holder + offset) = new_values[param_idx].enum_value;
+            }break;
+        }
+    }
+}
+
+
 //TODO, ça marche pas, on sait pas qui c'est
 void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_Parameter_Value *new_parameters)
 {
@@ -76,12 +129,12 @@ void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_P
     if(ring.writer_idx == ring.buffer_size) 
         ring.writer_idx = 0;
     
-    InterlockedExchangePointer((void**)&ring.head, pointer_to_push);
+    exchange_ptr((void**)&ring.head, pointer_to_push);
 }
 
 Plugin_Parameter_Value* plugin_parameters_buffer_pull(Plugin_Parameters_Ring_Buffer& ring)
 {
-    Plugin_Parameter_Value *maybe_plugin_array =  (Plugin_Parameter_Value*) InterlockedExchangePointer((void**)&ring.head, nullptr);
+    Plugin_Parameter_Value *maybe_plugin_array =  (Plugin_Parameter_Value*) exchange_ptr((void**)&ring.head, nullptr);
     
     return maybe_plugin_array;
 }

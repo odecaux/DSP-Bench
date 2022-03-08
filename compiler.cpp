@@ -1,10 +1,272 @@
 
 
+#if _WIN32
+#pragma comment(lib, "version.lib")
+
+/* date = November 15th 2021 1:55 pm */
+#include <iostream>
+#include <cstdlib>
+#include <cstring>
+#include <sstream>
+#include <iterator>
+
+
+#include <clang/Lex/PreprocessorOptions.h>
+
+
+#include <clang/Sema/Sema.h>
+#include <llvm/Passes/OptimizationLevel.h>
+#include <clang/Serialization/PCHContainerOperations.h>
+#include <clang/Rewrite/Core/Rewriter.h>
+#include <clang/Basic/Builtins.h>
+#include <clang/AST/ASTContext.h>
+#include <clang/AST/RecordLayout.h>
+#include <clang/AST/ASTConsumer.h>
+#include <clang/Parse/ParseAST.h>
+#include <clang/ASTMatchers/ASTMatchers.h>
+#include <clang/ASTMatchers/ASTMatchFinder.h>
+
+#include <clang/Basic/DiagnosticOptions.h>
+#include <clang/Basic/Diagnostic.h>
+#include <clang/Basic/LangOptions.h>
+#include <clang/Basic/TargetInfo.h>
+#include <clang/CodeGen/CodeGenAction.h>
+
+
+#include "clang/Frontend/TextDiagnosticBuffer.h"
+#include <clang/Frontend/FrontendAction.h>
+#include <clang/Frontend/FrontendActions.h>
+#include <clang/Frontend/CompilerInstance.h>
+#include <clang/Frontend/CompilerInvocation.h>
+#include <clang/Tooling/Tooling.h>
+#include <clang/Rewrite/Frontend/FrontendActions.h>
+
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/MCJIT.h>
+#include <llvm/ExecutionEngine/SectionMemoryManager.h>
+#include <llvm/InitializePasses.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Support/MemoryBuffer.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/Host.h>
+#include <llvm/Support/DynamicLibrary.h>
+#include <llvm/Analysis/AliasAnalysis.h>
+
+#include "math.h"
+#include "base.h"
+#include "structs.h"
+
 #include "compiler.h"
 
 
+struct Clang_Context {
+    llvm::LLVMContext llvm_context;
+};
 
-extern "C" __declspec(dllexport) void* create_clang_context()
+struct Decl_Handle{
+    Custom_Error error;
+    union {
+        const clang::FunctionDecl* fun;
+        const clang::CXXRecordDecl* record;
+    };
+};
+
+struct Plugin_Required_Decls{
+    Custom_Error error;
+    Decl_Handle audio_callback;
+    Decl_Handle default_parameters;
+    Decl_Handle initialize_state;
+    Decl_Handle parameters_struct;
+    Decl_Handle state_struct;
+};
+
+
+
+Clang_Context* create_clang_context_impl();
+
+internal String allocate_and_copy_llvm_stringref(llvm::StringRef llvm_stringref)
+{
+    String new_string;
+    new_string.size = llvm_stringref.size();
+    new_string.str = new char[llvm_stringref.size()]; 
+    strncpy(new_string.str, llvm_stringref.data(), new_string.size);
+    return new_string;
+}
+
+
+internal String allocate_and_copy_std_string(const std::string& std_string)
+{
+    String new_string;
+    new_string.size = std_string.size();
+    new_string.str = new char[std_string.size()]; 
+    strncpy(new_string.str, std_string.data(), new_string.size);
+    return new_string;
+}
+
+template<typename Exec>
+class Consumer : public clang::ASTConsumer
+{
+    public:
+    explicit Consumer(Exec&& exec) : exec(exec), clang::ASTConsumer() { }
+    
+    virtual void HandleTranslationUnit(clang::ASTContext &Context)
+    {
+        exec(Context);
+    }
+    
+    Exec& exec;
+};
+
+
+
+template<typename Exec>
+class Action : public clang::ASTFrontendAction {
+    
+    Exec& exec;
+    
+    public:
+    
+    explicit Action(Exec&& exec) : exec{exec} {}
+    
+    virtual std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance &Compiler, llvm::StringRef InFile) {
+        return std::make_unique<Consumer<Exec>>(exec);
+    }
+};
+
+
+template<typename Exec>
+internal Action<Exec> make_action(Exec&&  exec)
+{
+    return Action<Exec>(exec); 
+}
+
+
+
+template<typename Exec>
+class MatchCallback : public clang::ast_matchers::MatchFinder::MatchCallback
+{
+    public:
+    explicit MatchCallback(Exec exec) : exec(exec) { }
+    
+    virtual void run(const clang::ast_matchers::MatchFinder::MatchResult& result)
+    {
+        exec(result);
+    }
+    
+    Exec& exec;
+};
+
+
+template<typename Exec>
+internal MatchCallback<Exec> make_match_callback(Exec&&  exec)
+{
+    return MatchCallback<Exec>(exec); 
+}
+
+template<typename Matcher, typename Exec>
+internal void match_ast(Matcher& matcher, Exec& exec, clang::ASTContext& ast_ctx)
+{
+    using namespace clang::ast_matchers;
+    
+    auto match_finder = MatchFinder{};
+    
+    
+    auto matcher_callback = make_match_callback(exec);
+    match_finder.addMatcher(matcher, &matcher_callback);
+    match_finder.matchAST(ast_ctx);
+} 
+
+template<typename Matcher, typename Exec, typename Node>
+internal void match_node(Matcher& matcher, Exec& exec, const Node& node, clang::ASTContext& ast_ctx)
+{
+    using namespace clang::ast_matchers;
+    
+    auto match_finder = MatchFinder{};
+    
+    
+    auto matcher_callback = make_match_callback(exec);
+    match_finder.addMatcher(matcher, &matcher_callback);
+    match_finder.match<Node>(node, ast_ctx);
+} 
+
+
+Compiler_Location fun_to_return_loc(const clang::FunctionDecl& fun, const clang::SourceManager& source_manager)
+{
+    auto location = fun.getReturnTypeSourceRange().getBegin();
+    auto [file_id, offset] = source_manager.getDecomposedLoc(location);
+    return{
+        .line = source_manager.getLineNumber(file_id, offset),
+        .column = source_manager.getColumnNumber(file_id, offset)
+    };
+};
+
+
+Compiler_Location decl_to_loc(const clang::Decl& decl, const clang::SourceManager& source_manager)
+{
+    
+    clang::SourceLocation location = decl.getLocation();
+    auto [file_id, offset] = source_manager.getDecomposedLoc(location);
+    return{
+        .line = source_manager.getLineNumber(file_id, offset),
+        .column = source_manager.getColumnNumber(file_id, offset)
+    };
+};
+
+internal void print_parameter(Plugin_Descriptor_Parameter parameter)
+{
+    switch(parameter.type){
+        case Int : {
+            std::cout << "Int type : min = " << parameter.int_param.min << ", max = " << parameter.int_param.max << "\n\n";
+            
+        }break;
+        
+        case Float : {
+            std::cout << "Float type : min = " << parameter.float_param.min << ", max = " << parameter.float_param.max << "\n\n";
+            
+        }break;
+        
+        case Enum : {
+            std::cout << "Enum type :\n";
+            
+            auto enum_param = parameter.enum_param;
+            for(auto i = 0; i < enum_param.num_entries; i++)
+            {
+                //TODO si cest pas NULL-terminated ça va faire une grosse erreur
+                std::cout << "   " << enum_param.entries[i].name.str << " : " << enum_param.entries[i].value << "\n";
+            }
+            std::cout << "\n";
+        }break;
+    }
+}
+
+
+
+Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx);
+
+Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
+                                          const clang::CXXRecordDecl* state_struct_decl,
+                                          const clang::SourceManager& source_manager);
+
+std::unique_ptr<llvm::MemoryBuffer> 
+rewrite_plugin_source(Plugin_Required_Decls decls,
+                      clang::SourceManager& source_manager,
+                      clang::LangOptions& language_options,
+                      clang::FileID plugin_source_file_id);
+
+void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
+                 Plugin_Descriptor& descriptor,
+                 llvm::LLVMContext *llvm_context,
+                 Plugin *plugin);
+
+void try_compile_impl(const char* filename, 
+                      Clang_Context* clang_cts,
+                      Plugin *plugin);
+
+
+#ifdef DEBUG
+extern "C" __declspec(dllexport)
+#endif
+void* create_clang_context()
 {
     return (void*) create_clang_context_impl();
 }
@@ -115,31 +377,15 @@ Clang_Context* create_clang_context_impl()
     
     auto* clang_ctx = new Clang_Context();
     
-    
-    llvm::PassBuilder passBuilder;
-    
-    passBuilder.registerModuleAnalyses(clang_ctx->moduleAnalysisManager);
-    passBuilder.registerCGSCCAnalyses(clang_ctx->cGSCCAnalysisManager);
-    passBuilder.registerFunctionAnalyses(clang_ctx->functionAnalysisManager);
-    clang_ctx->functionAnalysisManager.registerPass([&]{ return passBuilder.buildDefaultAAPipeline(); });
-    passBuilder.registerLoopAnalyses(clang_ctx->loopAnalysisManager);
-    passBuilder.crossRegisterProxies(clang_ctx->loopAnalysisManager, 
-                                     clang_ctx->functionAnalysisManager, 
-                                     clang_ctx->cGSCCAnalysisManager, 
-                                     clang_ctx->moduleAnalysisManager);
-    
-    clang_ctx->module_pass_manager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
-    
-    
-    
-    
     return clang_ctx;
 }
 
-
-extern "C" __declspec(dllexport) Plugin_Handle try_compile(const char* filename, void* clang_ctx_ptr, Compiler_Error_Log *error_log)
+#ifdef DEBUG
+extern "C" __declspec(dllexport)
+#endif
+void try_compile(const char* filename, void* clang_ctx_ptr, Plugin *plugin)
 {
-    return try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr, error_log);
+    try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr, plugin);
 }
 
 void errors_push(Compiler_Error_Log *error_log, Compiler_Error new_error)
@@ -164,7 +410,7 @@ void errors_push_clang(Compiler_Error_Log *error_log, Clang_Error new_error)
 }
 
 
-Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx, Compiler_Error_Log *error_log)
+void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *plugin)
 {
     
     clang::LangOptions language_options{};
@@ -194,6 +440,7 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx, C
                                               }, 
                                               compiler_instance.getDiagnostics());
     
+    Compiler_Error_Log *error_log = &plugin->error_log;
     
     compiler_instance.getTargetOpts().Triple = triple;
     compiler_instance.getLangOpts() = language_options;
@@ -206,7 +453,6 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx, C
     auto kind = clang::InputKind(clang::Language::CXX);
     compiler_instance.getFrontendOpts().Inputs.push_back(clang::FrontendInputFile(filename, kind));
     
-    bool initial_compilation_succeeded = false;
     
     String plugin_filename =  allocate_and_copy_llvm_stringref(compiler_instance.getFrontendOpts().Inputs.back().getFile().rsplit('\\').second);
     
@@ -257,39 +503,26 @@ Plugin_Handle try_compile_impl(const char* filename, Clang_Context* clang_ctx, C
         {
             errors_push_clang(error_log, {allocate_and_copy_std_string(error_it->second)});
         }
-        return Plugin_Handle{
-            .error = {Compiler_Clang_Error},
-            .descriptor = {},
-            .llvm_jit_engine = nullptr,
-            .audio_callback_f = nullptr,
-            .default_parameters_f = nullptr,
-            .initialize_state_f = nullptr
-        };
+        plugin->error = {Compiler_Clang_Error};
+        return;
     }
     //succesfully compiled, but failed at some parsing stage
     else if(error.type != Compiler_Error_Type_Success) 
     {
-        return Plugin_Handle{
-            .error = Compiler_Generic_Error,
-            .descriptor = descriptor,
-            .llvm_jit_engine = nullptr,
-            .audio_callback_f = nullptr,
-            .default_parameters_f = nullptr,
-            .initialize_state_f = nullptr
-        };
+        plugin->error = {Compiler_Generic_Error}; 
+        plugin->descriptor = descriptor;
+        return;
     }
     else 
     {
         diagnostics.clear();
-        Plugin_Handle handle = jit_compile(new_buffer->getMemBufferRef(), 
-                                           compiler_instance, 
-                                           descriptor,
-                                           &clang_ctx->llvm_context,
-                                           clang_ctx->module_pass_manager,
-                                           clang_ctx->moduleAnalysisManager,
-                                           error_log);
-        errors_push_custom(error_log, handle.error);
-        return handle;
+        jit_compile(new_buffer->getMemBufferRef(), 
+                    compiler_instance, 
+                    descriptor,
+                    &clang_ctx->llvm_context,
+                    plugin);
+        errors_push_custom(error_log, plugin->error);
+        return;
     }
 }
 
@@ -880,14 +1113,11 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
 }
 
 
-Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
-                          Plugin_Descriptor& descriptor,
-                          llvm::LLVMContext *llvm_context,
-                          llvm::ModulePassManager& module_pass_manager,
-                          llvm::ModuleAnalysisManager& module_analysis_manager,
-                          Compiler_Error_Log *error_log)
+void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
+                 Plugin_Descriptor& descriptor,
+                 llvm::LLVMContext *llvm_context,
+                 Plugin *plugin)
 {
-    
     auto new_file = clang::FrontendInputFile{
         new_buffer, 
         clang::InputKind{clang::Language::CXX}
@@ -906,10 +1136,11 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
         
         for(auto error_it = diagnostics->err_begin(); error_it < diagnostics->err_end(); error_it++)
         {
-            errors_push_clang(error_log, {allocate_and_copy_std_string(error_it->second)});
+            errors_push_clang(&plugin->error_log, {allocate_and_copy_std_string(error_it->second)});
         }
         
-        return { Compiler_Clang_Error};
+        plugin->error = { Compiler_Clang_Error};
+        return;
     }
     std::unique_ptr<llvm::Module> module = compile_action->takeModule();
     
@@ -917,7 +1148,24 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
     //return { Compiler_Cant_Take_Module };
     
     //Optimizations
-    module_pass_manager.run(*module, module_analysis_manager);
+    llvm::PassBuilder passBuilder;
+    llvm::LoopAnalysisManager loopAnalysisManager;
+    llvm::FunctionAnalysisManager functionAnalysisManager;
+    llvm::CGSCCAnalysisManager cGSCCAnalysisManager;
+    llvm::ModuleAnalysisManager moduleAnalysisManager;
+    
+    passBuilder.registerModuleAnalyses(moduleAnalysisManager);
+    passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
+    functionAnalysisManager.registerPass([&]{ return passBuilder.buildDefaultAAPipeline(); });
+    passBuilder.registerFunctionAnalyses(functionAnalysisManager);
+    passBuilder.registerLoopAnalyses(loopAnalysisManager);
+    passBuilder.crossRegisterProxies(loopAnalysisManager, 
+                                     functionAnalysisManager, 
+                                     cGSCCAnalysisManager, 
+                                     moduleAnalysisManager);
+    
+    llvm::ModulePassManager module_pass_manager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
+    module_pass_manager.run(*module, moduleAnalysisManager);
     
     llvm::EngineBuilder builder(std::move(module));
     builder.setMCJITMemoryManager(std::make_unique<llvm::SectionMemoryManager>());
@@ -937,18 +1185,20 @@ Plugin_Handle jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInsta
     
     assert(audio_callback_f && default_parameters_f && initialize_state_f);
     
-    return Plugin_Handle{
-        .error =  { Compiler_Success }, 
-        .descriptor = descriptor,
-        .llvm_jit_engine = (void*)engine, 
-        .audio_callback_f = audio_callback_f, 
-        .default_parameters_f = default_parameters_f, 
-        .initialize_state_f = initialize_state_f
-    };
+    plugin->error = { Compiler_Success };
+    plugin->descriptor = descriptor;
+    
+    plugin->llvm_jit_engine = (void*)engine; 
+    plugin->audio_callback_f = audio_callback_f; 
+    plugin->default_parameters_f = default_parameters_f; 
+    plugin->initialize_state_f = initialize_state_f;
+    
 }
 
+#ifdef DEBUG
 extern "C" __declspec(dllexport) 
-void release_jit(Plugin_Handle *plugin)
+#endif
+void release_jit(Plugin *plugin)
 {
     
     Plugin_Descriptor_Parameter *params = plugin->descriptor.parameters;
@@ -988,10 +1238,154 @@ void release_jit(Plugin_Handle *plugin)
     assert(plugin->audio_callback_f == nullptr);
 }
 
-
-extern "C" __declspec(dllexport) 
+#ifdef DEBUG
+extern "C" __declspec(dllexport)
+#endif
 void release_clang_ctx(void* clang_ctx_void)
 {
     Clang_Context *clang_ctx = (Clang_Context*)clang_ctx_void;
     delete clang_ctx;
 }
+
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////
+// Clang library
+
+
+#pragma comment(lib, "clangAnalysis.lib")
+#pragma comment(lib, "clangAPINotes.lib")
+#pragma comment(lib, "clangARCMigrate.lib")
+#pragma comment(lib, "clangAST.lib")
+#pragma comment(lib, "clangASTMatchers.lib")
+#pragma comment(lib, "clangBasic.lib")
+#pragma comment(lib, "clangCodeGen.lib")
+#pragma comment(lib, "clangCrossTU.lib")
+#pragma comment(lib, "clangDependencyScanning.lib")
+#pragma comment(lib, "clangDirectoryWatcher.lib")
+#pragma comment(lib, "clangDriver.lib")
+#pragma comment(lib, "clangAstMatchers.lib")
+//#pragma comment(lib, "clangDynamicASTMatchers.lib")
+#pragma comment(lib, "clangEdit.lib")
+#pragma comment(lib, "clangFrontend.lib")
+#pragma comment(lib, "clangFrontendTool.lib")
+#pragma comment(lib, "clangHandleCXX.lib")
+#pragma comment(lib, "clangHandleLLVM.lib")
+#pragma comment(lib, "clangIndex.lib")
+#pragma comment(lib, "clangIndexSerialization.lib")
+#pragma comment(lib, "clangLex.lib")
+#pragma comment(lib, "clangParse.lib")
+#pragma comment(lib, "clangRewrite.lib")
+#pragma comment(lib, "clangRewriteFrontend.lib")
+#pragma comment(lib, "clangSema.lib")
+#pragma comment(lib, "clangSerialization.lib")
+#pragma comment(lib, "clangStaticAnalyzerCheckers.lib")
+#pragma comment(lib, "clangStaticAnalyzerCore.lib")
+#pragma comment(lib, "clangStaticAnalyzerFrontend.lib")
+#pragma comment(lib, "clangTooling.lib")
+#pragma comment(lib, "clangToolingASTDiff.lib")
+#pragma comment(lib, "clangToolingCore.lib")
+#pragma comment(lib, "clangToolingInclusions.lib")
+#pragma comment(lib, "clangToolingRefactoring.lib")
+#pragma comment(lib, "clangToolingSyntax.lib")
+#pragma comment(lib, "clangTransformer.lib")
+#pragma comment(lib, "libclang.lib")
+#pragma comment(lib, "LLVMAggressiveInstCombine.lib")
+
+#pragma comment(lib, "LLVMAnalysis.lib")
+
+#pragma comment(lib, "LLVMAsmParser.lib")
+#pragma comment(lib, "LLVMAsmPrinter.lib")
+
+#pragma comment(lib, "LLVMBinaryFormat.lib")
+#pragma comment(lib, "LLVMBitReader.lib")
+#pragma comment(lib, "LLVMBitstreamReader.lib")
+#pragma comment(lib, "LLVMBitWriter.lib")
+
+#pragma comment(lib, "LLVMCFGuard.lib")
+#pragma comment(lib, "LLVMCFIVerify.lib")
+#pragma comment(lib, "LLVMCodeGen.lib")
+#pragma comment(lib, "LLVMCore.lib")
+#pragma comment(lib, "LLVMCoroutines.lib")
+#pragma comment(lib, "LLVMCoverage.lib")
+#pragma comment(lib, "LLVMDebugInfoCodeView.lib")
+#pragma comment(lib, "LLVMDebugInfoDWARF.lib")
+#pragma comment(lib, "LLVMDebugInfoGSYM.lib")
+#pragma comment(lib, "LLVMDebugInfoMSF.lib")
+#pragma comment(lib, "LLVMDebugInfoPDB.lib")
+#pragma comment(lib, "LLVMDemangle.lib")
+#pragma comment(lib, "LLVMDlltoolDriver.lib")
+#pragma comment(lib, "LLVMDWARFLinker.lib")
+#pragma comment(lib, "LLVMDWP.lib")
+#pragma comment(lib, "LLVMExecutionEngine.lib")
+
+#pragma comment(lib, "LLVMExtensions.lib")
+#pragma comment(lib, "LLVMFileCheck.lib")
+#pragma comment(lib, "LLVMFrontendOpenACC.lib")
+#pragma comment(lib, "LLVMFrontendOpenMP.lib")
+#pragma comment(lib, "LLVMFuzzMutate.lib")
+#pragma comment(lib, "LLVMGlobalISel.lib")
+
+#pragma comment(lib, "LLVMInstCombine.lib")
+#pragma comment(lib, "LLVMInstrumentation.lib")
+#pragma comment(lib, "LLVMInterfaceStub.lib")
+#pragma comment(lib, "LLVMInterpreter.lib")
+#pragma comment(lib, "LLVMipo.lib")
+#pragma comment(lib, "LLVMIRReader.lib")
+#pragma comment(lib, "LLVMJITLink.lib")
+
+#pragma comment(lib, "LLVMLibDriver.lib")
+#pragma comment(lib, "LLVMLineEditor.lib")
+#pragma comment(lib, "LLVMLinker.lib")
+#pragma comment(lib, "LLVMLTO.lib")
+#pragma comment(lib, "LLVMMC.lib")
+#pragma comment(lib, "LLVMMCA.lib")
+//#pragma comment(lib, "LLVMMCACustomBehaviourAMDGPU.lib")
+#pragma comment(lib, "LLVMMCDisassembler.lib")
+#pragma comment(lib, "LLVMMCJIT.lib")
+#pragma comment(lib, "LLVMMCParser.lib")
+
+#pragma comment(lib, "LLVMMIRParser.lib")
+
+
+#pragma comment(lib, "LLVMObjCARCOpts.lib")
+#pragma comment(lib, "LLVMObject.lib")
+#pragma comment(lib, "LLVMObjectYAML.lib")
+#pragma comment(lib, "LLVMOption.lib")
+#pragma comment(lib, "LLVMOrcJIT.lib")
+#pragma comment(lib, "LLVMOrcShared.lib")
+#pragma comment(lib, "LLVMOrcTargetProcess.lib")
+
+#pragma comment(lib, "LLVMPasses.lib")
+
+#pragma comment(lib, "LLVMProfileData.lib")
+#pragma comment(lib, "LLVMRemarks.lib")
+
+#pragma comment(lib, "LLVMRuntimeDyld.lib")
+#pragma comment(lib, "LLVMScalarOpts.lib")
+#pragma comment(lib, "LLVMSelectionDAG.lib")
+#pragma comment(lib, "LLVMSupport.lib")
+#pragma comment(lib, "LLVMSymbolize.lib")
+
+#pragma comment(lib, "LLVMTableGen.lib")
+#pragma comment(lib, "LLVMTableGenGlobalISel.lib")
+#pragma comment(lib, "LLVMTarget.lib")
+#pragma comment(lib, "LLVMTextAPI.lib")
+#pragma comment(lib, "LLVMTransformUtils.lib")
+#pragma comment(lib, "LLVMVectorize.lib")
+
+#pragma comment(lib, "LLVMWindowsManifest.lib")
+
+#pragma comment(lib, "LTO.lib")
+
+#pragma comment(lib, "LLVMX86AsmParser.lib")
+#pragma comment(lib, "LLVMX86CodeGen.lib")
+#pragma comment(lib, "LLVMX86Desc.lib")
+#pragma comment(lib, "LLVMX86Disassembler.lib")
+#pragma comment(lib, "LLVMX86Info.lib")
+
+#endif //MSVC
+
