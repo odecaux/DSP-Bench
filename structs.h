@@ -24,6 +24,7 @@ enum Asset_File_State : u32 {
     Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
     Asset_File_State_COLD_RELOAD_UNLOADING,
     
+    Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE,
     Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING,
     Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING,
     Asset_File_State_HOT_RELOAD_STAGE_VALIDATION,
@@ -32,7 +33,6 @@ enum Asset_File_State : u32 {
     Asset_File_State_HOT_RELOAD_SWAPPING,
     Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
     Asset_File_State_HOT_RELOAD_DISPOSING,
-    Asset_File_State_HOT_RELOAD_STAGE_USAGE,
     
     Asset_File_State_FAILED,
 };
@@ -233,6 +233,8 @@ typedef struct {
     Plugin_Parameter_Value* parameter_values_audio_side;
     Plugin_Parameter_Value* parameter_values_ui_side;
     Plugin_Parameters_Ring_Buffer ring;
+    
+    File_Change_Listener file_change_listener;
 } Plugin;
 
 typedef void(*try_compile_t)(const char*, const void*, Plugin*);
@@ -263,7 +265,8 @@ typedef struct
     
     Audio_File *audio_file;
     Plugin *plugin;
-    Plugin *hot_swap_plugin;
+    Plugin *hot_reload_plugin;
+    Plugin *hot_reload_old_plugin;
 } Audio_Thread_Context;
 
 //~ UI

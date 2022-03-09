@@ -52,8 +52,11 @@
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Analysis/AliasAnalysis.h>
 
+#include "windows.h"
+
 #include "math.h"
 #include "base.h"
+#include "win32_helpers.h"
 #include "structs.h"
 
 #include "compiler.h"

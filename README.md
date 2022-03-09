@@ -14,6 +14,7 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 Easy : \
 \
+win32_helpers shouldn't be before structs.h, because now everything needs to include windows.h, and only win32_platform should do that. I need to take Listener out of Plugin
 Plugin hot swap \
 Proper memory layer \
 No plugin parameter -> Load Plugin File \

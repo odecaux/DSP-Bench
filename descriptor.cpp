@@ -2,9 +2,9 @@
 #include "windows.h"
 #include "math.h"
 #include "base.h"
+#include "win32_helpers.h"
 #include "structs.h"
 #include "descriptor.h"
-#include "win32_helpers.h"
 
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b)
 {

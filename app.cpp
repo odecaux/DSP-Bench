@@ -12,12 +12,12 @@
 
 #include "memory.h"
 #include "base.h"
+#include "win32_helpers.h"
 #include "structs.h"
 #include "descriptor.h"
 #include "draw.h"
 #include "app.h"
 
-#include "win32_helpers.h"
 
 IO io_initial_state()
 {

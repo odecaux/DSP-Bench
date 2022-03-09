@@ -8,9 +8,11 @@
 #include "ipp.h"
 #include "ipps.h"
 #include <ippdefs.h>
+#include "windows.h"
 
 #include "memory.h"
 #include "base.h"
+#include "win32_helpers.h"
 #include "structs.h"
 #include "fft.h"
 

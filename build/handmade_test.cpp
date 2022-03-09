@@ -46,7 +46,7 @@ void audio_callback(const Parameters& param,
                     const u32  num_samples,
                     const real32 sample_rate)
 {
-    float value = initial_gain;
+    float value = 0.5 * param.initial_gain;
     
     for(int sample = 0; sample < num_samples; sample++)
     {

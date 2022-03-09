@@ -4,10 +4,10 @@
 #include "stdio.h"
 
 #include "base.h"
+#include "win32_helpers.h"
 #include "structs.h"
 #include "descriptor.h"
 #include "audio.h"
-#include "win32_helpers.h"
 
 void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thread_Context* ctx)
 {
@@ -28,6 +28,15 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                            Asset_File_State_STAGE_USAGE))
     {
         
+    }
+    
+    else if(compare_exchange_32(ctx->plugin_state,
+                                Asset_File_State_HOT_RELOAD_SWAPPING,
+                                Asset_File_State_HOT_RELOAD_STAGE_SWAP))
+    {
+        ctx->hot_reload_old_plugin = ctx->plugin;
+        ctx->plugin = ctx->hot_reload_plugin;
+        ctx->hot_reload_plugin = nullptr;
     }
     
     auto plugin_state = *ctx->plugin_state;
@@ -122,46 +131,85 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
         }
     }
     
-    if(plugin_state == Asset_File_State_IN_USE)
+    switch(plugin_state)
     {
-        Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_buffer_pull(ctx->plugin->ring);
-        if(maybe_new_parameter_values)
+        
+        
+        case Asset_File_State_IN_USE :
+        case Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE :
+        case Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING :
+        case Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING :
+        case Asset_File_State_HOT_RELOAD_STAGE_VALIDATION :
+        case Asset_File_State_HOT_RELOAD_VALIDATING :
+        case Asset_File_State_HOT_RELOAD_SWAPPING :
+        case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
+        case Asset_File_State_HOT_RELOAD_DISPOSING :
         {
-            for(auto param_idx = 0; param_idx < ctx->plugin->ring.num_fields_by_plugin; param_idx++)
+            Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_buffer_pull(ctx->plugin->ring);
+            if(maybe_new_parameter_values)
             {
-                ctx->plugin->parameter_values_audio_side[param_idx] = maybe_new_parameter_values[param_idx];
+                for(auto param_idx = 0; param_idx < ctx->plugin->ring.num_fields_by_plugin; param_idx++)
+                {
+                    ctx->plugin->parameter_values_audio_side[param_idx] = maybe_new_parameter_values[param_idx];
+                }
+                
+                MemoryBarrier();
+                assert(ctx->plugin->ring.num_fields_by_plugin == ctx->plugin->descriptor.num_parameters);
+                
+                plugin_set_parameter_holder_from_values(&ctx->plugin->descriptor, 
+                                                        ctx->plugin->parameter_values_audio_side, ctx->plugin->parameters_holder);
             }
             
-            MemoryBarrier();
-            assert(ctx->plugin->ring.num_fields_by_plugin == ctx->plugin->descriptor.num_parameters);
-            
-            plugin_set_parameter_holder_from_values(&ctx->plugin->descriptor, 
-                                                    ctx->plugin->parameter_values_audio_side, ctx->plugin->parameters_holder);
-        }
-        
-        if(plugin_play == 1)
+            if(plugin_play == 1)
+            {
+                ctx->plugin->audio_callback_f(ctx->plugin->parameters_holder,
+                                              ctx->plugin->state_holder,
+                                              output_buffer,
+                                              parameters.num_channels,
+                                              parameters.num_samples,
+                                              parameters.sample_rate);
+            }
+        }break;
+        case Asset_File_State_HOT_RELOAD_STAGE_SWAP :
+        case Asset_File_State_STAGE_USAGE :  
         {
-            ctx->plugin->audio_callback_f(ctx->plugin->parameters_holder,
-                                          ctx->plugin->state_holder,
-                                          output_buffer,
-                                          parameters.num_channels,
-                                          parameters.num_samples,
-                                          parameters.sample_rate);
-        }
+            assert(false);
+        }break;
     }
-    compare_exchange_32( ctx->audio_file_state,
-                        Asset_File_State_OK_TO_UNLOAD,
-                        Asset_File_State_STAGE_UNLOADING);
-    compare_exchange_32(ctx->plugin_state,
-                        Asset_File_State_OK_TO_UNLOAD,
-                        Asset_File_State_STAGE_UNLOADING);
     
-    compare_exchange_32(ctx->audio_file_state,
-                        Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
-                        Asset_File_State_COLD_RELOAD_STAGE_UNUSE);
-    compare_exchange_32(ctx->plugin_state,
-                        Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
-                        Asset_File_State_COLD_RELOAD_STAGE_UNUSE);
+    if(plugin_state == Asset_File_State_HOT_RELOAD_SWAPPING)
+    {
+        assert(compare_exchange_32(ctx->plugin_state,
+                                   Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
+                                   Asset_File_State_HOT_RELOAD_SWAPPING));
+    }
+    
+    if(compare_exchange_32(ctx->audio_file_state,
+                           Asset_File_State_OK_TO_UNLOAD,
+                           Asset_File_State_STAGE_UNLOADING))
+    {
+        ctx->audio_file = nullptr;
+    }
+    if(compare_exchange_32(ctx->plugin_state,
+                           Asset_File_State_OK_TO_UNLOAD,
+                           Asset_File_State_STAGE_UNLOADING))
+    {
+        ctx->plugin = nullptr;
+    }
+    
+    if(compare_exchange_32(ctx->audio_file_state,
+                           Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
+                           Asset_File_State_COLD_RELOAD_STAGE_UNUSE))
+    {
+        
+        ctx->audio_file = nullptr;
+    }
+    if(compare_exchange_32(ctx->plugin_state,
+                           Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
+                           Asset_File_State_COLD_RELOAD_STAGE_UNUSE))
+    {
+        ctx->plugin = nullptr;
+    };
 }
 
 

@@ -11,9 +11,11 @@
 #include "winuser.h"
 
 #include "base.h"
+#include "win32_helpers.h"
 #include "structs.h"
 #include "descriptor.h"
 #include "audio.h"
+
 
 const IID IID_IAudioClient  = __uuidof(IAudioClient);
 const IID IID_IAudioRenderClient = __uuidof(IAudioRenderClient);
