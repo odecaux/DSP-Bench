@@ -37,40 +37,16 @@ enum Asset_File_State : u32 {
     Asset_File_State_FAILED,
 };
 
+
+
 //~ Compiler Error Handling
 
-//TODO should be a struct, and include data, like which parameter is wrong
-//I do it the other way around for now : each handle says which type of error it has
-//the use case where it doesn't work is signature checking, I don't have a separate handle for every parameter of the signature, but I still want to report the details of what went wrong
-//mayber I just need the location of the problem in the source ?
+#define CUSTOM_ERROR_FLAG(flag) flag, 
 
 enum Compiler_Error_Flag{
-    Compiler_Generic_Error, //TODO c'est pour aller voir plus loin dans le tree des erreurs, rename sub_error or smth
-    Compiler_Success,
-    
-    Compiler_Too_Many_Fun,
-    Compiler_No_Fun,
-    Compiler_Wrong_Signature_Fun,
-    Compiler_Types_Mismatch,
-    Compiler_Not_Record_Type,
-    Compiler_Polymorphic,
-    
-    Compiler_Could_Not_Get_Decls,
-    
-    Compiler_Empty_Annotation,
-    Compiler_Invalid_Annotation,
-    Compiler_Missing_Min_Max,
-    Compiler_Min_Greater_Than_Max,
-    Compiler_Invalid_Min_Value,
-    Compiler_Invalid_Max_Value,
-    Compiler_Annotation_Type_Mismatch,
-    
-    Compiler_Struct_Parsing_Error,
-    
-    Compiler_Clang_Error,
-    Compiler_Cant_Take_Module,
-    Compiler_Cant_Launch_Jit,
+#include "errors.inc"
 };
+#undef CUSTOM_ERROR_FLAG
 
 
 enum Compiler_Error_Type{

@@ -1,6 +1,9 @@
 #include "plugin_header.h"
 
 
+typedef float real32;
+typedef unsigned int u32;
+
 enum random_enum{
     A, B, C
 };
@@ -34,9 +37,6 @@ State initialize_state(const Parameters& param,
     State initial_state = {0.0f};
     return initial_state;
 }
-
-typedef float real32;
-typedef unsigned int u32;
 
 void audio_callback(const Parameters& param,
                     State& state,

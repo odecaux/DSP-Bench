@@ -39,3 +39,4 @@
 *.pdb
 *.ngfx-proj
 /build/.vs/
+error.txt

@@ -15,16 +15,18 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 Core: \
 \
 Disable hot-reload button \
-If the struct layout has not changed, and if initial_state produces the same thing, then do not swap \
 Plugin Loading Manager abstraction
 Proper memory layer \
 No CLI plugin -> Load Plugin File (implies 3 states : was_failed, was_in_use, was_not_loaded) \
 FFT processing available to the plugins \
 Plugin allocator \
+Debug compiler on wrong field macro \
 Display custom compiler errors \
+Panel toggle : compiler log and IR \
 \
 Optional: \
 \
+If the struct layout has not changed, and if initial_state produces the same thing, then do not swap \
 Draggable IR \
 Time and frequency markers on the graphs \
 Plugin browser \

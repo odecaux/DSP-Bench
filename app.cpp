@@ -552,7 +552,7 @@ void frame(Plugin_Descriptor& descriptor,
                 if(error->type == Compiler_Error_Type_Clang)
                     draw_text(error->clang.error_message, error_message_bounds, Color_Front, &graphics_ctx->atlas);
                 else if(error->type == Compiler_Error_Type_Custom)
-                    draw_text(StringLit("custom"), error_message_bounds, Color_Front, &graphics_ctx->atlas);
+                    draw_text(compiler_error_flag_to_string(error->custom.flag), error_message_bounds, Color_Front, &graphics_ctx->atlas);
                 else
                     octave_assert(false);
                 

@@ -11,7 +11,7 @@ enum slope_type{
 
 
 struct Parameters{
-    FLOAT_ARAM(0.0f, 2.0f) initial_gain;
+    FLOAT_ARAM(2.0f, 0.0f) initial_gain;
     ENUM_ARAM(slope_type) slope;
     FLOAT_ARAM(0.0f, 0.1f) step;
 };
