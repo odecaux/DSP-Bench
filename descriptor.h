@@ -80,7 +80,7 @@ function u32 enum_value_to_index(Parameter_Enum& parameter, i64 value)
         if(parameter.entries[i].value == value)
             return i;
     }
-    assert(false);
+    octave_assert(false);
     return 0;
 }
 

@@ -175,7 +175,7 @@ real32 simple_slider(real32 normalized_value, i32 id,
     
     if(io.mouse_clicked && rect_contains(bounds, io.mouse_position))
     {
-        assert(ui_state->selected_parameter_id == -1);
+        octave_assert(ui_state->selected_parameter_id == -1);
         ui_state->selected_parameter_id = id;
     }
     
@@ -228,7 +228,7 @@ real32 slider(real32 normalized_value, i32 id,
     
     if(io.mouse_clicked && rect_contains(slider_bounds, io.mouse_position))
     {
-        assert(ui_state->selected_parameter_id == -1);
+        octave_assert(ui_state->selected_parameter_id == -1);
         ui_state->selected_parameter_id = id;
     }
     
@@ -331,17 +331,29 @@ void frame(Plugin_Descriptor& descriptor,
     
     switch(plugin_state)
     {
+        
         case Asset_File_State_IN_USE:
+        case Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE :
+        case Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING :
+        case Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING :
+        case Asset_File_State_HOT_RELOAD_STAGE_VALIDATION :
+        case Asset_File_State_HOT_RELOAD_VALIDATING :
+        case Asset_File_State_HOT_RELOAD_STAGE_SWAP :
+        case Asset_File_State_HOT_RELOAD_SWAPPING :
+        case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
+        case Asset_File_State_HOT_RELOAD_DISPOSING :
         {
             
             Rect title_bounds = rect_drop_right(header_bounds,  TITLE_HEIGHT);
             
-            Rect load_plugin_button_bounds = rect_take_left(title_bounds, TITLE_HEIGHT * 3);
-            title_bounds = rect_drop_left(title_bounds, TITLE_HEIGHT * 3);
-            
-            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, &ui_state, &frame_io))
+            if(plugin_state == Asset_File_State_IN_USE)
             {
-                *load_plugin_was_clicked = true;
+                Rect load_plugin_button_bounds = rect_take_left(title_bounds, TITLE_HEIGHT * 3);
+                title_bounds = rect_drop_left(title_bounds, TITLE_HEIGHT * 3);
+                if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, &ui_state, &frame_io))
+                {
+                    *load_plugin_was_clicked = true;
+                }
             }
             
             draw_rectangle(footer_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
@@ -365,7 +377,7 @@ void frame(Plugin_Descriptor& descriptor,
             Rect parameter_bounds = left_panel_bounds;
             parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
             
-            for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters; parameter_idx++)
+            for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters && descriptor.error.flag == Compiler_Success; parameter_idx++)
             {
                 auto& current_parameter_value = current_parameter_values[parameter_idx];
                 auto& parameter_descriptor = descriptor.parameters[parameter_idx];
@@ -377,7 +389,7 @@ void frame(Plugin_Descriptor& descriptor,
                         int current_value = current_parameter_value.int_value; 
                         char current_value_text[256];
                         int text_size = sprintf(current_value_text, "%d", current_value);
-                        assert(text_size >= 0);
+                        octave_assert(text_size >= 0);
                         String current_value_label = {.str = current_value_text, .size = (u64)text_size};
                         
                         real32 current_normalized_value = normalize_parameter_int_value(parameter_descriptor.int_param, current_value);
@@ -386,13 +398,13 @@ void frame(Plugin_Descriptor& descriptor,
                         i32 min_value = parameter_descriptor.int_param.min;
                         char min_value_text[256];
                         text_size = sprintf(min_value_text, "%d", min_value);
-                        assert(text_size >= 0);
+                        octave_assert(text_size >= 0);
                         String min_label = {.str = min_value_text, .size = (u64)text_size};
                         
                         i32 max_value = parameter_descriptor.int_param.max;
                         char max_value_text[256];
                         text_size = sprintf(max_value_text, "%d", max_value);
-                        assert(text_size >= 0);
+                        octave_assert(text_size >= 0);
                         String max_label = {.str = max_value_text, .size = (u64)text_size};
                         
                         real32 new_normalized_value =
@@ -413,7 +425,7 @@ void frame(Plugin_Descriptor& descriptor,
                         real32 current_value = current_parameter_value.float_value; 
                         char current_value_text[256];
                         int text_size = sprintf(current_value_text, "%.3f", current_value);
-                        assert(text_size >= 0);
+                        octave_assert(text_size >= 0);
                         String current_value_label = {.str = current_value_text, .size = (u64)text_size};
                         
                         real32 current_normalized_value = normalize_parameter_float_value(parameter_descriptor.float_param, current_value);
@@ -421,13 +433,13 @@ void frame(Plugin_Descriptor& descriptor,
                         real32 min_value = parameter_descriptor.float_param.min;
                         char min_value_text[256];
                         text_size = sprintf(min_value_text, "%.3f", min_value);
-                        assert(text_size >= 0);
+                        octave_assert(text_size >= 0);
                         String min_label = {.str = min_value_text, .size = (u64)text_size};
                         
                         real32 max_value = parameter_descriptor.float_param.max;
                         char max_value_text[256];
                         text_size = sprintf(max_value_text, "%.3f", max_value);
-                        assert(text_size >= 0);
+                        octave_assert(text_size >= 0);
                         String max_label = {.str = max_value_text, .size = (u64)text_size};
                         
                         real32 new_normalized_value =
@@ -542,7 +554,7 @@ void frame(Plugin_Descriptor& descriptor,
                 else if(error->type == Compiler_Error_Type_Custom)
                     draw_text(StringLit("custom"), error_message_bounds, Color_Front, &graphics_ctx->atlas);
                 else
-                    assert(false);
+                    octave_assert(false);
                 
                 error_message_bounds = rect_move_by(error_message_bounds, {0.0f, TITLE_HEIGHT});
             }

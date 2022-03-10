@@ -23,7 +23,7 @@ struct State{
 
 Parameters default_parameters()
 {
-    Parameters initial_state = {0.2f, linear, 0.001f};
+    Parameters initial_state = {0.9f, linear, 0.001f};
     return initial_state;
 }
 

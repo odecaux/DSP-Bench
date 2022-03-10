@@ -154,7 +154,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                 }
                 
                 MemoryBarrier();
-                assert(ctx->plugin->ring.num_fields_by_plugin == ctx->plugin->descriptor.num_parameters);
+                octave_assert(ctx->plugin->ring.num_fields_by_plugin == ctx->plugin->descriptor.num_parameters);
                 
                 plugin_set_parameter_holder_from_values(&ctx->plugin->descriptor, 
                                                         ctx->plugin->parameter_values_audio_side, ctx->plugin->parameters_holder);
@@ -173,15 +173,15 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
         case Asset_File_State_HOT_RELOAD_STAGE_SWAP :
         case Asset_File_State_STAGE_USAGE :  
         {
-            assert(false);
+            octave_assert(false);
         }break;
     }
     
     if(plugin_state == Asset_File_State_HOT_RELOAD_SWAPPING)
     {
-        assert(compare_exchange_32(ctx->plugin_state,
-                                   Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
-                                   Asset_File_State_HOT_RELOAD_SWAPPING));
+        octave_assert(compare_exchange_32(ctx->plugin_state,
+                                          Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
+                                          Asset_File_State_HOT_RELOAD_SWAPPING));
     }
     
     if(compare_exchange_32(ctx->audio_file_state,

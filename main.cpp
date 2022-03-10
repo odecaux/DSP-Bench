@@ -9,10 +9,10 @@
 
 #include "memory.h"
 #include "base.h"
-#include "win32_helpers.h"
 #include "structs.h"
 #include "descriptor.h"
 #include "audio.h"
+#include "win32_helpers.h"
 #include "wav_reader.h"
 #include "font.h"
 #include "fft.h"
@@ -48,7 +48,7 @@ DWORD compiler_thread_proc(void *void_param)
     {
         
         try_compile(param->source_filename, param->clang_ctx, param->handle);
-        assert(compare_exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION, Asset_File_State_BACKGROUND_LOADING));
+        octave_assert(compare_exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION, Asset_File_State_BACKGROUND_LOADING));
     }
     else if(compare_exchange_32(param->stage, 
                                 Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING, 
@@ -56,11 +56,11 @@ DWORD compiler_thread_proc(void *void_param)
     {
         
         try_compile(param->source_filename, param->clang_ctx, param->handle);
-        assert(compare_exchange_32(param->stage, Asset_File_State_HOT_RELOAD_STAGE_VALIDATION, Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING));
+        octave_assert(compare_exchange_32(param->stage, Asset_File_State_HOT_RELOAD_STAGE_VALIDATION, Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING));
     }
     else
     {
-        assert(false && "someone touched plugin_state while I wasn't watching");
+        octave_assert(false && "someone touched plugin_state while I wasn't watching");
     }
     return 1;
 }
@@ -74,13 +74,13 @@ typedef struct {
 DWORD wav_loader_thread_proc(void *void_param)
 {
     Wav_Loader_Thread_Param *param = (Wav_Loader_Thread_Param*)void_param;
-    assert(exchange_32(param->stage, Asset_File_State_BACKGROUND_LOADING)
-           == Asset_File_State_STAGE_BACKGROUND_LOADING);
+    octave_assert(exchange_32(param->stage, Asset_File_State_BACKGROUND_LOADING)
+                  == Asset_File_State_STAGE_BACKGROUND_LOADING);
     
     *param->file = windows_load_wav(param->filename);
     
-    assert(exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION)
-           == Asset_File_State_BACKGROUND_LOADING);
+    octave_assert(exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION)
+                  == Asset_File_State_BACKGROUND_LOADING);
     return 1;
 }
 
@@ -207,7 +207,7 @@ i32 main(i32 argc, char** argv)
     //~ Compiler Init
 #ifdef DEBUG
     HMODULE compiler_dll = LoadLibraryA("compiler.dll");
-    assert(compiler_dll != NULL && "couldn't find compiler.dll");
+    octave_assert(compiler_dll != NULL && "couldn't find compiler.dll");
     
     try_compile = (try_compile_t)GetProcAddress(compiler_dll, "try_compile");
     release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
@@ -217,8 +217,9 @@ i32 main(i32 argc, char** argv)
 #endif
     void* clang_ctx = create_clang_context();
     
-    bool hot_reload_was_it_failed = false;
-    //TODO on doit avoir deux handle à swap
+    //bool hot_reload_was_it_failed = false;
+    File_Change_Listener plugin_edit_listener;
+    
     Plugin handle_a {
         .error_log = {
             m_allocate_array(Compiler_Error, 1024),
@@ -306,13 +307,13 @@ i32 main(i32 argc, char** argv)
         {
             if(wav_file.error == Wav_Success)
             {
-                assert(exchange_32(&wav_state, Asset_File_State_STAGE_USAGE)
-                       == Asset_File_State_VALIDATING);
+                octave_assert(exchange_32(&wav_state, Asset_File_State_STAGE_USAGE)
+                              == Asset_File_State_VALIDATING);
             }
             else
             {
-                assert(exchange_32(&wav_state, Asset_File_State_FAILED)
-                       == Asset_File_State_VALIDATING);
+                octave_assert(exchange_32(&wav_state, Asset_File_State_FAILED)
+                              == Asset_File_State_VALIDATING);
                 //TODO y a pas à cleanup un buffer ici ?
             }
         }
@@ -329,9 +330,9 @@ i32 main(i32 argc, char** argv)
                 .file = &wav_file,
                 .stage = &wav_state
             };
-            assert(exchange_32(&wav_state,
-                               Asset_File_State_STAGE_BACKGROUND_LOADING)
-                   == Asset_File_State_COLD_RELOAD_UNLOADING);
+            octave_assert(exchange_32(&wav_state,
+                                      Asset_File_State_STAGE_BACKGROUND_LOADING)
+                          == Asset_File_State_COLD_RELOAD_UNLOADING);
             
             wav_loader_thread_handle = CreateThread(0, 0,
                                                     &wav_loader_thread_proc,
@@ -365,11 +366,11 @@ i32 main(i32 argc, char** argv)
                 plugin_set_parameter_values_from_holder(&current_handle->descriptor, current_handle->parameter_values_audio_side, current_handle->parameters_holder);
                 current_handle->ring = plugin_parameters_ring_buffer_initialize(current_handle->descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
                 
-                current_handle->file_change_listener = win32_init_file_change_listener(source_filename);
+                plugin_edit_listener = win32_init_file_change_listener(source_filename);
                 audio_context.plugin = current_handle;
                 
-                assert(exchange_32(&plugin_state, Asset_File_State_STAGE_USAGE)
-                       == Asset_File_State_VALIDATING);
+                octave_assert(exchange_32(&plugin_state, Asset_File_State_STAGE_USAGE)
+                              == Asset_File_State_VALIDATING);
                 
                 //~ IR initialization
                 compute_IR(*current_handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, current_handle->parameter_values_ui_side);
@@ -384,16 +385,16 @@ i32 main(i32 argc, char** argv)
             else
             {
                 printf("compilation failed, cleaning up\n");
-                assert(!current_handle->parameter_values_audio_side);
-                assert(!current_handle->parameter_values_ui_side);
-                assert(!current_handle->ring.buffer);
+                octave_assert(!current_handle->parameter_values_audio_side);
+                octave_assert(!current_handle->parameter_values_ui_side);
+                octave_assert(!current_handle->ring.buffer);
                 
-                current_handle->file_change_listener = win32_init_file_change_listener(source_filename);
+                plugin_edit_listener = win32_init_file_change_listener(source_filename);
                 audio_context.plugin = current_handle;
                 
                 printf("done cleaning up\n");
-                assert(exchange_32(&plugin_state, Asset_File_State_FAILED)
-                       == Asset_File_State_VALIDATING);
+                octave_assert(exchange_32(&plugin_state, Asset_File_State_FAILED)
+                              == Asset_File_State_VALIDATING);
             }
         }
         else if(compare_exchange_32(&plugin_state,
@@ -404,6 +405,7 @@ i32 main(i32 argc, char** argv)
             if(hot_reload_handle->error.flag == Compiler_Success)
             {
                 printf("hot : compiler success\n");
+                
                 hot_reload_handle->parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, hot_reload_handle->descriptor.num_parameters);
                 
                 hot_reload_handle->parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, hot_reload_handle->descriptor.num_parameters);
@@ -422,7 +424,7 @@ i32 main(i32 argc, char** argv)
                 plugin_set_parameter_values_from_holder(&hot_reload_handle->descriptor, hot_reload_handle->parameter_values_audio_side, hot_reload_handle->parameters_holder);
                 hot_reload_handle->ring = plugin_parameters_ring_buffer_initialize(hot_reload_handle->descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
                 
-                hot_reload_handle->file_change_listener = win32_init_file_change_listener(source_filename);
+                plugin_edit_listener = win32_init_file_change_listener(source_filename);
                 audio_context.hot_reload_plugin = hot_reload_handle;
                 
                 compute_IR(*hot_reload_handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, hot_reload_handle->parameter_values_ui_side);
@@ -432,31 +434,34 @@ i32 main(i32 argc, char** argv)
                 memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
                 memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
                 
-                assert(compare_exchange_32(&plugin_state,
-                                           Asset_File_State_HOT_RELOAD_STAGE_SWAP,
-                                           Asset_File_State_HOT_RELOAD_VALIDATING));
+                octave_assert(compare_exchange_32(&plugin_state,
+                                                  Asset_File_State_HOT_RELOAD_STAGE_SWAP,
+                                                  Asset_File_State_HOT_RELOAD_VALIDATING));
                 
                 printf("hot reload validation done\n");
                 
             }
             else 
             {
+                
                 printf("hot : compilation failed\n");
                 release_jit(hot_reload_handle);
-                assert(!hot_reload_handle->parameter_values_audio_side);
-                assert(!hot_reload_handle->parameter_values_ui_side);
-                assert(!hot_reload_handle->ring.buffer);
+                octave_assert(!hot_reload_handle->parameter_values_audio_side);
+                octave_assert(!hot_reload_handle->parameter_values_ui_side);
+                octave_assert(!hot_reload_handle->ring.buffer);
+                
                 printf("hot : done cleaning up, back in use\n");
                 
-                if(hot_reload_was_it_failed){
-                    assert(compare_exchange_32(&plugin_state,
-                                               Asset_File_State_FAILED,
-                                               Asset_File_State_HOT_RELOAD_VALIDATING));
+                
+                if(current_handle->descriptor.error.flag != Compiler_Success){
+                    octave_assert(compare_exchange_32(&plugin_state,
+                                                      Asset_File_State_FAILED,
+                                                      Asset_File_State_HOT_RELOAD_VALIDATING));
                 }
                 else{
-                    assert(compare_exchange_32(&plugin_state,
-                                               Asset_File_State_STAGE_USAGE,
-                                               Asset_File_State_HOT_RELOAD_VALIDATING));
+                    octave_assert(compare_exchange_32(&plugin_state,
+                                                      Asset_File_State_STAGE_USAGE,
+                                                      Asset_File_State_HOT_RELOAD_VALIDATING));
                 }
             }
         }
@@ -485,9 +490,9 @@ i32 main(i32 argc, char** argv)
                 .stage = &plugin_state
             };
             
-            assert(exchange_32(&plugin_state,
-                               Asset_File_State_STAGE_BACKGROUND_LOADING)
-                   == Asset_File_State_UNLOADING);
+            octave_assert(exchange_32(&plugin_state,
+                                      Asset_File_State_STAGE_BACKGROUND_LOADING)
+                          == Asset_File_State_UNLOADING);
             
             compiler_thread_handle = 
                 CreateThread(0, 0,
@@ -558,9 +563,9 @@ i32 main(i32 argc, char** argv)
             if(win32_open_file(audio_filename, sizeof(audio_filename), filter))
             {
                 //Auto old_wave_state = 
-                assert(compare_exchange_32(&wav_state, 
-                                           Asset_File_State_COLD_RELOAD_STAGE_UNUSE,
-                                           Asset_File_State_IN_USE));
+                octave_assert(compare_exchange_32(&wav_state, 
+                                                  Asset_File_State_COLD_RELOAD_STAGE_UNUSE,
+                                                  Asset_File_State_IN_USE));
             }
             frame_io.mouse_down = false;
         }
@@ -571,7 +576,7 @@ i32 main(i32 argc, char** argv)
             {
                 //Auto old_wave_state = 
                 exchange_32(&plugin_state, Asset_File_State_COLD_RELOAD_STAGE_UNUSE);
-                //TODO assert, dans quels états peut être old_wav_state qui nous foutraient dans la merde ?
+                //TODO octave_assert, dans quels états peut être old_wav_state qui nous foutraient dans la merde ?
             }
             frame_io.mouse_down = false;
         }
@@ -584,12 +589,12 @@ i32 main(i32 argc, char** argv)
                                                    Asset_File_State_FAILED);
             if(was_in_use || was_failed)
             {
-                if(win32_query_file_change(&current_handle->file_change_listener))
+                if(win32_query_file_change(&plugin_edit_listener))
                 {
                     printf("hot : file has changed\n");
-                    assert(!hot_reload_handle->parameter_values_audio_side);
-                    assert(!hot_reload_handle->parameter_values_ui_side);
-                    assert(!hot_reload_handle->ring.buffer);
+                    octave_assert(!hot_reload_handle->parameter_values_audio_side);
+                    octave_assert(!hot_reload_handle->parameter_values_ui_side);
+                    octave_assert(!hot_reload_handle->ring.buffer);
                     
                     Compiler_Error *old_error_log_buffer = hot_reload_handle->error_log.errors;
                     
@@ -608,11 +613,8 @@ i32 main(i32 argc, char** argv)
                         .stage = &plugin_state
                     };
                     
-                    hot_reload_was_it_failed = was_failed;
-                    
-                    assert(compare_exchange_32(&plugin_state, Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING,
-                                               Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
-                    
+                    octave_assert(compare_exchange_32(&plugin_state, Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING,
+                                                      Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
                     printf("hot : file stage backround loading\n");
                     compiler_thread_handle = CreateThread(0, 0,
                                                           &compiler_thread_proc,
@@ -623,15 +625,15 @@ i32 main(i32 argc, char** argv)
                 }
                 else if(was_in_use)
                 {
-                    assert(compare_exchange_32(&plugin_state, 
-                                               Asset_File_State_IN_USE,
-                                               Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
+                    octave_assert(compare_exchange_32(&plugin_state, 
+                                                      Asset_File_State_IN_USE,
+                                                      Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
                 }
                 else if(was_failed)
                 {
-                    assert(compare_exchange_32(&plugin_state, 
-                                               Asset_File_State_FAILED,
-                                               Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
+                    octave_assert(compare_exchange_32(&plugin_state, 
+                                                      Asset_File_State_FAILED,
+                                                      Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
                 }
             }
             

@@ -12,20 +12,21 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 ### TODO
 
-Easy : \
+Core: \
 \
-win32_helpers shouldn't be before structs.h, because now everything needs to include windows.h, and only win32_platform should do that. I need to take Listener out of Plugin
-Plugin hot swap \
+Disable hot-reload button \
+If the struct layout has not changed, and if initial_state produces the same thing, then do not swap \
+Plugin Loading Manager abstraction
 Proper memory layer \
-No plugin parameter -> Load Plugin File \
+No CLI plugin -> Load Plugin File (implies 3 states : was_failed, was_in_use, was_not_loaded) \
 FFT processing available to the plugins \
-Plugin allocator and tracking -> automatic collection \
+Plugin allocator \
+Display custom compiler errors \
+\
+Optional: \
+\
 Draggable IR \
 Time and frequency markers on the graphs \
-Release assertions \
-\
-Hard : \
-\
 Plugin browser \
 Command queue to audio thread : play, stop, parameter change (? full parameter state ?) \
 Reset State button \
@@ -35,6 +36,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+~~Plugin reload on save~~ \
 ~~Single executable Release build~~ \
 ~~Display Compiler errors~~ \
 ~~Plugin cold swap~~

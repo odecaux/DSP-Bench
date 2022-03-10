@@ -45,8 +45,8 @@ enum Asset_File_State : u32 {
 //mayber I just need the location of the problem in the source ?
 
 enum Compiler_Error_Flag{
-    Compiler_Success,
     Compiler_Generic_Error, //TODO c'est pour aller voir plus loin dans le tree des erreurs, rename sub_error or smth
+    Compiler_Success,
     
     Compiler_Too_Many_Fun,
     Compiler_No_Fun,
@@ -234,7 +234,6 @@ typedef struct {
     Plugin_Parameter_Value* parameter_values_ui_side;
     Plugin_Parameters_Ring_Buffer ring;
     
-    File_Change_Listener file_change_listener;
 } Plugin;
 
 typedef void(*try_compile_t)(const char*, const void*, Plugin*);

@@ -43,7 +43,7 @@ function i64 file_get_size(const char* filename)
     
     CloseHandle(handle);
     
-    assert(file_size < 0x7FFFFFFFFFFFFFFF);
+    octave_assert(file_size < 0x7FFFFFFFFFFFFFFF);
     
     return (i64)file_size;
 }
@@ -68,7 +68,7 @@ function bool load_file_to_memory(const char* filename, u8* out_buffer)
     LARGE_INTEGER file_size_quad;
     //TODO check result
     BOOL result = GetFileSizeEx(handle, &file_size_quad);
-    u64 file_size = file_size_quad.QuadPart; assert(file_size <= 0xFFFFFFFF);
+    u64 file_size = file_size_quad.QuadPart; octave_assert(file_size <= 0xFFFFFFFF);
     
     auto success = ReadFile(handle, out_buffer, (u32)file_size, 0, 0);
     if(success == FALSE)
@@ -82,7 +82,7 @@ function bool load_file_to_memory(const char* filename, u8* out_buffer)
 
 function bool win32_open_file(char *out_buffer, u32 max_buffer_size, char *filter)
 {
-    assert(max_buffer_size > 0);
+    octave_assert(max_buffer_size > 0);
     out_buffer[0] = '\0';
     OPENFILENAME open_file_ctx = {
         .lStructSize = sizeof(open_file_ctx),

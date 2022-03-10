@@ -456,10 +456,14 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
     auto kind = clang::InputKind(clang::Language::CXX);
     compiler_instance.getFrontendOpts().Inputs.push_back(clang::FrontendInputFile(filename, kind));
     
+    auto split_input = compiler_instance.getFrontendOpts().Inputs.back().getFile().rsplit('\\');
+    String plugin_filename;
+    if(split_input.second.size() == 0)
+        plugin_filename =  allocate_and_copy_llvm_stringref(split_input.first);
+    else
+        plugin_filename =  allocate_and_copy_llvm_stringref(split_input.second);
     
-    String plugin_filename =  allocate_and_copy_llvm_stringref(compiler_instance.getFrontendOpts().Inputs.back().getFile().rsplit('\\').second);
-    
-    Compiler_Error error = { };
+    Compiler_Error error = {  };
     Plugin_Descriptor descriptor = {.name = plugin_filename};
     std::unique_ptr<llvm::MemoryBuffer> new_buffer = nullptr;
     
@@ -492,7 +496,7 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
                                            compiler_instance.getSourceManager(), 
                                            compiler_instance.getLangOpts(), 
                                            compiler_instance.getSourceManager().getMainFileID());
-        assert(new_buffer);
+        octave_assert(new_buffer);
         error.type = Compiler_Error_Type_Success;
     };
     
@@ -507,6 +511,7 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
             errors_push_clang(error_log, {allocate_and_copy_std_string(error_it->second)});
         }
         plugin->error = {Compiler_Clang_Error};
+        plugin->descriptor = descriptor;
         return;
     }
     //succesfully compiled, but failed at some parsing stage
@@ -697,7 +702,7 @@ Decl_Handle find_initialize_state(clang::ASTContext& ast_ctx)
             return false;
         }
         
-        //TODO assert que float est 32 bit
+        //TODO octave_assert que float est 32 bit
         if(!sample_rate_type.isSpecificBuiltinType(clang::BuiltinType::Float))
         {
             std::cout << "third parameter should be float sample_rate\n";
@@ -886,8 +891,9 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
             Plugin_Descriptor_Parameter plugin_parameter_rename = [&param_strings, 
                                                                    &parameters_struct_layout,
                                                                    &field,
-                                                                   &source_manager] {
-                Plugin_Descriptor_Parameter parameter = {};
+                                                                   &source_manager] 
+            {
+                Plugin_Descriptor_Parameter parameter = { .error { .flag = Compiler_Success}};
                 
                 const auto& type = *field->getType();
                 auto index = field->getFieldIndex();
@@ -1001,7 +1007,7 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
                     Parameter_Enum enum_param = {};
                     
                     auto *enum_decl = maybe_enum->getDecl();
-                    //TODO assert que le getIntegerType soit un int normal
+                    //TODO octave_assert que le getIntegerType soit un int normal
                     for(auto _: maybe_enum->getDecl()->enumerators())
                         enum_param.num_entries++;
                     
@@ -1135,7 +1141,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     {
         //NOTE only possible because we set this ourselves
         auto* diagnostics = static_cast<clang::TextDiagnosticBuffer*>(&compiler_instance.getDiagnosticClient()); 
-        assert(diagnostics->getNumErrors() != 0);
+        octave_assert(diagnostics->getNumErrors() != 0);
         
         for(auto error_it = diagnostics->err_begin(); error_it < diagnostics->err_end(); error_it++)
         {
@@ -1147,7 +1153,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     }
     std::unique_ptr<llvm::Module> module = compile_action->takeModule();
     
-    assert(module); 
+    octave_assert(module); 
     //return { Compiler_Cant_Take_Module };
     
     //Optimizations
@@ -1175,7 +1181,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     builder.setOptLevel(llvm::CodeGenOpt::Level::Aggressive);
     
     llvm::ExecutionEngine *engine = builder.create();
-    assert(engine); 
+    octave_assert(engine); 
     //return { Compiler_Cant_Launch_Jit };
     
     //on en a pas vraiment besoin de faire ça. C'est dans le cas où on chargerait plusieur modules sur le même executionEngine
@@ -1186,7 +1192,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     auto initialize_state_f = (initialize_state_t)engine->getFunctionAddress("initialize_state_wrapper");
     
     
-    assert(audio_callback_f && default_parameters_f && initialize_state_f);
+    octave_assert(audio_callback_f && default_parameters_f && initialize_state_f);
     
     plugin->error = { Compiler_Success };
     plugin->descriptor = descriptor;
@@ -1210,7 +1216,7 @@ void release_jit(Plugin *plugin)
     
     if(plugin->descriptor.num_parameters == 0)
     {
-        assert(plugin->descriptor.parameters == nullptr);
+        octave_assert(plugin->descriptor.parameters == nullptr);
     }
     else{
         for(i32 i = 0; i < plugin->descriptor.num_parameters; i++)
@@ -1225,7 +1231,7 @@ void release_jit(Plugin *plugin)
                 }
                 else
                 {
-                    assert(params[i].enum_param.entries == nullptr);
+                    octave_assert(params[i].enum_param.entries == nullptr);
                 }
             }
             delete params[i].name.str;
@@ -1237,8 +1243,12 @@ void release_jit(Plugin *plugin)
     if(plugin->llvm_jit_engine)
         delete (llvm::ExecutionEngine *)plugin->llvm_jit_engine;
     
-    *plugin = {};
-    assert(plugin->audio_callback_f == nullptr);
+    
+    plugin->llvm_jit_engine = nullptr;
+    plugin->audio_callback_f = nullptr;
+    plugin->default_parameters_f = nullptr;
+    plugin->initialize_state_f = nullptr;
+    
 }
 
 #ifdef DEBUG

@@ -8,15 +8,13 @@
 #include "ipp.h"
 #include "ipps.h"
 #include <ippdefs.h>
-#include "windows.h"
 
 #include "memory.h"
 #include "base.h"
-#include "win32_helpers.h"
 #include "structs.h"
 #include "fft.h"
 
-void ipp_assert_impl(IppStatus status, const char* file, u32 line)
+void ipp_octave_assert_impl(IppStatus status, const char* file, u32 line)
 {
     if(status != ippStsNoErr) {
         printf("%s:%lu\n", file, line);
@@ -65,7 +63,7 @@ void fft_perform(FFT *fft)
         fft->magnitudes[i] = sqrt(fft->fft_out[i].a * fft->fft_out[i].a + 
                                   fft->fft_out[i].b * fft->fft_out[i].b);
 }
-#define ipp_assert(status) ipp_assert_impl(status, __FILE__, __LINE__); 
+#define ipp_octave_assert(status) ipp_octave_assert_impl(status, __FILE__, __LINE__); 
 
 void fft_test_generate_tone(real32 frequency, real32 magnitude, real32 *buffer, i32 sample_count)
 {
@@ -75,21 +73,21 @@ void fft_test_generate_tone(real32 frequency, real32 magnitude, real32 *buffer, 
 
 void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count)
 {
-    ipp_assert(ippsWinHamming_32f(in_buffer, out_buffer, sample_count));
+    ipp_octave_assert(ippsWinHamming_32f(in_buffer, out_buffer, sample_count));
 }
 
 void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp_ctx)
 {
-    assert((input_sample_count & (input_sample_count - 1)) == 0);
+    octave_assert((input_sample_count & (input_sample_count - 1)) == 0);
     real32 r_s = log((real32)input_sample_count);
     real32 l = log(2.0);
     i32 order = (i32)(log((real32)input_sample_count)/log(2.0));
     
     Ipp_Order_Context *ctx = &ipp_ctx->order_to_ctx[order];
-    ipp_assert(ippsFFTFwd_RToCCS_32f(in, ctx->temp_perm_buffer, (IppsFFTSpec_R_32f*)ctx->spec, ctx->work_buffer));
+    ipp_octave_assert(ippsFFTFwd_RToCCS_32f(in, ctx->temp_perm_buffer, (IppsFFTSpec_R_32f*)ctx->spec, ctx->work_buffer));
     
     //NOTE il faut que Ipp32fc et Vec2 aient le même layout
-    ipp_assert(ippsConjCcs_32fc(ctx->temp_perm_buffer, (Ipp32fc*)out, input_sample_count));
+    ipp_octave_assert(ippsConjCcs_32fc(ctx->temp_perm_buffer, (Ipp32fc*)out, input_sample_count));
 }
 
 Ipp_Order_Context ipp_create_spec_for_order(i32 fft_order)
@@ -99,14 +97,14 @@ Ipp_Order_Context ipp_create_spec_for_order(i32 fft_order)
     i32 spec_size;
     i32 spec_buffer_size;
     i32 work_buffer_size;
-    ipp_assert(ippsFFTGetSize_R_32f(fft_order, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast ,&spec_size, &spec_buffer_size, &work_buffer_size));
+    ipp_octave_assert(ippsFFTGetSize_R_32f(fft_order, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast ,&spec_size, &spec_buffer_size, &work_buffer_size));
     
     u8 *spec_holder = (u8*) malloc(spec_size);
     u8 *spec_initialization_buffer = (u8*) malloc(spec_buffer_size);
     u8 *work_buffer = (u8*) malloc(work_buffer_size);
     
     IppsFFTSpec_R_32f *spec; 
-    ipp_assert(ippsFFTInit_R_32f(&spec, fft_order, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast, spec_holder, spec_initialization_buffer));
+    ipp_octave_assert(ippsFFTInit_R_32f(&spec, fft_order, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast, spec_holder, spec_initialization_buffer));
     
     
     free(spec_initialization_buffer);
@@ -127,10 +125,10 @@ Ipp_Context ipp_initialize()
     u64 cpuFeatures;
     u64 enabledFeatures;
     
-    ipp_assert(ippInit());
-    ipp_assert(ippSetFlushToZero(1, 0));
-    ipp_assert(ippSetDenormAreZeros(1));
-    ipp_assert(ippGetCpuFeatures(&cpuFeatures, 0));/* Get CPU features and features enabled with selected library level */
+    ipp_octave_assert(ippInit());
+    ipp_octave_assert(ippSetFlushToZero(1, 0));
+    ipp_octave_assert(ippSetDenormAreZeros(1));
+    ipp_octave_assert(ippGetCpuFeatures(&cpuFeatures, 0));/* Get CPU features and features enabled with selected library level */
     
     
     Ipp_Order_Context *order_to_ctx = (Ipp_Order_Context*) malloc( sizeof(Ipp_Order_Context) *  (MAX_FFT_ORDER + 1));

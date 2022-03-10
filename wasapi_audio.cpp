@@ -118,13 +118,13 @@ DWORD audio_thread_fn(LPVOID Context)
             
             wasapi_context->audio_client->GetCurrentPadding(&padding);
             wasapi_context->audio_client->GetBufferSize(&system_allocated_samples);
-            assert(wasapi_context->system_num_allocated_samples == system_allocated_samples);
+            octave_assert(wasapi_context->system_num_allocated_samples == system_allocated_samples);
             
             total_samples_to_render = system_allocated_samples - padding;
             u32 total_samples_user_buffer = audio_parameters.num_samples;
             
             HRESULT hr = wasapi_context->render_client->GetBuffer(total_samples_to_render,(BYTE**) &system_buffer);
-            assert(hr != AUDCLNT_E_BUFFER_TOO_LARGE);
+            octave_assert(hr != AUDCLNT_E_BUFFER_TOO_LARGE);
             
             if(hr == S_OK)
             {

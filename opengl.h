@@ -364,7 +364,7 @@ OpenGL_Context_Atlas opengl_initialize_atlas(Font* font)
     glShaderSource(atlas_vertex_shader_handle, 1, &atlas_vertex_shader_source, NULL);
     glCompileShader(atlas_vertex_shader_handle);
     glGetShaderiv(atlas_vertex_shader_handle, GL_COMPILE_STATUS, &status);
-    assert(status == GL_TRUE);
+    octave_assert(status == GL_TRUE);
     
     const char *atlas_fragment_shader_source =  
         "#version 330 core\n"
@@ -383,14 +383,14 @@ OpenGL_Context_Atlas opengl_initialize_atlas(Font* font)
     glShaderSource(atlas_fragment_shader_handle, 1, &atlas_fragment_shader_source, NULL);
     glCompileShader(atlas_fragment_shader_handle);
     glGetShaderiv(atlas_fragment_shader_handle, GL_COMPILE_STATUS, &status);
-    assert(status == GL_TRUE);
+    octave_assert(status == GL_TRUE);
     
     const u32 atlas_shader_program = glCreateProgram();
     glAttachShader(atlas_shader_program, atlas_vertex_shader_handle);
     glAttachShader(atlas_shader_program, atlas_fragment_shader_handle);
     glLinkProgram(atlas_shader_program);
     glGetProgramiv(atlas_shader_program, GL_LINK_STATUS, &status);
-    assert(status == GL_TRUE);
+    octave_assert(status == GL_TRUE);
     opengl_check_error();
     
     glDeleteShader(atlas_vertex_shader_handle);
@@ -478,7 +478,7 @@ OpenGL_Context_IR opengl_initialize_ir()
     glShaderSource(ir_vertex_shader_handle, 1, &ir_vertex_shader_source, NULL);
     glCompileShader(ir_vertex_shader_handle);
     glGetShaderiv(ir_vertex_shader_handle, GL_COMPILE_STATUS, &status);
-    assert(status == GL_TRUE);
+    octave_assert(status == GL_TRUE);
     
     
     //~ accumulate
@@ -516,14 +516,14 @@ OpenGL_Context_IR opengl_initialize_ir()
     glShaderSource(ir_integrate_fragment_shader_handle, 1, &ir_integrate_fragment_shader_source, NULL);
     glCompileShader(ir_integrate_fragment_shader_handle);
     glGetShaderiv(ir_integrate_fragment_shader_handle, GL_COMPILE_STATUS, &status);
-    assert(status == GL_TRUE);
+    octave_assert(status == GL_TRUE);
     
     const u32 ir_integrate_shader_program = glCreateProgram();
     glAttachShader(ir_integrate_shader_program, ir_vertex_shader_handle);
     glAttachShader(ir_integrate_shader_program, ir_integrate_fragment_shader_handle);
     glLinkProgram(ir_integrate_shader_program);
     glGetProgramiv(ir_integrate_shader_program, GL_LINK_STATUS, &status);
-    assert(status == GL_TRUE);
+    octave_assert(status == GL_TRUE);
     opengl_check_error();
     
     glDeleteShader(ir_integrate_fragment_shader_handle);
@@ -591,14 +591,14 @@ OpenGL_Context_IR opengl_initialize_ir()
     glShaderSource(ir_interpolate_fragment_shader_handle, 1, &ir_interpolate_fragment_shader_source, NULL);
     glCompileShader(ir_interpolate_fragment_shader_handle);
     glGetShaderiv(ir_interpolate_fragment_shader_handle, GL_COMPILE_STATUS, &status);
-    assert(status == GL_TRUE);
+    octave_assert(status == GL_TRUE);
     
     const u32 ir_interpolate_shader_program = glCreateProgram();
     glAttachShader(ir_interpolate_shader_program, ir_vertex_shader_handle);
     glAttachShader(ir_interpolate_shader_program, ir_interpolate_fragment_shader_handle);
     glLinkProgram(ir_interpolate_shader_program);
     glGetProgramiv(ir_interpolate_shader_program, GL_LINK_STATUS, &status);
-    assert(status == GL_TRUE);
+    octave_assert(status == GL_TRUE);
     opengl_check_error();
     
     glDeleteShader(ir_vertex_shader_handle);
@@ -685,7 +685,7 @@ OpenGL_Context_FFT opengl_initialize_fft()
     glShaderSource(fft_vertex_shader_handle, 1, &fft_vertex_shader_source, NULL);
     glCompileShader(fft_vertex_shader_handle);
     glGetShaderiv(fft_vertex_shader_handle, GL_COMPILE_STATUS, &status);
-	assert(status == GL_TRUE);
+	octave_assert(status == GL_TRUE);
     
     
     
@@ -719,14 +719,14 @@ OpenGL_Context_FFT opengl_initialize_fft()
     glShaderSource(fft_fragment_shader_handle, 1, &fft_fragment_shader_source, NULL);
     glCompileShader(fft_fragment_shader_handle);
     glGetShaderiv(fft_fragment_shader_handle, GL_COMPILE_STATUS, &status);
-	assert(status == GL_TRUE);
+	octave_assert(status == GL_TRUE);
     
     const u32 fft_shader_program = glCreateProgram();
     glAttachShader(fft_shader_program, fft_vertex_shader_handle);
     glAttachShader(fft_shader_program, fft_fragment_shader_handle);
     glLinkProgram(fft_shader_program);
     glGetProgramiv(fft_shader_program, GL_LINK_STATUS, &status);
-    assert(status == GL_TRUE);
+    octave_assert(status == GL_TRUE);
     opengl_check_error();
     
     glDeleteShader(fft_vertex_shader_handle);
@@ -847,7 +847,7 @@ void opengl_render_ir(OpenGL_Context_IR* opengl_ctx, Graphics_Context_IR* graphi
     
     
     i32 pixel_count = bounds.dim.x;
-    assert(pixel_count >= 0);
+    octave_assert(pixel_count >= 0);
     i32 sample_count = i32(IR_BUFFER_LENGTH * graphics_ctx->zoom_state);
     
     Vec2 *temp = opengl_ctx->ir_integrate_temp_buffer;

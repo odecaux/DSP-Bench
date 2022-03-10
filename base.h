@@ -38,6 +38,19 @@ typedef double real64;
 #define octave_abs(x) ((x > 0) ? (x) : -(x))
 #define octave_lerp(val, in_min, in_max, out_min, out_max) (out_min)+ ((out_max) - (out_min)) * ((val) - (in_min)) / ((in_max)- (in_min))
 
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+#define AT __FILE__ ":" TOSTRING(__LINE__)
+
+
+#ifdef DEBUG
+#define octave_assert(expr) assert(expr)
+#endif
+#ifdef RELEASE
+#define octave_assert(expr) if(!(expr)) { printf(AT " : " #expr); exit(-1); } 
+#endif
+
+
 typedef struct{
     union { 
         char* str;

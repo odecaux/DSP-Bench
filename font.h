@@ -33,7 +33,7 @@ internal Font load_fonts(const char* font_filename)
     
     const int font_offset = stbtt_GetFontOffsetForIndex(font_file_buffer, /* TODO autre font dans le fichier ?*/ 0);
     
-    assert(font_offset >= 0 && "FontData is incorrect, or FontNo cannot be found.");
+    octave_assert(font_offset >= 0 && "FontData is incorrect, or FontNo cannot be found.");
     if (!stbtt_InitFont(&font_info, font_file_buffer, font_offset))
     {
         printf("couldn't initialize stbtt\n");
@@ -89,7 +89,7 @@ internal Font load_fonts(const char* font_filename)
         int x0, y0, x1, y1;
         const int glyph_index_in_font = stbtt_FindGlyphIndex(&font_info, codepoint_list[glyph_i]);
         
-        assert(glyph_index_in_font != 0);
+        octave_assert(glyph_index_in_font != 0);
         stbtt_GetGlyphBitmapBoxSubpixel(&font_info, glyph_index_in_font, scale * oversample_h, scale * oversample_v, 0, 0, &x0, &y0, &x1, &y1);
         glyph_rects[glyph_i].w = (stbrp_coord)(x1 - x0 + padding + oversample_h - 1);
         glyph_rects[glyph_i].h = (stbrp_coord)(y1 - y0 + padding + oversample_v - 1);
@@ -217,12 +217,12 @@ internal Font load_fonts(const char* font_filename)
                 
                 if(a_idx >= texture_width * texture_height)
                 {
-                    assert(false && "a_idx");
+                    octave_assert(false && "a_idx");
                 }
                 
                 if(b_idx >= texture_width * texture_height)
                 {
-                    assert(false && "b_idx");
+                    octave_assert(false && "b_idx");
                 }
                 u8 swap = grayscale_pixels[a_idx];
                 grayscale_pixels[a_idx] = grayscale_pixels[b_idx];
