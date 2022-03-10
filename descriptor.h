@@ -4,7 +4,22 @@
 #define DESCRIPTOR_H
 
 
-String compiler_error_flag_to_string(Compiler_Error_Flag flag);
+#define CUSTOM_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
+
+
+internal String compiler_error_flag_to_string(Compiler_Error_Flag flag)
+{
+    switch(flag)
+    {
+#include "errors.inc"
+        default : {
+            octave_assert(false && "why doesn't this switch cover all compiler errors ?\n");
+            return {};
+        }
+    }
+}
+
+#undef CUSTOM_ERROR_FLAG
 
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b);
 

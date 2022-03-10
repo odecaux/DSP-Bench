@@ -19,5 +19,5 @@ set code="%cd%"
 set libs=Kernel32.lib  user32.lib Ole32.lib opengl32.lib Gdi32.lib ippcoremt.lib ippsmt.lib ippvmmt.lib Comdlg32.lib 
 
 pushd build
-cl %release_opts% /I %llvm_inc%  %code%\wasapi_audio.cpp %code%\app.cpp %code%\audio.cpp %code%\main.cpp %code%\descriptor.cpp %code%\fft.cpp %code%\compiler.cpp -FeDSP_bench_release.exe   %libs%  /link  /INCREMENTAL:NO  /OPT:REF /OPT:ICF /LIBPATH:%llvm_lib%  
+cl %release_opts% /I %llvm_inc%  %code%\wasapi_audio.cpp %code%\app.cpp %code%\audio.cpp %code%\main.cpp %code%\descriptor.cpp %code%\fft.cpp %code%\compiler.cpp %code%\gui.cpp -FeDSP_bench_release.exe   %libs%  /link  /INCREMENTAL:NO  /OPT:REF /OPT:ICF /LIBPATH:%llvm_lib%  
 popd

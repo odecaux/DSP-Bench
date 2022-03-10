@@ -4,6 +4,8 @@
 #define WIN32_PLATFORM_H
 
 
+
+
 LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param)
 {
     LRESULT result = 0;

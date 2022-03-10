@@ -14,14 +14,16 @@ DSP_bench.exe audio_file.wav plugin_code.cpp
 
 Core: \
 \
-Disable hot-reload button \
+Debug compiler on wrong field macro \
+
 Plugin Loading Manager abstraction
 Proper memory layer \
-No CLI plugin -> Load Plugin File (implies 3 states : was_failed, was_in_use, was_not_loaded) \
-FFT processing available to the plugins \
 Plugin allocator \
-Debug compiler on wrong field macro \
-Display custom compiler errors \
+Error message : more info \
+FFT processing available to the plugins \
+
+No CLI plugin -> Load Plugin File \
+Disable hot-reload button \
 Panel toggle : compiler log and IR \
 \
 Optional: \
@@ -30,7 +32,6 @@ If the struct layout has not changed, and if initial_state produces the same thi
 Draggable IR \
 Time and frequency markers on the graphs \
 Plugin browser \
-Command queue to audio thread : play, stop, parameter change (? full parameter state ?) \
 Reset State button \
 Font sizes system (load multiple font sizes or stretch uv) \
 Beautiful UI \
@@ -38,6 +39,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+~~Display custom compiler errors~~ \
 ~~Plugin reload on save~~ \
 ~~Single executable Release build~~ \
 ~~Display Compiler errors~~ \

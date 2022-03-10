@@ -106,63 +106,35 @@ typedef struct Window_Context{
     HWND window;
 } Window_Context;
 
-typedef struct {
-    bool worked;
-    char* filename;
-    HANDLE handle;
-    u64 last_write_time;
-} File_Change_Listener ;
-
-function File_Change_Listener win32_init_file_change_listener(char *filename) 
+function u64 win32_get_last_write_time(const char *filename)
 {
-    HANDLE handle = CreateFileA(filename,
-                                FILE_READ_ATTRIBUTES,
-                                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                                nullptr,
-                                OPEN_EXISTING,
-                                FILE_ATTRIBUTE_NORMAL,
-                                nullptr);
-    
-    if(handle == INVALID_HANDLE_VALUE)
+    FILETIME last_write_time = {0};
+    WIN32_FIND_DATA find_data;
+    HANDLE find_handle = FindFirstFileA(filename, &find_data);
+    if(find_handle != INVALID_HANDLE_VALUE)
     {
-        return {false};
+        FindClose(find_handle);
+        last_write_time = find_data.ftLastWriteTime;
     }
-    FILETIME win32_write_time;
-    BOOL result = GetFileTime(handle,
-                              nullptr,
-                              nullptr,
-                              &win32_write_time);
-    ULARGE_INTEGER temp_large_int { .u = { .LowPart = win32_write_time.dwLowDateTime, .HighPart = win32_write_time.dwHighDateTime}} ;
-    
-    u64 write_time = temp_large_int.QuadPart;
-    
-    return File_Change_Listener{
-        .worked = true,
-        .filename = filename,
-        .handle = handle,
-        .last_write_time = write_time,
-    };
+    ULARGE_INTEGER temp_large_int = { .u = { 
+            .LowPart = last_write_time.dwLowDateTime, 
+            .HighPart = last_write_time.dwHighDateTime
+        }};
+    return temp_large_int.QuadPart;
 }
 
-function bool win32_query_file_change(File_Change_Listener *listener)
+function bool win32_query_file_change(const char *filename, u64 *previous_write_time)
 {
-    if(!listener->worked)
+    u64 new_write_time = win32_get_last_write_time(filename);
+    if(new_write_time == 0)
         return false;
-    FILETIME win32_write_time;
-    BOOL result = GetFileTime(listener->handle,
-                              nullptr,
-                              nullptr,
-                              &win32_write_time);
-    if(result == 0)
-        return false;
-    
-    ULARGE_INTEGER temp_large_int { .u = { .LowPart = win32_write_time.dwLowDateTime, .HighPart = win32_write_time.dwHighDateTime}} ;
-    u64 write_time = temp_large_int.QuadPart;
-    if(listener->last_write_time < write_time){
-        listener->last_write_time = write_time;
+    if(new_write_time > *previous_write_time)
+    {
+        
+        *previous_write_time = new_write_time;
         return true;
     }
-    else{
+    else {
         return false;
     }
 }

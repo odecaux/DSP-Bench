@@ -7,17 +7,6 @@ IO io_initial_state();
 
 IO io_state_advance(const IO old_io);
 
-void frame(Plugin_Descriptor& descriptor, 
-           Graphics_Context *graphics_ctx, 
-           UI_State& ui_state, 
-           IO frame_io, 
-           Plugin_Parameter_Value* current_parameter_values,
-           Audio_Thread_Context *audio_ctx,
-           Compiler_Error_Log *error_log,
-           bool *parameters_were_tweaked,
-           bool *load_was_clicked,
-           bool *load_plugin_was_clicked);
-
 void compute_IR(Plugin& handle, 
                 real32** IR_buffer, 
                 u32 IR_length, 

@@ -32,6 +32,10 @@ commands = {
         .win = "build_compiler.bat", 
     },
     
+    .build_gui = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
+        .win = "build_gui.bat", 
+    },
+    
     .build_and_run_tests = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
         .win = "test\\build_tests.bat", 
     },
@@ -47,9 +51,6 @@ commands = {
         .win = "remedybg.exe build\\session.rdbg",
     },
     
-    .build_and_run_font = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
-        .win = "build_font.bat", 
-    },
 };
 
 fkey_command = {
@@ -57,6 +58,7 @@ fkey_command = {
     .F2 = "run",
     .F3 = "debug",
     .F4 = "build_compiler",
-    .F5 = "build_and_run_tests",
-    .F6 = "build_and_run_font",
+    .F5 = "build_gui",
+    //.F5 = "build_and_run_tests",
+    .F5 = "build_gui",
 };

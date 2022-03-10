@@ -22,15 +22,17 @@
 #include "win32_platform.h"
 #include "opengl.h"
 
+
 #ifdef DEBUG
 try_compile_t try_compile = nullptr;
 release_jit_t release_jit = nullptr;
 create_clang_context_t create_clang_context = nullptr;
 release_clang_context_t release_clang_context = nullptr; 
-
+frame_t frame = nullptr;
 #endif
 #ifdef RELEASE
 #include "compiler.h"
+#include "gui.h"
 #endif
 
 typedef struct {
@@ -218,7 +220,7 @@ i32 main(i32 argc, char** argv)
     void* clang_ctx = create_clang_context();
     
     //bool hot_reload_was_it_failed = false;
-    File_Change_Listener plugin_edit_listener;
+    u64 plugin_last_write_time;
     
     Plugin handle_a {
         .error_log = {
@@ -278,6 +280,21 @@ i32 main(i32 argc, char** argv)
     };
     
     FFT fft = fft_initialize(IR_BUFFER_LENGTH, audio_parameters.num_channels);
+    
+    //~ UI init
+    
+    
+#ifdef DEBUG
+    octave_assert(CopyFile("gui.dll", "gui_temp.dll", FALSE) != 0);
+    HMODULE gui_dll = LoadLibraryA("gui_temp.dll");
+    octave_assert(gui_dll != NULL && "couldn't find gui.dll");
+    frame = (frame_t)GetProcAddress(gui_dll, "frame");
+    octave_assert(frame != 0);
+    u64 gui_dll_last_write_time = win32_get_last_write_time("gui.dll");
+    
+    printf("gui.dll init : %llu\n", gui_dll_last_write_time);
+#endif
+    
     
     IO frame_io = io_initial_state();
     UI_State ui_state = {-1};
@@ -366,7 +383,7 @@ i32 main(i32 argc, char** argv)
                 plugin_set_parameter_values_from_holder(&current_handle->descriptor, current_handle->parameter_values_audio_side, current_handle->parameters_holder);
                 current_handle->ring = plugin_parameters_ring_buffer_initialize(current_handle->descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
                 
-                plugin_edit_listener = win32_init_file_change_listener(source_filename);
+                plugin_last_write_time = win32_get_last_write_time(source_filename);
                 audio_context.plugin = current_handle;
                 
                 octave_assert(exchange_32(&plugin_state, Asset_File_State_STAGE_USAGE)
@@ -389,7 +406,7 @@ i32 main(i32 argc, char** argv)
                 octave_assert(!current_handle->parameter_values_ui_side);
                 octave_assert(!current_handle->ring.buffer);
                 
-                plugin_edit_listener = win32_init_file_change_listener(source_filename);
+                plugin_last_write_time = win32_get_last_write_time(source_filename);
                 audio_context.plugin = current_handle;
                 
                 printf("done cleaning up\n");
@@ -424,7 +441,7 @@ i32 main(i32 argc, char** argv)
                 plugin_set_parameter_values_from_holder(&hot_reload_handle->descriptor, hot_reload_handle->parameter_values_audio_side, hot_reload_handle->parameters_holder);
                 hot_reload_handle->ring = plugin_parameters_ring_buffer_initialize(hot_reload_handle->descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
                 
-                plugin_edit_listener = win32_init_file_change_listener(source_filename);
+                plugin_last_write_time = win32_get_last_write_time(source_filename);
                 audio_context.hot_reload_plugin = hot_reload_handle;
                 
                 compute_IR(*hot_reload_handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, hot_reload_handle->parameter_values_ui_side);
@@ -589,7 +606,7 @@ i32 main(i32 argc, char** argv)
                                                    Asset_File_State_FAILED);
             if(was_in_use || was_failed)
             {
-                if(win32_query_file_change(&plugin_edit_listener))
+                if(win32_query_file_change(source_filename, &plugin_last_write_time))
                 {
                     printf("hot : file has changed\n");
                     octave_assert(!hot_reload_handle->parameter_values_audio_side);
@@ -659,7 +676,38 @@ i32 main(i32 argc, char** argv)
         i64 current_time;
         win32_get_elapsed_ms_since(last_time, &current_time, &frame_io.delta_time);
         last_time = current_time;
+        
+        //~ reload gui dll
+#ifdef DEBUG
+        {
+            
+            u64 temp_gui_write_time = gui_dll_last_write_time;
+            
+            if(win32_query_file_change("gui.dll", &temp_gui_write_time))
+            {
+                printf("\n");
+                u64 diff = temp_gui_write_time - gui_dll_last_write_time;
+                u64 diff_milliseconds =  diff / 10000;
+                printf("gui.dll reload : %llu ms\n", diff_milliseconds); 
+                
+                FreeLibrary(gui_dll);
+                CopyFile("gui.dll", "gui_temp.dll", FALSE);
+                
+                HMODULE gui_dll = LoadLibraryA("gui_temp.dll");
+                octave_assert(gui_dll != NULL);
+                frame = (frame_t)GetProcAddress(gui_dll, "frame");
+                octave_assert(frame != nullptr);
+                gui_dll_last_write_time = temp_gui_write_time;
+            }
+            
+        }
+#endif
     }
+    
+    
+    
+    
+    
     
     exit(1);
     
