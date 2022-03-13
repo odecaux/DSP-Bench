@@ -254,9 +254,9 @@ void frame(Plugin_Descriptor& descriptor,
                 }
             }
             
+            draw_rectangle(title_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
             draw_rectangle(footer_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
             
-            draw_rectangle(title_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
             
             draw_text(descriptor.name, title_bounds, Color_Front, &graphics_ctx->atlas);
             Rect plugin_play_stop_bounds = rect_take_right(header_bounds, TITLE_HEIGHT);
@@ -430,6 +430,13 @@ void frame(Plugin_Descriptor& descriptor,
         }break;
         case Asset_File_State_NONE :
         {
+            
+            Rect load_plugin_button_bounds = rect_take_left(header_bounds, TITLE_HEIGHT * 3);
+            header_bounds = rect_drop_left(header_bounds, TITLE_HEIGHT * 3);
+            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, &ui_state, &frame_io))
+            {
+                *load_plugin_was_clicked = true;
+            }
             draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
             draw_text(StringLit("No plugin file"), header_bounds, Color_Front, &graphics_ctx->atlas);
         }break;

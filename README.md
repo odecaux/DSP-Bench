@@ -5,11 +5,6 @@ Tool for prototyping DSP code.
 ### Building
 For now there are two heavy dependencies : clang/llvm and Intel Performance Primitives. Sooooo, please use the release for now. 
 
-### usage 
-```
-DSP_bench.exe audio_file.wav plugin_code.cpp 
-```
-
 ### TODO
 
 Core: \
@@ -21,7 +16,6 @@ Plugin allocator \
 Error message : more info \
 FFT processing available to the plugins \
 
-No CLI plugin -> Load Plugin File \
 Disable hot-reload button \
 Panel toggle : compiler log and IR \
 \
@@ -39,25 +33,26 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
-~~Plugin Loading Manager abstraction~~ \
-~~Moved the ui layer to its own dll on debug builds~~ _
-~~Display custom compiler errors~~ \
-~~Plugin reload on save~~ \
-~~Single executable Release build~~ \
-~~Display Compiler errors~~ \
-~~Plugin cold swap~~
-~~Linear vs Logarithmic slider customization~~ \
-~~logarithmic normalization~~ \
-~~Wav swap~~ \
-~~open file prompt~~
-~~Zoomable IR~~ \
-~~don't call opengl_render_fft/ir when plugin isn't live~~ \
-~~Loading screen~~ \
-~~Self contained slider widget~~ \
-~~Parameter ctrl precision (hide mouse)~~ \
-~~cli : optional wav~~ \
-~~Display min,max,value~~ \
-~~window + zero padding fft~~\
-~~Background thread compilation~~ \
-~~Background wav loading~~ \
-~~Play/Stop/Loop Wav, enable/disable plugin (header ?)~~ 
+cli : optional plugin source \
+Plugin loading abstraction \
+Moved the UI layer to its own dll on debug builds \
+Display custom compiler errors \
+Plugin hot-swap on save \
+Single-executable Release build \
+Display compiler errors \
+Plugin cold-swap \
+Linear vs Logarithmic slider customization \
+Audio file swap \
+Open File prompt \
+Zoomable IR \
+Loading screen \
+Self contained slider widget \
+Left-Ctrl -> increase parameter precision  \
+Parameter tweaking hides mouse  \
+cli : optional wav \
+Min, max and value labels on parameters \
+FFT windowing & zero padding \
+Background thread compilation \
+Background wav loading \
+Play, Pause, Enable\Disable buttons\
+Footer and header\
