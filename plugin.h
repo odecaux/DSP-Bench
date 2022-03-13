@@ -7,6 +7,38 @@
 #define CUSTOM_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
 
 
+typedef struct {
+    const char* source_filename;
+    Plugin *handle;
+    void *clang_ctx;
+    
+    Asset_File_State *stage;
+} Compiler_Thread_Param;
+
+
+struct Plugin_Loading_Manager
+{
+    Plugin handle_a;
+    Plugin handle_b;
+    Plugin *current_handle;
+    Plugin *hot_reload_handle;
+    Compiler_Thread_Param compiler_thread_param;
+    HANDLE compiler_thread_handle;
+    u64 plugin_last_write_time;
+    void *clang_ctx;
+    Asset_File_State *plugin_state;
+    char *source_filename;
+};
+
+void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, char *source_filename, Asset_File_State *plugin_state);
+
+void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audio_context, Audio_Parameters audio_parameters);
+
+void plugin_load_button_was_clicked(Plugin_Loading_Manager *m);
+
+void plugin_loading_check_and_stage_hot_reload(Plugin_Loading_Manager *m);
+
+
 internal String compiler_error_flag_to_string(Compiler_Error_Flag flag)
 {
     switch(flag)

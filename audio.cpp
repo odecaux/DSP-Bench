@@ -188,7 +188,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                            Asset_File_State_OK_TO_UNLOAD,
                            Asset_File_State_STAGE_UNLOADING))
     {
-        ctx->audio_file = nullptr;
+        //ctx->audio_file = nullptr;
     }
     if(compare_exchange_32(ctx->plugin_state,
                            Asset_File_State_OK_TO_UNLOAD,
@@ -202,7 +202,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                            Asset_File_State_COLD_RELOAD_STAGE_UNUSE))
     {
         
-        ctx->audio_file = nullptr;
+        //ctx->audio_file = nullptr;
     }
     if(compare_exchange_32(ctx->plugin_state,
                            Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
