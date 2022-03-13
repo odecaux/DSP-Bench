@@ -16,7 +16,6 @@ Core: \
 \
 Debug compiler on wrong field macro \
 
-Plugin Loading Manager abstraction
 Proper memory layer \
 Plugin allocator \
 Error message : more info \
@@ -40,6 +39,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+~~Plugin Loading Manager abstraction~~ \
 ~~Moved the ui layer to its own dll on debug builds~~ _
 ~~Display custom compiler errors~~ \
 ~~Plugin reload on save~~ \

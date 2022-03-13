@@ -27,13 +27,6 @@ typedef struct{
     unsigned long size;
 } Chunk_Header;
 
-typedef struct {
-    Wav_Reading_Error error;
-    u32 num_channels;
-    u32 samples_by_channel;
-    real32** deinterleaved_buffer;
-} WavData;
-
 internal Chunk_Header read_header(HANDLE handle, u64* file_position)
 {
     //printf("curret offset : %llu\n", *file_position);
@@ -62,7 +55,7 @@ internal void debug_header(Wav_Format *header)
     printf("Number of bits used        : %lu\n", header->bit_depth);
 }
 
-internal WavData windows_load_wav(const char* filename)
+internal Audio_File windows_load_wav(const char* filename)
 {
     i64 file_size = file_get_size(filename);
     
