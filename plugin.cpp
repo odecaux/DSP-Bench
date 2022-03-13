@@ -266,7 +266,6 @@ void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, cha
 }
 
 
-
 void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audio_context, Audio_Parameters audio_parameters, 
                            Plugin **handle_to_pull_ir_from)
 {
@@ -284,9 +283,8 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
             
             octave_assert(exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE)
                           == Asset_File_State_VALIDATING);
-            
+                          
             *handle_to_pull_ir_from = m->current_handle;
-            
         }
         else
         {
@@ -316,7 +314,6 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
             
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
             audio_context->hot_reload_plugin = m->hot_reload_handle;
-            
             *handle_to_pull_ir_from = m->hot_reload_handle;
             
             octave_assert(compare_exchange_32(m->plugin_state,
