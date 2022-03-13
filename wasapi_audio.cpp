@@ -16,7 +16,6 @@
 #include "plugin.h"
 #include "audio.h"
 
-
 const IID IID_IAudioClient  = __uuidof(IAudioClient);
 const IID IID_IAudioRenderClient = __uuidof(IAudioRenderClient);
 const CLSID CLSID_MMDeviceEnumerator = __uuidof(MMDeviceEnumerator);

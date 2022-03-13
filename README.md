@@ -9,18 +9,15 @@ For now there are two heavy dependencies : clang/llvm and Intel Performance Prim
 
 Core: \
 \
-Debug compiler on wrong field macro \
-
-Proper memory layer \
-Plugin allocator \
-Error message : more info \
+Plugin should allocate memory \
+Rewrite error reporting \
 FFT processing available to the plugins \
-
 Disable hot-reload button \
-Panel toggle : compiler log and IR \
 \
 Optional: \
 \
+Panel toggle : compiler log and IR \
+Bug : wrong field macro \
 Bug : Exiting while hot reloading crashes \
 If the struct layout has not changed, and if initial_state produces the same thing, then do not swap \
 Draggable IR \
@@ -33,6 +30,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+Plugin allocator \
 cli : optional plugin source \
 Plugin loading abstraction \
 Moved the UI layer to its own dll on debug builds \

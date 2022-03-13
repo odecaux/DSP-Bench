@@ -11,6 +11,10 @@
 #include "plugin.h"
 
 #include "hardcoded_values.h"
+
+//Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_fields_by_plugin, u32 buffer_slot_count);
+
+
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b)
 {
     if(a->parameters_struct.size            != b->parameters_struct.size) return false;
@@ -58,10 +62,11 @@ bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b)
     return true;
 }
 
-Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_fields_by_plugin, u32 buffer_slot_count)
+Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_fields_by_plugin, u32 buffer_slot_count,
+                                                                       Plugin_Allocator *allocator)
 {
     return {
-        .buffer = (Plugin_Parameter_Value*)malloc(sizeof(Plugin_Parameter_Value) * buffer_slot_count * num_fields_by_plugin),
+        .buffer = (Plugin_Parameter_Value*)plugin_allocate(allocator, sizeof(Plugin_Parameter_Value) * buffer_slot_count * num_fields_by_plugin),
         .head = nullptr,
         .writer_idx = 0,
         .buffer_size = buffer_slot_count * num_fields_by_plugin,
@@ -146,41 +151,20 @@ Plugin_Parameter_Value* plugin_parameters_buffer_pull(Plugin_Parameters_Ring_Buf
 
 
 
-void plugin_populate_from_descriptor(Plugin *handle, Audio_Parameters audio_parameters)
-{
-    handle->parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle->descriptor.num_parameters);
-    
-    handle->parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, handle->descriptor.num_parameters);
-    
-    handle->parameters_holder = (char*) m_allocate(handle->descriptor.parameters_struct.size);
-    handle->state_holder = (char*) m_allocate(handle->descriptor.state_struct.size);
-    
-    handle->default_parameters_f(handle->parameters_holder);
-    handle->initialize_state_f(handle->parameters_holder, 
-                               handle->state_holder, 
-                               audio_parameters.num_channels,
-                               audio_parameters.sample_rate, 
-                               nullptr);
-    
-    plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_ui_side, handle->parameters_holder);
-    plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_audio_side, handle->parameters_holder);
-    handle->ring = plugin_parameters_ring_buffer_initialize(handle->descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
-}
-
 #ifdef DEBUG
 extern release_jit_t release_jit;
 extern try_compile_t try_compile;
 #endif
 #ifdef RELEASE
 void release_jit(Plugin *plugin);
-void try_compile(const char* filename, void* clang_ctx_ptr, Plugin *plugin);
+void try_compile(const char* filename, void* clang_ctx_ptr, Plugin *plugin, Plugin_Allocator *allocator);
 #endif
 
 void plugin_reset_handle(Plugin *handle)
 {
-    m_safe_free(handle->parameter_values_audio_side);
-    m_safe_free(handle->parameter_values_ui_side);
-    m_safe_free(handle->ring.buffer);
+    handle->parameter_values_audio_side = nullptr;
+    handle->parameter_values_ui_side = nullptr;
+    handle->ring.buffer = nullptr;
     Compiler_Error *old_error_log_buffer = handle->error_log.errors;
     
     release_jit(handle);
@@ -199,7 +183,7 @@ DWORD compiler_thread_proc(void *void_param)
     if(compare_exchange_32(param->stage, Asset_File_State_BACKGROUND_LOADING, Asset_File_State_STAGE_BACKGROUND_LOADING) )
     {
         
-        try_compile(param->source_filename, param->clang_ctx, param->handle);
+        try_compile(param->source_filename, param->clang_ctx, param->handle, param->allocator);
         octave_assert(compare_exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION, Asset_File_State_BACKGROUND_LOADING));
     }
     else if(compare_exchange_32(param->stage, 
@@ -207,7 +191,7 @@ DWORD compiler_thread_proc(void *void_param)
                                 Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING) )
     {
         
-        try_compile(param->source_filename, param->clang_ctx, param->handle);
+        try_compile(param->source_filename, param->clang_ctx, param->handle, param->allocator);
         octave_assert(compare_exchange_32(param->stage, Asset_File_State_HOT_RELOAD_STAGE_VALIDATION, Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING));
     }
     else
@@ -218,6 +202,16 @@ DWORD compiler_thread_proc(void *void_param)
 }
 
 
+
+Plugin_Allocator plugin_allocator_init(u64 size)
+{
+    Plugin_Allocator allocator = {
+        .base = (char*)m_allocate(size),
+        .current = allocator.base,
+        .capacity = size,
+    };
+    return allocator;
+}
 
 void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, char *source_filename, Asset_File_State *plugin_state)
 {
@@ -237,20 +231,25 @@ void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, cha
                 1024
             }
         },
+        .allocator_a = plugin_allocator_init(1024 * 1024),
+        .allocator_b = plugin_allocator_init(1024 * 1204),
+        
+        .current_handle = &m->handle_a,
+        .hot_reload_handle = &m->handle_b,
+        .current_allocator = &m->allocator_a,
+        .hot_reload_allocator = &m->allocator_b,
         
         .clang_ctx = clang_ctx,
         .plugin_state = plugin_state,
         .source_filename = source_filename
     };
     
-    m->current_handle = &m->handle_a;
-    m->hot_reload_handle = &m->handle_b;
-    
     if(m->source_filename[0] != 0)
     {
         m->compiler_thread_param = Compiler_Thread_Param {
             .source_filename = source_filename,
             .handle = m->current_handle,
+            .allocator = m->current_allocator,
             .clang_ctx = m->clang_ctx,
             .stage = m->plugin_state
         };
@@ -266,6 +265,29 @@ void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, cha
 }
 
 
+void plugin_populate_from_descriptor(Plugin *handle, Plugin_Allocator *allocator, Audio_Parameters audio_parameters)
+{
+    handle->parameter_values_audio_side = (Plugin_Parameter_Value*)plugin_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
+    
+    handle->parameter_values_ui_side = (Plugin_Parameter_Value*)plugin_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
+    
+    handle->parameters_holder = (char*) plugin_allocate(allocator, handle->descriptor.parameters_struct.size);
+    handle->state_holder = (char*) plugin_allocate(allocator, handle->descriptor.state_struct.size);
+    
+    handle->default_parameters_f(handle->parameters_holder);
+    handle->initialize_state_f(handle->parameters_holder, 
+                               handle->state_holder, 
+                               audio_parameters.num_channels,
+                               audio_parameters.sample_rate, 
+                               nullptr);
+    
+    plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_ui_side, handle->parameters_holder);
+    plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_audio_side, handle->parameters_holder);
+    handle->ring = plugin_parameters_ring_buffer_initialize(handle->descriptor.num_parameters, RING_BUFFER_SLOT_COUNT, allocator);
+}
+
+
+
 void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audio_context, Audio_Parameters audio_parameters, 
                            Plugin **handle_to_pull_ir_from)
 {
@@ -274,21 +296,21 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
                            Asset_File_State_VALIDATING,
                            Asset_File_State_STAGE_VALIDATION))
     {
-        
         if(m->current_handle->error.flag == Compiler_Success)
         {
-            plugin_populate_from_descriptor(m->current_handle, audio_parameters);
+            plugin_populate_from_descriptor(m->current_handle, m->current_allocator, audio_parameters);
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
             audio_context->plugin = m->current_handle;
             
             octave_assert(exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE)
                           == Asset_File_State_VALIDATING);
-                          
+            
             *handle_to_pull_ir_from = m->current_handle;
         }
         else
         {
             printf("compilation failed, cleaning up\n");
+            
             octave_assert(!m->current_handle->parameter_values_audio_side);
             octave_assert(!m->current_handle->parameter_values_ui_side);
             octave_assert(!m->current_handle->ring.buffer);
@@ -310,7 +332,7 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
         {
             printf("hot : compiler success\n");
             
-            plugin_populate_from_descriptor(m->hot_reload_handle, audio_parameters);
+            plugin_populate_from_descriptor(m->hot_reload_handle, m->hot_reload_allocator, audio_parameters);
             
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
             audio_context->hot_reload_plugin = m->hot_reload_handle;
@@ -327,6 +349,7 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
             
             printf("hot : compilation failed\n");
             release_jit(m->hot_reload_handle);
+            
             octave_assert(!m->hot_reload_handle->parameter_values_audio_side);
             octave_assert(!m->hot_reload_handle->parameter_values_ui_side);
             octave_assert(!m->hot_reload_handle->ring.buffer);
@@ -351,9 +374,12 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
     {
         plugin_reset_handle(m->current_handle);
         
+        m->current_allocator->current = m->current_allocator->base;
+        
         m->compiler_thread_param = {
             .source_filename = m->source_filename,
             .handle = m->current_handle,
+            .allocator = m->current_allocator,
             .clang_ctx = m->clang_ctx,
             .stage = m->plugin_state
         };
@@ -378,7 +404,12 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
         m->hot_reload_handle = m->current_handle;
         m->current_handle = temp;
         
+        Plugin_Allocator *temp_alloc = m->hot_reload_allocator;
+        m->hot_reload_allocator = m->current_allocator;
+        m->current_allocator = temp_alloc;
+        
         plugin_reset_handle(m->hot_reload_handle);
+        m->hot_reload_allocator->current = m->hot_reload_allocator->base;
         
         compare_exchange_32(m->plugin_state,
                             Asset_File_State_STAGE_USAGE,
@@ -414,6 +445,8 @@ void plugin_loading_check_and_stage_hot_reload(Plugin_Loading_Manager *m)
             octave_assert(!m->hot_reload_handle->parameter_values_ui_side);
             octave_assert(!m->hot_reload_handle->ring.buffer);
             
+            m->hot_reload_allocator->current = m->hot_reload_allocator->base;
+            
             Compiler_Error *old_error_log_buffer = m->hot_reload_handle->error_log.errors;
             
             *m->hot_reload_handle = {};
@@ -427,6 +460,7 @@ void plugin_loading_check_and_stage_hot_reload(Plugin_Loading_Manager *m)
             m->compiler_thread_param = {
                 .source_filename = m->source_filename,
                 .handle = m->hot_reload_handle,
+                .allocator = m->hot_reload_allocator,
                 .clang_ctx = m->clang_ctx,
                 .stage = m->plugin_state
             };
@@ -454,5 +488,4 @@ void plugin_loading_check_and_stage_hot_reload(Plugin_Loading_Manager *m)
                                               Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
         }
     }
-    
 }

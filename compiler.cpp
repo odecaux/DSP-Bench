@@ -58,7 +58,7 @@
 #include "base.h"
 #include "win32_helpers.h"
 #include "structs.h"
-
+#include "plugin.h"
 #include "compiler.h"
 
 
@@ -87,21 +87,21 @@ struct Plugin_Required_Decls{
 
 Clang_Context* create_clang_context_impl();
 
-internal String allocate_and_copy_llvm_stringref(llvm::StringRef llvm_stringref)
+internal String allocate_and_copy_llvm_stringref(Plugin_Allocator *allocator, llvm::StringRef llvm_stringref)
 {
     String new_string;
     new_string.size = llvm_stringref.size();
-    new_string.str = new char[llvm_stringref.size()]; 
+    new_string.str = (char *)plugin_allocate(allocator, sizeof(char) * llvm_stringref.size()); 
     strncpy(new_string.str, llvm_stringref.data(), new_string.size);
     return new_string;
 }
 
 
-internal String allocate_and_copy_std_string(const std::string& std_string)
+internal String allocate_and_copy_std_string(Plugin_Allocator *allocator, const std::string& std_string)
 {
     String new_string;
     new_string.size = std_string.size();
-    new_string.str = new char[std_string.size()]; 
+    new_string.str = (char *)plugin_allocate(allocator, sizeof(char) * std_string.size()); 
     strncpy(new_string.str, std_string.data(), new_string.size);
     return new_string;
 }
@@ -248,7 +248,8 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx);
 
 Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
                                           const clang::CXXRecordDecl* state_struct_decl,
-                                          const clang::SourceManager& source_manager);
+                                          const clang::SourceManager& source_manager,
+                                          Plugin_Allocator *allocator);
 
 std::unique_ptr<llvm::MemoryBuffer> 
 rewrite_plugin_source(Plugin_Required_Decls decls,
@@ -259,11 +260,12 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
 void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
                  Plugin_Descriptor& descriptor,
                  llvm::LLVMContext *llvm_context,
-                 Plugin *plugin);
+                 Plugin *plugin,
+                 Plugin_Allocator *allocator);
 
 void try_compile_impl(const char* filename, 
                       Clang_Context* clang_cts,
-                      Plugin *plugin);
+                      Plugin *plugin, Plugin_Allocator *allocator);
 
 
 #ifdef DEBUG
@@ -386,9 +388,9 @@ Clang_Context* create_clang_context_impl()
 #ifdef DEBUG
 extern "C" __declspec(dllexport)
 #endif
-void try_compile(const char* filename, void* clang_ctx_ptr, Plugin *plugin)
+void try_compile(const char* filename, void* clang_ctx_ptr, Plugin *plugin, Plugin_Allocator *allocator)
 {
-    try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr, plugin);
+    try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr, plugin, allocator);
 }
 
 void errors_push(Compiler_Error_Log *error_log, Compiler_Error new_error)
@@ -413,7 +415,7 @@ void errors_push_clang(Compiler_Error_Log *error_log, Clang_Error new_error)
 }
 
 
-void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *plugin)
+void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *plugin, Plugin_Allocator *allocator)
 {
     
     clang::LangOptions language_options{};
@@ -459,9 +461,9 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
     auto split_input = compiler_instance.getFrontendOpts().Inputs.back().getFile().rsplit('\\');
     String plugin_filename;
     if(split_input.second.size() == 0)
-        plugin_filename =  allocate_and_copy_llvm_stringref(split_input.first);
+        plugin_filename =  allocate_and_copy_llvm_stringref(allocator, split_input.first);
     else
-        plugin_filename =  allocate_and_copy_llvm_stringref(split_input.second);
+        plugin_filename =  allocate_and_copy_llvm_stringref(allocator, split_input.second);
     
     Compiler_Error error = {  };
     Plugin_Descriptor descriptor = {.name = plugin_filename};
@@ -480,7 +482,8 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
             return;
         }
         
-        descriptor = parse_plugin_descriptor(decls.parameters_struct.record, decls.state_struct.record, ast_ctx.getSourceManager());
+        descriptor = parse_plugin_descriptor(decls.parameters_struct.record, decls.state_struct.record, ast_ctx.getSourceManager(),
+                                             allocator);
         descriptor.name = plugin_filename;
         
         if(descriptor.error.flag != Compiler_Success){
@@ -508,7 +511,7 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
     {
         for(auto error_it = diagnostics.err_begin(); error_it < diagnostics.err_end(); error_it++)
         {
-            errors_push_clang(error_log, {allocate_and_copy_std_string(error_it->second)});
+            errors_push_clang(error_log, {allocate_and_copy_std_string(allocator, error_it->second)});
         }
         plugin->error = {Compiler_Clang_Error};
         plugin->descriptor = descriptor;
@@ -528,7 +531,7 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
                     compiler_instance, 
                     descriptor,
                     &clang_ctx->llvm_context,
-                    plugin);
+                    plugin, allocator);
         errors_push_custom(error_log, plugin->error);
         return;
     }
@@ -832,7 +835,8 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
 
 Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
                                           const clang::CXXRecordDecl* state_struct_decl,
-                                          const clang::SourceManager& source_manager)
+                                          const clang::SourceManager& source_manager,
+                                          Plugin_Allocator *allocator)
 {
     const clang::ASTRecordLayout& parameters_struct_layout  = parameters_struct_decl->getASTContext().getASTRecordLayout(parameters_struct_decl);
     
@@ -871,7 +875,7 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
     }
     
     bool there_was_an_error = false;
-    auto *anotated_parameters = (Plugin_Descriptor_Parameter*)malloc(sizeof(Plugin_Descriptor_Parameter) * num_annotated_parameters);
+    auto *anotated_parameters = (Plugin_Descriptor_Parameter*)plugin_allocate(allocator, sizeof(Plugin_Descriptor_Parameter) * num_annotated_parameters);
     u32 anotated_parameter_idx = 0;
     for(const auto* field : parameters_struct_decl->fields())
     {
@@ -891,14 +895,15 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
             Plugin_Descriptor_Parameter plugin_parameter_rename = [&param_strings, 
                                                                    &parameters_struct_layout,
                                                                    &field,
-                                                                   &source_manager] 
+                                                                   &source_manager,
+                                                                   &allocator] 
             {
                 Plugin_Descriptor_Parameter parameter = { .error { .flag = Compiler_Success}};
                 
                 const auto& type = *field->getType();
                 auto index = field->getFieldIndex();
                 parameter.offset = parameters_struct_layout.getFieldOffset(index) / 8;
-                parameter.name = allocate_and_copy_llvm_stringref(field->getName());
+                parameter.name = allocate_and_copy_llvm_stringref(allocator, field->getName());
                 
                 if(param_strings.size() == 0)
                 {
@@ -1011,12 +1016,12 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
                     for(auto _: maybe_enum->getDecl()->enumerators())
                         enum_param.num_entries++;
                     
-                    enum_param.entries = new Parameter_Enum_Entry[enum_param.num_entries];
+                    enum_param.entries = (Parameter_Enum_Entry*)plugin_allocate(allocator, sizeof(Parameter_Enum_Entry) * enum_param.num_entries);
                     
                     auto i = 0;
                     for(const auto *field : maybe_enum->getDecl()->enumerators())
                     {
-                        enum_param.entries[i].name = allocate_and_copy_llvm_stringref(field->getName());
+                        enum_param.entries[i].name = allocate_and_copy_llvm_stringref(allocator, field->getName());
                         enum_param.entries[i].value = field->getInitVal().getExtValue(); 
                         i++;
                     }
@@ -1125,7 +1130,7 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
 void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
                  Plugin_Descriptor& descriptor,
                  llvm::LLVMContext *llvm_context,
-                 Plugin *plugin)
+                 Plugin *plugin, Plugin_Allocator *allocator)
 {
     auto new_file = clang::FrontendInputFile{
         new_buffer, 
@@ -1145,7 +1150,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
         
         for(auto error_it = diagnostics->err_begin(); error_it < diagnostics->err_end(); error_it++)
         {
-            errors_push_clang(&plugin->error_log, {allocate_and_copy_std_string(error_it->second)});
+            errors_push_clang(&plugin->error_log, {allocate_and_copy_std_string(allocator, error_it->second)});
         }
         
         plugin->error = { Compiler_Clang_Error};
@@ -1209,46 +1214,13 @@ extern "C" __declspec(dllexport)
 #endif
 void release_jit(Plugin *plugin)
 {
-    
-    Plugin_Descriptor_Parameter *params = plugin->descriptor.parameters;
-    
-    delete plugin->descriptor.name.str;
-    
-    if(plugin->descriptor.num_parameters == 0)
-    {
-        octave_assert(plugin->descriptor.parameters == nullptr);
-    }
-    else{
-        for(i32 i = 0; i < plugin->descriptor.num_parameters; i++)
-        {
-            if(params[i].type == Enum)
-            {
-                if(params[i].enum_param.num_entries != 0)
-                {
-                    for(i32 j = 0; j < params[i].enum_param.num_entries; j++)
-                        delete params[i].enum_param.entries[j].name.str;
-                    delete params[i].enum_param.entries;
-                }
-                else
-                {
-                    octave_assert(params[i].enum_param.entries == nullptr);
-                }
-            }
-            delete params[i].name.str;
-        }
-        delete plugin->descriptor.parameters;
-    }
-    
-    
     if(plugin->llvm_jit_engine)
         delete (llvm::ExecutionEngine *)plugin->llvm_jit_engine;
-    
     
     plugin->llvm_jit_engine = nullptr;
     plugin->audio_callback_f = nullptr;
     plugin->default_parameters_f = nullptr;
     plugin->initialize_state_f = nullptr;
-    
 }
 
 #ifdef DEBUG
@@ -1356,7 +1328,6 @@ void release_clang_ctx(void* clang_ctx_void)
 #pragma comment(lib, "LLVMLTO.lib")
 #pragma comment(lib, "LLVMMC.lib")
 #pragma comment(lib, "LLVMMCA.lib")
-//#pragma comment(lib, "LLVMMCACustomBehaviourAMDGPU.lib")
 #pragma comment(lib, "LLVMMCDisassembler.lib")
 #pragma comment(lib, "LLVMMCJIT.lib")
 #pragma comment(lib, "LLVMMCParser.lib")

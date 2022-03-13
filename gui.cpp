@@ -47,9 +47,17 @@ real32 simple_slider(real32 normalized_value, i32 id,
     }
 }
 
-real32 slider(real32 normalized_value, i32 id, 
-              String title, String current_value_label, String min_label, String max_label, Rect bounds, IO io, 
-              UI_State *ui_state, Graphics_Context *graphics_ctx)
+real32 slider(real32 normalized_value, 
+              i32 id, 
+              String title, 
+              String current_value_label, 
+              String min_label, 
+              String max_label, 
+              Rect bounds, 
+              bool use_relative,
+              IO io, 
+              UI_State *ui_state, 
+              Graphics_Context *graphics_ctx)
 {
     Rect title_bounds = rect_take_top(bounds, FIELD_TITLE_HEIGHT);
     Rect current_value_bounds = rect_remove_padding(rect_drop_top(bounds, FIELD_TITLE_HEIGHT), 2.5f, 2.5f);
@@ -80,19 +88,28 @@ real32 slider(real32 normalized_value, i32 id,
     bool dragging = io.mouse_down && (io.mouse_delta.x != 0.0f
                                       || io.mouse_delta.y != 0.0f);
     
+    real32 mouse_x = io.mouse_position.x;
+    real32 normalized_mouse_x = (mouse_x - slider_bounds.origin.x - (SLIDER_WIDTH / 2)) / (slider_bounds.dim.x - SLIDER_WIDTH);
+    
+    real32 mouse_delta_x = (io.left_ctrl_down) ? io.mouse_delta.x / 4 : io.mouse_delta.x;
+    real32 normalized_delta = (mouse_delta_x) / (slider_bounds.dim.x - SLIDER_WIDTH);
+    
     if(ui_state->selected_parameter_id == id && io.mouse_clicked)
     {
-        real32 mouse_x = io.mouse_position.x;
-        real32 normalized_mouse_value = (mouse_x - slider_bounds.origin.x - (SLIDER_WIDTH / 2)) / (slider_bounds.dim.x - SLIDER_WIDTH);
         
-        return octave_clamp(normalized_mouse_value, 0.0f, 1.0f);
+        return octave_clamp(normalized_mouse_x, 0.0f, 1.0f);
     }
     else if(ui_state->selected_parameter_id == id && dragging)
     {
-        
-        real32 mouse_delta_x = (io.left_ctrl_down) ? io.mouse_delta.x / 4 : io.mouse_delta.x;
-        real32 normalized_delta = (mouse_delta_x) / (slider_bounds.dim.x - SLIDER_WIDTH);
-        return octave_clamp(normalized_delta + normalized_value, 0.0f, 1.0f);
+        if(use_relative)
+        {
+            return octave_clamp(normalized_delta + normalized_value, 0.0f, 1.0f);
+        }
+        else 
+        {
+            
+            return octave_clamp(normalized_mouse_x, 0.0f, 1.0f);
+        }
     }
     else
     {
@@ -193,6 +210,109 @@ bool toggle(Rect bounds,
     return clicked;
 }
 
+void parameter_slider(u32 parameter_idx, Plugin_Descriptor_Parameter *parameter_descriptor, Plugin_Parameter_Value *current_parameter_value, Rect parameter_bounds, UI_State *ui_state, IO frame_io, bool *parameters_were_tweaked, Graphics_Context *graphics_ctx)
+{
+    switch(parameter_descriptor->type)
+    {
+        case Int :
+        {
+            int current_value = current_parameter_value->int_value; 
+            char current_value_text[256];
+            int text_size = sprintf(current_value_text, "%d", current_value);
+            octave_assert(text_size >= 0);
+            String current_value_label = {.str = current_value_text, .size = (u64)text_size};
+            
+            real32 current_normalized_value = normalize_parameter_int_value(parameter_descriptor->int_param, current_value);
+            
+            
+            i32 min_value = parameter_descriptor->int_param.min;
+            char min_value_text[256];
+            text_size = sprintf(min_value_text, "%d", min_value);
+            octave_assert(text_size >= 0);
+            String min_label = {.str = min_value_text, .size = (u64)text_size};
+            
+            i32 max_value = parameter_descriptor->int_param.max;
+            char max_value_text[256];
+            text_size = sprintf(max_value_text, "%d", max_value);
+            octave_assert(text_size >= 0);
+            String max_label = {.str = max_value_text, .size = (u64)text_size};
+            
+            real32 new_normalized_value =
+                slider(current_normalized_value, parameter_idx, 
+                       parameter_descriptor->name, current_value_label, min_label, max_label, 
+                       parameter_bounds, 
+                       true,
+                       frame_io, ui_state, graphics_ctx);
+            
+            if(new_normalized_value != current_normalized_value )
+            {
+                *parameters_were_tweaked = true;
+                auto new_int_value = denormalize_int_value(parameter_descriptor->int_param, new_normalized_value);
+                current_parameter_value->int_value = new_int_value;
+            }
+            
+        }break;
+        case Float : 
+        {
+            real32 current_value = current_parameter_value->float_value; 
+            char current_value_text[256];
+            int text_size = sprintf(current_value_text, "%.3f", current_value);
+            octave_assert(text_size >= 0);
+            String current_value_label = {.str = current_value_text, .size = (u64)text_size};
+            
+            real32 current_normalized_value = normalize_parameter_float_value(parameter_descriptor->float_param, current_value);
+            
+            real32 min_value = parameter_descriptor->float_param.min;
+            char min_value_text[256];
+            text_size = sprintf(min_value_text, "%.3f", min_value);
+            octave_assert(text_size >= 0);
+            String min_label = {.str = min_value_text, .size = (u64)text_size};
+            
+            real32 max_value = parameter_descriptor->float_param.max;
+            char max_value_text[256];
+            text_size = sprintf(max_value_text, "%.3f", max_value);
+            octave_assert(text_size >= 0);
+            String max_label = {.str = max_value_text, .size = (u64)text_size};
+            
+            real32 new_normalized_value =
+                slider(current_normalized_value, parameter_idx, 
+                       parameter_descriptor->name, current_value_label, min_label, max_label, 
+                       parameter_bounds, 
+                       true,
+                       frame_io, ui_state, graphics_ctx);
+            
+            if(new_normalized_value != current_normalized_value)
+            {
+                *parameters_were_tweaked = true;
+                auto new_float_value = denormalize_float_value(parameter_descriptor->float_param, new_normalized_value);
+                current_parameter_value->float_value = new_float_value;
+            }
+            
+        }break;
+        case Enum : 
+        {
+            i32 index = current_parameter_value->enum_value;
+            real32 current_normalized_value = normalize_parameter_enum_index(parameter_descriptor->enum_param, index);
+            Parameter_Enum_Entry value = parameter_descriptor->enum_param.entries[index];
+            
+            real32 new_normalized_value =
+                slider(current_normalized_value, parameter_idx, 
+                       parameter_descriptor->name, value.name, {}, {}, 
+                       parameter_bounds, false,
+                       frame_io, ui_state, graphics_ctx);
+            
+            if(new_normalized_value != current_normalized_value)
+            {
+                printf("%f\n", new_normalized_value);
+                *parameters_were_tweaked = true;
+                auto new_index = denormalize_enum_index(parameter_descriptor->enum_param, new_normalized_value);
+                auto new_value = enum_index_to_value(parameter_descriptor->enum_param, new_index);
+                current_parameter_value->enum_value = new_value;
+            }
+            
+        }break;
+    }
+}
 
 #ifdef DEBUG 
 extern "C" __declspec(dllexport)
@@ -277,105 +397,11 @@ void frame(Plugin_Descriptor& descriptor,
             
             for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters && descriptor.error.flag == Compiler_Success; parameter_idx++)
             {
-                auto& current_parameter_value = current_parameter_values[parameter_idx];
-                auto& parameter_descriptor = descriptor.parameters[parameter_idx];
+                auto *current_parameter_value = &current_parameter_values[parameter_idx];
+                auto *parameter_descriptor = &descriptor.parameters[parameter_idx];
                 
-                switch(parameter_descriptor.type)
-                {
-                    case Int :
-                    {
-                        int current_value = current_parameter_value.int_value; 
-                        char current_value_text[256];
-                        int text_size = sprintf(current_value_text, "%d", current_value);
-                        octave_assert(text_size >= 0);
-                        String current_value_label = {.str = current_value_text, .size = (u64)text_size};
-                        
-                        real32 current_normalized_value = normalize_parameter_int_value(parameter_descriptor.int_param, current_value);
-                        
-                        
-                        i32 min_value = parameter_descriptor.int_param.min;
-                        char min_value_text[256];
-                        text_size = sprintf(min_value_text, "%d", min_value);
-                        octave_assert(text_size >= 0);
-                        String min_label = {.str = min_value_text, .size = (u64)text_size};
-                        
-                        i32 max_value = parameter_descriptor.int_param.max;
-                        char max_value_text[256];
-                        text_size = sprintf(max_value_text, "%d", max_value);
-                        octave_assert(text_size >= 0);
-                        String max_label = {.str = max_value_text, .size = (u64)text_size};
-                        
-                        real32 new_normalized_value =
-                            slider(current_normalized_value, parameter_idx, 
-                                   parameter_descriptor.name, current_value_label, min_label, max_label, 
-                                   parameter_bounds, frame_io, &ui_state, graphics_ctx);
-                        
-                        if(new_normalized_value != current_normalized_value )
-                        {
-                            *parameters_were_tweaked = true;
-                            auto new_int_value = denormalize_int_value(parameter_descriptor.int_param, new_normalized_value);
-                            current_parameter_value.int_value = new_int_value;
-                        }
-                        
-                    }break;
-                    case Float : 
-                    {
-                        real32 current_value = current_parameter_value.float_value; 
-                        char current_value_text[256];
-                        int text_size = sprintf(current_value_text, "%.3f", current_value);
-                        octave_assert(text_size >= 0);
-                        String current_value_label = {.str = current_value_text, .size = (u64)text_size};
-                        
-                        real32 current_normalized_value = normalize_parameter_float_value(parameter_descriptor.float_param, current_value);
-                        
-                        real32 min_value = parameter_descriptor.float_param.min;
-                        char min_value_text[256];
-                        text_size = sprintf(min_value_text, "%.3f", min_value);
-                        octave_assert(text_size >= 0);
-                        String min_label = {.str = min_value_text, .size = (u64)text_size};
-                        
-                        real32 max_value = parameter_descriptor.float_param.max;
-                        char max_value_text[256];
-                        text_size = sprintf(max_value_text, "%.3f", max_value);
-                        octave_assert(text_size >= 0);
-                        String max_label = {.str = max_value_text, .size = (u64)text_size};
-                        
-                        real32 new_normalized_value =
-                            slider(current_normalized_value, parameter_idx, 
-                                   parameter_descriptor.name, current_value_label, min_label, max_label, 
-                                   parameter_bounds, frame_io, &ui_state, graphics_ctx);
-                        
-                        if(new_normalized_value != current_normalized_value)
-                        {
-                            *parameters_were_tweaked = true;
-                            auto new_float_value = denormalize_float_value(parameter_descriptor.float_param, new_normalized_value);
-                            current_parameter_value.float_value = new_float_value;
-                        }
-                        
-                    }break;
-                    case Enum : 
-                    {
-                        i32 index = current_parameter_value.enum_value;
-                        real32 current_normalized_value = normalize_parameter_enum_index(parameter_descriptor.enum_param, index);
-                        Parameter_Enum_Entry value = parameter_descriptor.enum_param.entries[index];
-                        
-                        real32 new_normalized_value =
-                            slider(current_normalized_value, parameter_idx, 
-                                   parameter_descriptor.name, value.name, {}, {}, 
-                                   parameter_bounds, frame_io, &ui_state, graphics_ctx);
-                        
-                        if(new_normalized_value != current_normalized_value)
-                        {
-                            *parameters_were_tweaked = true;
-                            auto new_index = denormalize_enum_index(parameter_descriptor.enum_param, new_normalized_value);
-                            auto new_value = enum_index_to_value(parameter_descriptor.enum_param, new_index);
-                            current_parameter_value.enum_value = new_value;
-                        }
-                        
-                    }break;
-                }
+                parameter_slider(parameter_idx, parameter_descriptor, current_parameter_value, parameter_bounds, &ui_state, frame_io, parameters_were_tweaked, graphics_ctx);
                 
-                //TODO fix
                 parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN * 2;
             }
             

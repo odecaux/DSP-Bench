@@ -212,7 +212,15 @@ typedef struct {
     
 } Plugin;
 
-typedef void(*try_compile_t)(const char*, const void*, Plugin*);
+
+struct Plugin_Allocator{
+    char *base;
+    char *current; 
+    u64 capacity;
+}; 
+
+
+typedef void(*try_compile_t)(const char*, const void*, Plugin*, Plugin_Allocator *allocator);
 typedef void(*release_jit_t)(Plugin*);
 typedef void*(*create_clang_context_t)();
 typedef void(*release_clang_context_t)(void* clang_context_void);

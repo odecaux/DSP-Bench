@@ -19,26 +19,55 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
     if(compare_exchange_32(ctx->audio_file_state,
                            Asset_File_State_IN_USE,
                            Asset_File_State_STAGE_USAGE))
-    {
-        
-    }
+    {}
     
     if(compare_exchange_32(ctx->plugin_state,
                            Asset_File_State_IN_USE,
                            Asset_File_State_STAGE_USAGE))
-    {
-        
-    }
+    {}
     
-    else if(compare_exchange_32(ctx->plugin_state,
-                                Asset_File_State_HOT_RELOAD_SWAPPING,
-                                Asset_File_State_HOT_RELOAD_STAGE_SWAP))
+    if(compare_exchange_32(ctx->plugin_state,
+                           Asset_File_State_HOT_RELOAD_SWAPPING,
+                           Asset_File_State_HOT_RELOAD_STAGE_SWAP))
     {
         ctx->hot_reload_old_plugin = ctx->plugin;
         ctx->plugin = ctx->hot_reload_plugin;
         ctx->hot_reload_plugin = nullptr;
+        
+        octave_assert(compare_exchange_32(ctx->plugin_state,
+                                          Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
+                                          Asset_File_State_HOT_RELOAD_SWAPPING));
     }
     
+    
+    
+    if(compare_exchange_32(ctx->audio_file_state,
+                           Asset_File_State_OK_TO_UNLOAD,
+                           Asset_File_State_STAGE_UNLOADING))
+    {
+        //ctx->audio_file = nullptr;
+    }
+    if(compare_exchange_32(ctx->plugin_state,
+                           Asset_File_State_OK_TO_UNLOAD,
+                           Asset_File_State_STAGE_UNLOADING))
+    {
+        ctx->plugin = nullptr;
+    }
+    
+    if(compare_exchange_32(ctx->audio_file_state,
+                           Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
+                           Asset_File_State_COLD_RELOAD_STAGE_UNUSE))
+    {
+        //ctx->audio_file = nullptr;
+    }
+    if(compare_exchange_32(ctx->plugin_state,
+                           Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
+                           Asset_File_State_COLD_RELOAD_STAGE_UNUSE))
+    {
+        ctx->plugin = nullptr;
+    }
+    
+    MemoryBarrier();
     auto plugin_state = *ctx->plugin_state;
     auto audio_file_state = *ctx->audio_file_state;
     
@@ -140,8 +169,8 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
         case Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING :
         case Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING :
         case Asset_File_State_HOT_RELOAD_STAGE_VALIDATION :
+        case Asset_File_State_HOT_RELOAD_STAGE_SWAP :
         case Asset_File_State_HOT_RELOAD_VALIDATING :
-        case Asset_File_State_HOT_RELOAD_SWAPPING :
         case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
         case Asset_File_State_HOT_RELOAD_DISPOSING :
         {
@@ -170,46 +199,12 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                                               parameters.sample_rate);
             }
         }break;
-        case Asset_File_State_HOT_RELOAD_STAGE_SWAP :
-        case Asset_File_State_STAGE_USAGE :  
+        case Asset_File_State_HOT_RELOAD_SWAPPING :
         {
             octave_assert(false);
         }break;
     }
     
-    if(plugin_state == Asset_File_State_HOT_RELOAD_SWAPPING)
-    {
-        octave_assert(compare_exchange_32(ctx->plugin_state,
-                                          Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
-                                          Asset_File_State_HOT_RELOAD_SWAPPING));
-    }
-    
-    if(compare_exchange_32(ctx->audio_file_state,
-                           Asset_File_State_OK_TO_UNLOAD,
-                           Asset_File_State_STAGE_UNLOADING))
-    {
-        //ctx->audio_file = nullptr;
-    }
-    if(compare_exchange_32(ctx->plugin_state,
-                           Asset_File_State_OK_TO_UNLOAD,
-                           Asset_File_State_STAGE_UNLOADING))
-    {
-        ctx->plugin = nullptr;
-    }
-    
-    if(compare_exchange_32(ctx->audio_file_state,
-                           Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
-                           Asset_File_State_COLD_RELOAD_STAGE_UNUSE))
-    {
-        
-        //ctx->audio_file = nullptr;
-    }
-    if(compare_exchange_32(ctx->plugin_state,
-                           Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
-                           Asset_File_State_COLD_RELOAD_STAGE_UNUSE))
-    {
-        ctx->plugin = nullptr;
-    };
 }
 
 
