@@ -21,7 +21,6 @@ Plugin allocator \
 Error message : more info \
 FFT processing available to the plugins \
 
-No CLI plugin -> Load Plugin File \
 Disable hot-reload button \
 Panel toggle : compiler log and IR \
 \
@@ -39,8 +38,9 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+~~No CLI plugin -> Load Plugin File~~ \
 ~~Plugin Loading Manager abstraction~~ \
-~~Moved the ui layer to its own dll on debug builds~~ _
+~~Moved the ui layer to its own dll on debug builds~~ \
 ~~Display custom compiler errors~~ \
 ~~Plugin reload on save~~ \
 ~~Single executable Release build~~ \
