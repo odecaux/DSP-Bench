@@ -10,7 +10,7 @@
 #include "memory.h"
 #include "base.h"
 #include "structs.h"
-#include "descriptor.h"
+#include "plugin.h"
 #include "audio.h"
 #include "win32_helpers.h"
 #include "wav_reader.h"
@@ -291,8 +291,6 @@ i32 main(i32 argc, char** argv)
     frame = (frame_t)GetProcAddress(gui_dll, "frame");
     octave_assert(frame != 0);
     u64 gui_dll_last_write_time = win32_get_last_write_time("gui.dll");
-    
-    printf("gui.dll init : %llu\n", gui_dll_last_write_time);
 #endif
     
     
@@ -660,13 +658,10 @@ i32 main(i32 argc, char** argv)
         if(ui_state.selected_parameter_id != -1 && 
            ui_state.selected_parameter_id < 255 && 
            frame_io.mouse_clicked)
-        {
             ShowCursor(FALSE);
-        }
         else if(ui_state.previous_selected_parameter_id != -1 && frame_io.mouse_released && ui_state.previous_selected_parameter_id < 255)
-        {
             ShowCursor(TRUE);
-        }
+        
         
         if(plugin_state == Asset_File_State_IN_USE)
             opengl_render_ui(&opengl_ctx, &graphics_ctx);
@@ -680,19 +675,10 @@ i32 main(i32 argc, char** argv)
         //~ reload gui dll
 #ifdef DEBUG
         {
-            
             u64 temp_gui_write_time = gui_dll_last_write_time;
-            
             if(win32_query_file_change("gui.dll", &temp_gui_write_time))
             {
-                printf("\n");
-                u64 diff = temp_gui_write_time - gui_dll_last_write_time;
-                u64 diff_milliseconds =  diff / 10000;
-                printf("gui.dll reload : %llu ms\n", diff_milliseconds); 
-                
                 FreeLibrary(gui_dll);
-                CopyFile("gui.dll", "gui_temp.dll", FALSE);
-                
                 HMODULE gui_dll = LoadLibraryA("gui_temp.dll");
                 octave_assert(gui_dll != NULL);
                 frame = (frame_t)GetProcAddress(gui_dll, "frame");

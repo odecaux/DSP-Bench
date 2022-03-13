@@ -4,7 +4,7 @@
 
 #include "base.h"
 #include "structs.h"
-#include "descriptor.h"
+#include "plugin.h"
 
 #include "hardcoded_values.h"
 #include "draw.h"

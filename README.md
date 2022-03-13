@@ -39,6 +39,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+~~Moved the ui layer to its own dll on debug builds~~ _
 ~~Display custom compiler errors~~ \
 ~~Plugin reload on save~~ \
 ~~Single executable Release build~~ \

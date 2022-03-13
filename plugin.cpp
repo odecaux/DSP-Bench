@@ -5,7 +5,7 @@
 #include "base.h"
 #include "win32_helpers.h"
 #include "structs.h"
-#include "descriptor.h"
+#include "plugin.h"
 
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b)
 {

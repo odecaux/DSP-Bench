@@ -517,7 +517,7 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
     //succesfully compiled, but failed at some parsing stage
     else if(error.type != Compiler_Error_Type_Success) 
     {
-        plugin->error = {Compiler_Generic_Error}; 
+        plugin->error = {Compiler_Error_Recurse}; 
         plugin->descriptor = descriptor;
         return;
     }
@@ -740,12 +740,12 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
        initialize_state_decl.error.flag != Compiler_Success)
     {
         return Plugin_Required_Decls{
-            {Compiler_Generic_Error},
+            {Compiler_Error_Recurse},
             audio_callback_decl,
             default_parameters_decl,
             initialize_state_decl,
-            Decl_Handle{.error = Compiler_Generic_Error},
-            Decl_Handle{.error = Compiler_Generic_Error}
+            Decl_Handle{.error = Compiler_Error_Recurse},
+            Decl_Handle{.error = Compiler_Error_Recurse}
         };
     }
     
@@ -817,7 +817,7 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
     Custom_Error error = 
     ( parameters_struct_decl.error.flag == Compiler_Success && state_struct_decl.error.flag == Compiler_Success ) 
         ? Custom_Error { Compiler_Success } 
-    :   Custom_Error{ Compiler_Generic_Error };
+    :   Custom_Error{ Compiler_Error_Recurse };
     
     return {
         error,
@@ -1036,7 +1036,7 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
     }
     
     return {
-        .error = there_was_an_error ? Custom_Error{ Compiler_Generic_Error } : Custom_Error{ Compiler_Success },
+        .error = there_was_an_error ? Custom_Error{ Compiler_Error_Recurse } : Custom_Error{ Compiler_Success },
         .parameters_struct = {
             .size = parameters_struct_size.getQuantity(),
             .alignment = parameters_struct_alignment.getQuantity()

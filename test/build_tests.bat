@@ -8,7 +8,7 @@ set my_lib="C:\llvm\debug_msvc\lib"
 set opts=-FC -GR- -EHa- -nologo -Zi
 set code="%cd%"
 pushd build
-cl %opts% %code%\test\tests.cpp %code%\descriptor.cpp %code%\compiler.cpp -Fetests.exe /I %my_inc% /std:c++latest /w44624 /w44530 /w44244 /DEBUG /MTd /link /LIBPATH:%my_lib% 
+cl %opts% %code%\test\tests.cpp %code%\plugin.cpp %code%\compiler.cpp -Fetests.exe /I %my_inc% /std:c++latest /w44624 /w44530 /w44244 /DEBUG /MTd /link /LIBPATH:%my_lib% 
 
 
 @if ERRORLEVEL == 0 (

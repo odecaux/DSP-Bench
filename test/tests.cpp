@@ -5,7 +5,7 @@
 #include "../compiler.h"
 
 #include "../base.h"
-#include "../descriptor.h"
+#include "../plugin.h"
 
 
 enum TEST_ENUM{

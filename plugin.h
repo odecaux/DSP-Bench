@@ -18,7 +18,6 @@ internal String compiler_error_flag_to_string(Compiler_Error_Flag flag)
         }
     }
 }
-
 #undef CUSTOM_ERROR_FLAG
 
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b);

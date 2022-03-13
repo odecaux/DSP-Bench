@@ -7,7 +7,7 @@
 #include "windows.h"
 #include "memory.h"
 #include "base.h"
-#include "descriptor.h"
+#include "plugin.h"
 #include "structs.h"
 #include "win32_helpers.h"
 #include "font.h"

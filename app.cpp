@@ -14,7 +14,7 @@
 #include "base.h"
 #include "win32_helpers.h"
 #include "structs.h"
-#include "descriptor.h"
+#include "plugin.h"
 #include "draw.h"
 #include "app.h"
 

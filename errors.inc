@@ -1,4 +1,4 @@
-CUSTOM_ERROR_FLAG(Compiler_Generic_Error)
+CUSTOM_ERROR_FLAG(Compiler_Error_Recurse)
     CUSTOM_ERROR_FLAG(Compiler_Success)
     CUSTOM_ERROR_FLAG(Compiler_Too_Many_Fun)
     CUSTOM_ERROR_FLAG(Compiler_No_Fun)

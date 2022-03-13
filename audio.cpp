@@ -6,7 +6,7 @@
 #include "base.h"
 #include "win32_helpers.h"
 #include "structs.h"
-#include "descriptor.h"
+#include "plugin.h"
 #include "audio.h"
 
 void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thread_Context* ctx)
