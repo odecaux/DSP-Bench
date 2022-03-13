@@ -1,12 +1,16 @@
 #include "stdio.h"
+#include "stdlib.h"
 #include "string.h"
 #include "windows.h"
 #include "math.h"
+
 #include "base.h"
 #include "win32_helpers.h"
 #include "structs.h"
 #include "plugin.h"
 
+#include "memory.h"
+#include "hardcoded_values.h"
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b)
 {
     if(a->parameters_struct.size            != b->parameters_struct.size) return false;
@@ -138,4 +142,51 @@ Plugin_Parameter_Value* plugin_parameters_buffer_pull(Plugin_Parameters_Ring_Buf
     Plugin_Parameter_Value *maybe_plugin_array =  (Plugin_Parameter_Value*) exchange_ptr((void**)&ring.head, nullptr);
     
     return maybe_plugin_array;
+}
+
+
+
+void plugin_populate_from_descriptor(Plugin *handle, Audio_Parameters audio_parameters)
+{
+    handle->parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, handle->descriptor.num_parameters);
+    
+    handle->parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, handle->descriptor.num_parameters);
+    
+    handle->parameters_holder = (char*) m_allocate(handle->descriptor.parameters_struct.size);
+    handle->state_holder = (char*) m_allocate(handle->descriptor.state_struct.size);
+    
+    handle->default_parameters_f(handle->parameters_holder);
+    handle->initialize_state_f(handle->parameters_holder, 
+                               handle->state_holder, 
+                               audio_parameters.num_channels,
+                               audio_parameters.sample_rate, 
+                               nullptr);
+    
+    plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_ui_side, handle->parameters_holder);
+    plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_audio_side, handle->parameters_holder);
+    handle->ring = plugin_parameters_ring_buffer_initialize(handle->descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
+}
+
+#ifdef DEBUG
+extern release_jit_t release_jit;
+#endif
+#ifdef RELEASE
+void release_jit(Plugin *plugin);
+#endif
+
+void plugin_reset_handle(Plugin *handle)
+{
+    m_safe_free(handle->parameter_values_audio_side);
+    m_safe_free(handle->parameter_values_ui_side);
+    m_safe_free(handle->ring.buffer);
+    Compiler_Error *old_error_log_buffer = handle->error_log.errors;
+    
+    release_jit(handle);
+    *handle = {};
+    
+    handle->error_log = {
+        old_error_log_buffer,
+        0,
+        1024
+    };
 }

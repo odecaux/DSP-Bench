@@ -144,8 +144,6 @@ i32 main(i32 argc, char** argv)
     
     //~ Graphics Init
     
-    CoInitializeEx(NULL, COINIT_MULTITHREADED); 
-    
     Graphics_Context graphics_ctx = {};
     graphics_ctx.window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT}; 
     
@@ -163,7 +161,9 @@ i32 main(i32 argc, char** argv)
     
     win32_print_elapsed(time_program_begin, "time to graphics");
     
-    //~ Audio Init
+    //~ Audio Thread Init
+    CoInitializeEx(NULL, COINIT_MULTITHREADED); 
+    
     Asset_File_State wav_state = Asset_File_State_NONE;
     Asset_File_State plugin_state = Asset_File_State_NONE;
     
@@ -210,13 +210,12 @@ i32 main(i32 argc, char** argv)
 #ifdef DEBUG
     HMODULE compiler_dll = LoadLibraryA("compiler.dll");
     octave_assert(compiler_dll != NULL && "couldn't find compiler.dll");
-    
     try_compile = (try_compile_t)GetProcAddress(compiler_dll, "try_compile");
     release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
     create_clang_context = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context");
     release_clang_context = (release_clang_context_t)GetProcAddress(compiler_dll, "release_clang_context");
-    
 #endif
+    
     void* clang_ctx = create_clang_context();
     
     //bool hot_reload_was_it_failed = false;
@@ -230,7 +229,6 @@ i32 main(i32 argc, char** argv)
         }
     }; 
     
-    
     Plugin handle_b {
         .error_log = {
             m_allocate_array(Compiler_Error, 1024),
@@ -238,8 +236,6 @@ i32 main(i32 argc, char** argv)
             1024
         }
     }; 
-    
-    
     
     Plugin *current_handle = &handle_a;
     Plugin *hot_reload_handle = &handle_b;
@@ -282,8 +278,6 @@ i32 main(i32 argc, char** argv)
     FFT fft = fft_initialize(IR_BUFFER_LENGTH, audio_parameters.num_channels);
     
     //~ UI init
-    
-    
 #ifdef DEBUG
     octave_assert(CopyFile("gui.dll", "gui_temp.dll", FALSE) != 0);
     HMODULE gui_dll = LoadLibraryA("gui_temp.dll");
@@ -292,7 +286,6 @@ i32 main(i32 argc, char** argv)
     octave_assert(frame != 0);
     u64 gui_dll_last_write_time = win32_get_last_write_time("gui.dll");
 #endif
-    
     
     IO frame_io = io_initial_state();
     UI_State ui_state = {-1};
@@ -363,33 +356,14 @@ i32 main(i32 argc, char** argv)
             
             if(current_handle->error.flag == Compiler_Success)
             {
-                current_handle->parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, current_handle->descriptor.num_parameters);
-                
-                current_handle->parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, current_handle->descriptor.num_parameters);
-                
-                current_handle->parameters_holder = (char*) malloc(current_handle->descriptor.parameters_struct.size);
-                current_handle->state_holder = (char*) malloc(current_handle->descriptor.state_struct.size);
-                
-                current_handle->default_parameters_f(current_handle->parameters_holder);
-                current_handle->initialize_state_f(current_handle->parameters_holder, 
-                                                   current_handle->state_holder, 
-                                                   audio_parameters.num_channels,
-                                                   audio_parameters.sample_rate, 
-                                                   nullptr);
-                
-                plugin_set_parameter_values_from_holder(&current_handle->descriptor, current_handle->parameter_values_ui_side, current_handle->parameters_holder);
-                plugin_set_parameter_values_from_holder(&current_handle->descriptor, current_handle->parameter_values_audio_side, current_handle->parameters_holder);
-                current_handle->ring = plugin_parameters_ring_buffer_initialize(current_handle->descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
-                
+                plugin_populate_from_descriptor(current_handle, audio_parameters);
                 plugin_last_write_time = win32_get_last_write_time(source_filename);
                 audio_context.plugin = current_handle;
                 
                 octave_assert(exchange_32(&plugin_state, Asset_File_State_STAGE_USAGE)
                               == Asset_File_State_VALIDATING);
                 
-                //~ IR initialization
                 compute_IR(*current_handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, current_handle->parameter_values_ui_side);
-                
                 fft_perform(&fft);
                 
                 memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
@@ -421,29 +395,12 @@ i32 main(i32 argc, char** argv)
             {
                 printf("hot : compiler success\n");
                 
-                hot_reload_handle->parameter_values_audio_side = m_allocate_array(Plugin_Parameter_Value, hot_reload_handle->descriptor.num_parameters);
-                
-                hot_reload_handle->parameter_values_ui_side = m_allocate_array(Plugin_Parameter_Value, hot_reload_handle->descriptor.num_parameters);
-                
-                hot_reload_handle->parameters_holder = (char*) malloc(hot_reload_handle->descriptor.parameters_struct.size);
-                hot_reload_handle->state_holder = (char*) malloc(hot_reload_handle->descriptor.state_struct.size);
-                
-                hot_reload_handle->default_parameters_f(hot_reload_handle->parameters_holder);
-                hot_reload_handle->initialize_state_f(hot_reload_handle->parameters_holder, 
-                                                      hot_reload_handle->state_holder, 
-                                                      audio_parameters.num_channels,
-                                                      audio_parameters.sample_rate, 
-                                                      nullptr);
-                
-                plugin_set_parameter_values_from_holder(&hot_reload_handle->descriptor, hot_reload_handle->parameter_values_ui_side, hot_reload_handle->parameters_holder);
-                plugin_set_parameter_values_from_holder(&hot_reload_handle->descriptor, hot_reload_handle->parameter_values_audio_side, hot_reload_handle->parameters_holder);
-                hot_reload_handle->ring = plugin_parameters_ring_buffer_initialize(hot_reload_handle->descriptor.num_parameters, RING_BUFFER_SLOT_COUNT);
+                plugin_populate_from_descriptor(hot_reload_handle, audio_parameters);
                 
                 plugin_last_write_time = win32_get_last_write_time(source_filename);
                 audio_context.hot_reload_plugin = hot_reload_handle;
                 
                 compute_IR(*hot_reload_handle, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, hot_reload_handle->parameter_values_ui_side);
-                
                 fft_perform(&fft);
                 
                 memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
@@ -467,7 +424,6 @@ i32 main(i32 argc, char** argv)
                 
                 printf("hot : done cleaning up, back in use\n");
                 
-                
                 if(current_handle->descriptor.error.flag != Compiler_Success){
                     octave_assert(compare_exchange_32(&plugin_state,
                                                       Asset_File_State_FAILED,
@@ -484,19 +440,7 @@ i32 main(i32 argc, char** argv)
                                     Asset_File_State_UNLOADING,
                                     Asset_File_State_COLD_RELOAD_STAGE_UNLOAD)) 
         {
-            m_safe_free(current_handle->parameter_values_audio_side);
-            m_safe_free(current_handle->parameter_values_ui_side);
-            m_safe_free(current_handle->ring.buffer);
-            Compiler_Error *old_error_log_buffer = current_handle->error_log.errors;
-            
-            release_jit(current_handle);
-            *current_handle = {};
-            
-            current_handle->error_log = {
-                old_error_log_buffer,
-                0,
-                1024
-            };
+            plugin_reset_handle(current_handle);
             
             compiler_thread_param = {
                 .source_filename = source_filename,
@@ -525,18 +469,7 @@ i32 main(i32 argc, char** argv)
             hot_reload_handle = current_handle;
             current_handle = temp;
             
-            m_safe_free(hot_reload_handle->parameter_values_audio_side);
-            m_safe_free(hot_reload_handle->parameter_values_ui_side);
-            m_safe_free(hot_reload_handle->ring.buffer);
-            Compiler_Error *old_error_log_buffer = hot_reload_handle->error_log.errors;
-            release_jit(hot_reload_handle);
-            *hot_reload_handle = {};
-            hot_reload_handle->error_log = {
-                old_error_log_buffer,
-                0,
-                1024
-            };
-            
+            plugin_reset_handle(hot_reload_handle);
             
             compare_exchange_32(&plugin_state,
                                 Asset_File_State_STAGE_USAGE,
@@ -672,7 +605,6 @@ i32 main(i32 argc, char** argv)
         win32_get_elapsed_ms_since(last_time, &current_time, &frame_io.delta_time);
         last_time = current_time;
         
-        //~ reload gui dll
 #ifdef DEBUG
         {
             u64 temp_gui_write_time = gui_dll_last_write_time;
@@ -691,15 +623,9 @@ i32 main(i32 argc, char** argv)
     }
     
     
-    
-    
-    
-    
-    exit(1);
-    
     opengl_uninitialize(&opengl_ctx);
     
-    
+    return 0;
     exchange_32(&plugin_state, Asset_File_State_STAGE_UNLOADING);
     
     do{
@@ -709,6 +635,7 @@ i32 main(i32 argc, char** argv)
                                  Asset_File_State_OK_TO_UNLOAD));
     
     release_jit(current_handle);
+    release_jit(hot_reload_handle);
     
     audio_uninitialize(platform_audio_context);
     printf("done\n");

@@ -35,6 +35,10 @@ void plugin_set_parameter_holder_from_values(Plugin_Descriptor* descriptor,
 //TODO, ça marche pas, on sait pas qui c'est
 void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_Parameter_Value *new_parameters);
 
+void plugin_populate_from_descriptor(Plugin *plugin, Audio_Parameters audio_parameters);
+
+void plugin_reset_handle(Plugin *plugin);
+
 Plugin_Parameter_Value* plugin_parameters_buffer_pull(Plugin_Parameters_Ring_Buffer& ring);
 
 

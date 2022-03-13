@@ -28,6 +28,7 @@ Panel toggle : compiler log and IR \
 \
 Optional: \
 \
+Bug : Exiting while hot reloading crashes \
 If the struct layout has not changed, and if initial_state produces the same thing, then do not swap \
 Draggable IR \
 Time and frequency markers on the graphs \
