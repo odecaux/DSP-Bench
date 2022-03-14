@@ -4,7 +4,6 @@
 #define DESCRIPTOR_H
 
 
-#define CUSTOM_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
 
 
 typedef struct {
@@ -52,6 +51,8 @@ struct Plugin_Loading_Manager
     void *clang_ctx;
     Asset_File_State *plugin_state;
     char *source_filename;
+    
+    Compiler_Gui_Log gui_log;
 };
 
 
@@ -64,18 +65,7 @@ void plugin_load_button_was_clicked(Plugin_Loading_Manager *m);
 void plugin_loading_check_and_stage_hot_reload(Plugin_Loading_Manager *m);
 
 
-internal String compiler_error_flag_to_string(Compiler_Error_Flag flag)
-{
-    switch(flag)
-    {
-#include "errors.inc"
-        default : {
-            octave_assert(false && "why doesn't this switch cover all compiler errors ?\n");
-            return {};
-        }
-    }
-}
-#undef CUSTOM_ERROR_FLAG
+void plugin_manager_print_errors(Plugin *handle, Compiler_Gui_Log *log);
 
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b);
 

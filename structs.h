@@ -91,9 +91,13 @@ struct Compiler_Gui_Message{
     String message;
 };
 struct Compiler_Gui_Log{
-    Compiler_Gui_Message *errors;
-    u32 count;
-    u32 capacity;
+    Compiler_Gui_Message *messages;
+    u32 message_count;
+    u32 message_capacity;
+    
+    char *holder_base;
+    char *holder_current;
+    u32 holder_capacity;
 };
 
 
@@ -237,7 +241,6 @@ typedef void(*try_compile_t)(const char*, const void*, Plugin*, Plugin_Allocator
 typedef void(*release_jit_t)(Plugin*);
 typedef void*(*create_clang_context_t)();
 typedef void(*release_clang_context_t)(void* clang_context_void);
-
 //~ Audio
 
 typedef struct 

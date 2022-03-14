@@ -219,7 +219,17 @@ void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, cha
         
         .clang_ctx = clang_ctx,
         .plugin_state = plugin_state,
-        .source_filename = source_filename
+        .source_filename = source_filename,
+        
+        .gui_log = {
+            .messages = m_allocate_array(Compiler_Gui_Message, 256),
+            .message_count = 0,
+            .message_capacity = 256,
+            
+            .holder_base = m_allocate_array(char, 1024*16),
+            .holder_current = m->gui_log.holder_base,
+            .holder_capacity = 1024*16
+        }
     };
     
     if(m->source_filename[0] != 0)
@@ -289,6 +299,7 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
         {
             printf("compilation failed, cleaning up\n");
             
+            octave_assert(!m->current_handle->llvm_jit_engine);
             octave_assert(!m->current_handle->parameter_values_audio_side);
             octave_assert(!m->current_handle->parameter_values_ui_side);
             octave_assert(!m->current_handle->ring.buffer);
@@ -326,8 +337,7 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
         {
             
             printf("hot : compilation failed\n");
-            release_jit(m->hot_reload_handle);
-            
+            octave_assert(!m->hot_reload_handle->llvm_jit_engine);
             octave_assert(!m->hot_reload_handle->parameter_values_audio_side);
             octave_assert(!m->hot_reload_handle->parameter_values_ui_side);
             octave_assert(!m->hot_reload_handle->ring.buffer);
@@ -458,5 +468,80 @@ void plugin_loading_check_and_stage_hot_reload(Plugin_Loading_Manager *m)
                                               Asset_File_State_FAILED,
                                               Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
         }
+    }
+}
+
+#define CUSTOM_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
+String compiler_error_flag_to_string(Compiler_Error_Flag flag)
+{
+    switch(flag)
+    {
+#include "errors.inc"
+        default : {
+            octave_assert(false && "why doesn't this switch cover all compiler errors ?\n");
+            return {};
+        }
+    }
+}
+#undef CUSTOM_ERROR_FLAG
+
+
+void maybe_append_error(Compiler_Gui_Log *log, Custom_Error error)
+{
+    if(error.flag == Compiler_Success) return;
+    
+}
+
+void copy_message_to_log(Compiler_Gui_Log *log, String message)
+{
+    
+}
+
+void plugin_manager_print_errors(Plugin *handle, Compiler_Gui_Log *log)
+{
+    switch(handle->failure_stage)
+    {
+        case Compiler_Failure_Stage_Clang_Second_Pass :
+        case Compiler_Failure_Stage_Clang_First_Pass :{
+            Clang_Error_Log *error_log = &handle->clang_error_log;
+            for(u32 i = 0; i < error_log->count; i++)
+            {
+                String message = error_log->errors[i].error_message;
+                copy_message_to_log(log, message);
+            }
+        }break;
+        
+        case Compiler_Failure_Stage_Finding_Decls :{
+            Decl_Search_Log *decls = &handle->decls_search_log;
+            
+            if(decls->audio_callback.flag == Compiler_Success && 
+               decls->default_parameters.flag == Compiler_Success&& 
+               decls->initialize_state.flag == Compiler_Success)
+            {
+                maybe_append_error(log, decls->parameters_struct);
+                maybe_append_error(log, decls->state_struct);
+            }
+            else 
+            {
+                maybe_append_error(log, decls->audio_callback);
+                maybe_append_error(log, decls->default_parameters);
+                maybe_append_error(log, decls->initialize_state);
+            }
+        }break;
+        
+        case Compiler_Failure_Stage_Parsing_Parameters :{
+            
+            Plugin_Descriptor *descriptor = &handle->descriptor;
+            octave_assert(descriptor->error.flag == Compiler_Error_Recurse);
+            for(u32 param_idx = 0; param_idx < descriptor->num_parameters; param_idx++)
+            {
+                Plugin_Descriptor_Parameter *param = &descriptor->parameters[param_idx];
+                maybe_append_error(log, param->error);
+            }
+        }break;
+        
+        case Compiler_Failure_Stage_No_Failure :{
+            octave_assert(false && "don't call this function if there's no error\n");
+        }break;
     }
 }

@@ -303,7 +303,6 @@ void parameter_slider(u32 parameter_idx, Plugin_Descriptor_Parameter *parameter_
             
             if(new_normalized_value != current_normalized_value)
             {
-                //printf("%f\n", new_normalized_value);
                 *parameters_were_tweaked = true;
                 auto new_index = denormalize_enum_index(parameter_descriptor->enum_param, new_normalized_value);
                 auto new_value = enum_index_to_value(parameter_descriptor->enum_param, new_index);
