@@ -49,10 +49,12 @@ enum Compiler_Error_Flag{
 #undef CUSTOM_ERROR_FLAG
 
 
-enum Compiler_Error_Type{
-    Compiler_Error_Type_Clang,
-    Compiler_Error_Type_Custom,
-    Compiler_Error_Type_Success
+enum Compiler_Failure_Stage{
+    Compiler_Failure_Stage_Clang_First_Pass,
+    Compiler_Failure_Stage_Finding_Decls,
+    Compiler_Failure_Stage_Parsing_Parameters,
+    Compiler_Failure_Stage_Clang_Second_Pass,
+    Compiler_Failure_Stage_No_Failure
 };
 
 struct Compiler_Location{
@@ -66,12 +68,22 @@ struct Custom_Error{
     Compiler_Location location_2;
     Compiler_Location location_3;
 };
-
-
-struct Clang_Error{
-    String error_message;
+/*
+enum Decl_Search_Error{
+    Decl_Error_Finding_Functions,
+    Decl_Error_Finding_Structs,
+    Decl_No_Error
 };
+*/
 
+struct Decl_Search_Log{
+    Custom_Error audio_callback;
+    Custom_Error default_parameters;
+    Custom_Error initialize_state;
+    Custom_Error parameters_struct;
+    Custom_Error state_struct;
+};
+/*
 struct Compiler_Error {
     Compiler_Error_Type type;
     union{
@@ -79,9 +91,13 @@ struct Compiler_Error {
         Clang_Error clang;
     };
 };
+*/
 
-struct Compiler_Error_Log{
-    Compiler_Error *errors;
+struct Clang_Error{
+    String error_message;
+};
+struct Clang_Error_Log{
+    Clang_Error *errors;
     u32 count;
     u32 capacity;
 };
@@ -194,8 +210,10 @@ typedef struct{
 
 
 typedef struct {
-    Custom_Error error;
-    Compiler_Error_Log error_log;
+    Compiler_Failure_Stage failure_stage;
+    Clang_Error_Log clang_error_log;
+    Decl_Search_Log decls_search_log;
+    
     Plugin_Descriptor descriptor;
     
     void* llvm_jit_engine;
@@ -400,6 +418,16 @@ typedef struct {
     real32 *magnitudes;
 } FFT;
 
-typedef void(*frame_t)(Plugin_Descriptor&, Graphics_Context *graphics_ctx, UI_State& ui_state, IO frame_io, Plugin_Parameter_Value* current_parameter_values, Audio_Thread_Context *audio_ctx, Compiler_Error_Log *error_log, bool *parameters_were_tweaked, bool *load_was_clicked, bool *load_plugin_was_clicked);
+typedef void(*frame_t)(
+                       Plugin_Descriptor&,
+                       Graphics_Context *graphics_ctx, 
+                       UI_State& ui_state, 
+                       IO frame_io, 
+                       Plugin_Parameter_Value* current_parameter_values, 
+                       Audio_Thread_Context *audio_ctx, 
+                       //Clang_Error_Log *error_log, 
+                       bool *parameters_were_tweaked, 
+                       bool *load_was_clicked, 
+                       bool *load_plugin_was_clicked);
 
 #endif //STRUCTS_H

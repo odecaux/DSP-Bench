@@ -165,12 +165,12 @@ void plugin_reset_handle(Plugin *handle)
     handle->parameter_values_audio_side = nullptr;
     handle->parameter_values_ui_side = nullptr;
     handle->ring.buffer = nullptr;
-    Compiler_Error *old_error_log_buffer = handle->error_log.errors;
+    Clang_Error *old_error_log_buffer = handle->clang_error_log.errors;
     
     release_jit(handle);
     *handle = {};
     
-    handle->error_log = {
+    handle->clang_error_log = {
         old_error_log_buffer,
         0,
         1024
@@ -217,16 +217,16 @@ void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, cha
 {
     *m = {
         .handle_a = {
-            .error_log = {
-                m_allocate_array(Compiler_Error, 1024),
+            .clang_error_log = {
+                m_allocate_array(Clang_Error, 1024),
                 0,
                 1024
             }
         }, 
         
         .handle_b = {
-            .error_log = {
-                m_allocate_array(Compiler_Error, 1024),
+            .clang_error_log = {
+                m_allocate_array(Clang_Error, 1024),
                 0,
                 1024
             }
@@ -296,7 +296,7 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
                            Asset_File_State_VALIDATING,
                            Asset_File_State_STAGE_VALIDATION))
     {
-        if(m->current_handle->error.flag == Compiler_Success)
+        if(m->current_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
         {
             plugin_populate_from_descriptor(m->current_handle, m->current_allocator, audio_parameters);
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
@@ -328,7 +328,7 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
                                 Asset_File_State_HOT_RELOAD_STAGE_VALIDATION)) 
     {
         printf("hot : validating\n");
-        if(m->hot_reload_handle->error.flag == Compiler_Success)
+        if(m->hot_reload_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
         {
             printf("hot : compiler success\n");
             
@@ -447,11 +447,11 @@ void plugin_loading_check_and_stage_hot_reload(Plugin_Loading_Manager *m)
             
             m->hot_reload_allocator->current = m->hot_reload_allocator->base;
             
-            Compiler_Error *old_error_log_buffer = m->hot_reload_handle->error_log.errors;
+            Clang_Error *old_error_log_buffer = m->hot_reload_handle->clang_error_log.errors;
             
             *m->hot_reload_handle = {};
             
-            m->hot_reload_handle->error_log = {
+            m->hot_reload_handle->clang_error_log = {
                 old_error_log_buffer,
                 0,
                 1024
