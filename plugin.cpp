@@ -165,16 +165,9 @@ void plugin_reset_handle(Plugin *handle)
     handle->parameter_values_audio_side = nullptr;
     handle->parameter_values_ui_side = nullptr;
     handle->ring.buffer = nullptr;
-    Clang_Error *old_error_log_buffer = handle->clang_error_log.errors;
     
     release_jit(handle);
     *handle = {};
-    
-    handle->clang_error_log = {
-        old_error_log_buffer,
-        0,
-        1024
-    };
 }
 
 DWORD compiler_thread_proc(void *void_param)
@@ -216,21 +209,6 @@ Plugin_Allocator plugin_allocator_init(u64 size)
 void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, char *source_filename, Asset_File_State *plugin_state)
 {
     *m = {
-        .handle_a = {
-            .clang_error_log = {
-                m_allocate_array(Clang_Error, 1024),
-                0,
-                1024
-            }
-        }, 
-        
-        .handle_b = {
-            .clang_error_log = {
-                m_allocate_array(Clang_Error, 1024),
-                0,
-                1024
-            }
-        },
         .allocator_a = plugin_allocator_init(1024 * 1024),
         .allocator_b = plugin_allocator_init(1024 * 1204),
         
@@ -447,15 +425,8 @@ void plugin_loading_check_and_stage_hot_reload(Plugin_Loading_Manager *m)
             
             m->hot_reload_allocator->current = m->hot_reload_allocator->base;
             
-            Clang_Error *old_error_log_buffer = m->hot_reload_handle->clang_error_log.errors;
-            
             *m->hot_reload_handle = {};
             
-            m->hot_reload_handle->clang_error_log = {
-                old_error_log_buffer,
-                0,
-                1024
-            };
             printf("source : %s\n", m->source_filename);
             m->compiler_thread_param = {
                 .source_filename = m->source_filename,

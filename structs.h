@@ -68,13 +68,6 @@ struct Custom_Error{
     Compiler_Location location_2;
     Compiler_Location location_3;
 };
-/*
-enum Decl_Search_Error{
-    Decl_Error_Finding_Functions,
-    Decl_Error_Finding_Structs,
-    Decl_No_Error
-};
-*/
 
 struct Decl_Search_Log{
     Custom_Error audio_callback;
@@ -83,15 +76,6 @@ struct Decl_Search_Log{
     Custom_Error parameters_struct;
     Custom_Error state_struct;
 };
-/*
-struct Compiler_Error {
-    Compiler_Error_Type type;
-    union{
-        Custom_Error custom;
-        Clang_Error clang;
-    };
-};
-*/
 
 struct Clang_Error{
     String error_message;
@@ -101,6 +85,17 @@ struct Clang_Error_Log{
     u32 count;
     u32 capacity;
 };
+
+
+struct Compiler_Gui_Message{
+    String message;
+};
+struct Compiler_Gui_Log{
+    Compiler_Gui_Message *errors;
+    u32 count;
+    u32 capacity;
+};
+
 
 //~ Audio File
 

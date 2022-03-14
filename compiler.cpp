@@ -425,7 +425,7 @@ void errors_push_clang(Clang_Error_Log *error_log, Clang_Error new_error)
 void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *plugin, Plugin_Allocator *allocator)
 {
     
-    Clang_Error_Log *error_log = &plugin->clang_error_log;
+    //Clang_Error_Log *error_log = &plugin->clang_error_log;
     clang::CompilerInstance compiler_instance{};
     clang::TextDiagnosticBuffer diagnostics{};
     String plugin_filename;
@@ -520,9 +520,15 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
     if(diagnostics.getNumErrors() != 0) 
     {
         octave_assert(compilation_count == 0);
+        plugin->clang_error_log = {
+            (Clang_Error*)plugin_allocate(allocator, sizeof(Clang_Error) * diagnostics.getNumErrors()),
+            0,
+            diagnostics.getNumErrors()
+        };
+        
         for(auto error_it = diagnostics.err_begin(); error_it < diagnostics.err_end(); error_it++)
         {
-            errors_push_clang(error_log, {allocate_and_copy_std_string(allocator, error_it->second)});
+            errors_push_clang(&plugin->clang_error_log, {allocate_and_copy_std_string(allocator, error_it->second)});
         }
         plugin->failure_stage = {Compiler_Failure_Stage_Clang_First_Pass};
         return;
@@ -1163,6 +1169,12 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
         //NOTE only possible because we set this ourselves
         auto* diagnostics = static_cast<clang::TextDiagnosticBuffer*>(&compiler_instance.getDiagnosticClient()); 
         octave_assert(diagnostics->getNumErrors() != 0);
+        
+        plugin->clang_error_log = {
+            (Clang_Error*)plugin_allocate(allocator, sizeof(Clang_Error) * diagnostics->getNumErrors()),
+            0,
+            diagnostics->getNumErrors()
+        };
         
         for(auto error_it = diagnostics->err_begin(); error_it < diagnostics->err_end(); error_it++)
         {
