@@ -75,7 +75,7 @@ struct Decl_Handle{
 };
 
 struct Plugin_Required_Decls{
-    Custom_Error error;
+    bool worked;
     Decl_Handle audio_callback;
     Decl_Handle default_parameters;
     Decl_Handle initialize_state;
@@ -392,7 +392,7 @@ void try_compile(const char* filename, void* clang_ctx_ptr, Plugin *plugin, Plug
 {
     try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr, plugin, allocator);
 }
-
+/*
 void errors_push(Compiler_Error_Log *error_log, Compiler_Error new_error)
 {
     if(error_log->count >= error_log->capacity) return; 
@@ -413,72 +413,86 @@ void errors_push_clang(Compiler_Error_Log *error_log, Clang_Error new_error)
 {
     errors_push(error_log, {.type = Compiler_Error_Type_Clang, .clang = new_error});  
 }
+*/
+
+void errors_push_clang(Clang_Error_Log *error_log, Clang_Error new_error)
+{
+    if(error_log->count >= error_log->capacity) return; 
+    error_log->errors[error_log->count++] = new_error;
+}
 
 
 void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *plugin, Plugin_Allocator *allocator)
 {
     
-    clang::LangOptions language_options{};
-    language_options.Bool = 1;
-    language_options.CPlusPlus = 1;
-    language_options.RTTI = 0;
-    language_options.CXXExceptions = 0;
-    language_options.MSVCCompat = 1;
-    language_options.MicrosoftExt = 1;
-    
+    //Clang_Error_Log *error_log = &plugin->clang_error_log;
     clang::CompilerInstance compiler_instance{};
-    
     clang::TextDiagnosticBuffer diagnostics{};
-    compiler_instance.createDiagnostics(&diagnostics, false);
-    
-    auto triple = llvm::sys::getDefaultTargetTriple();
-    auto triple_str = "-triple=" + triple;
-    
-    clang::CompilerInvocation::CreateFromArgs(compiler_instance.getInvocation(),
-                                              {
-                                                  triple_str.c_str(),
-                                                  "-Ofast", 
-                                                  "-fcxx-exceptions", 
-                                                  "-fms-extensions", 
-                                                  "-ffast-math", 
-                                                  "-fdenormal-fp-math=positive-zero"
-                                              }, 
-                                              compiler_instance.getDiagnostics());
-    
-    Compiler_Error_Log *error_log = &plugin->error_log;
-    
-    compiler_instance.getTargetOpts().Triple = triple;
-    compiler_instance.getLangOpts() = language_options;
-    
-    auto& header_opts = compiler_instance.getHeaderSearchOpts();
-    //header_opts.Verbose = true;
-    header_opts.AddPath(".", clang::frontend::Quoted , false, false);
-    
-    compiler_instance.getFrontendOpts().Inputs.clear();
-    auto kind = clang::InputKind(clang::Language::CXX);
-    compiler_instance.getFrontendOpts().Inputs.push_back(clang::FrontendInputFile(filename, kind));
-    
-    auto split_input = compiler_instance.getFrontendOpts().Inputs.back().getFile().rsplit('\\');
     String plugin_filename;
-    if(split_input.second.size() == 0)
-        plugin_filename =  allocate_and_copy_llvm_stringref(allocator, split_input.first);
-    else
-        plugin_filename =  allocate_and_copy_llvm_stringref(allocator, split_input.second);
     
-    Compiler_Error error = {  };
+    {
+        clang::LangOptions language_options{};
+        language_options.Bool = 1;
+        language_options.CPlusPlus = 1;
+        language_options.RTTI = 0;
+        language_options.CXXExceptions = 0;
+        language_options.MSVCCompat = 1;
+        language_options.MicrosoftExt = 1;
+        
+        compiler_instance.createDiagnostics(&diagnostics, false);
+        
+        auto triple = llvm::sys::getDefaultTargetTriple();
+        auto triple_str = "-triple=" + triple;
+        
+        clang::CompilerInvocation::CreateFromArgs(compiler_instance.getInvocation(),
+                                                  {
+                                                      triple_str.c_str(),
+                                                      "-Ofast", 
+                                                      "-fcxx-exceptions", 
+                                                      "-fms-extensions", 
+                                                      "-ffast-math", 
+                                                      "-fdenormal-fp-math=positive-zero"
+                                                  }, 
+                                                  compiler_instance.getDiagnostics());
+        
+        compiler_instance.getTargetOpts().Triple = triple;
+        compiler_instance.getLangOpts() = language_options;
+        auto& header_opts = compiler_instance.getHeaderSearchOpts();
+        //header_opts.Verbose = true;
+        header_opts.AddPath(".", clang::frontend::Quoted , false, false);
+        
+        compiler_instance.getFrontendOpts().Inputs.clear();
+        auto kind = clang::InputKind(clang::Language::CXX);
+        compiler_instance.getFrontendOpts().Inputs.push_back(clang::FrontendInputFile(filename, kind));
+        auto split_input = compiler_instance.getFrontendOpts().Inputs.back().getFile().rsplit('\\');
+        if(split_input.second.size() == 0)
+            plugin_filename =  allocate_and_copy_llvm_stringref(allocator, split_input.first);
+        else
+            plugin_filename =  allocate_and_copy_llvm_stringref(allocator, split_input.second);
+    }
+    
+    
+    Compiler_Failure_Stage error = {Compiler_Failure_Stage_No_Failure};
+    Decl_Search_Log decls_search_log;
     Plugin_Descriptor descriptor = {.name = plugin_filename};
     std::unique_ptr<llvm::MemoryBuffer> new_buffer = nullptr;
+    int compilation_count = 0; 
     
     auto visit_ast = [&](clang::ASTContext& ast_ctx){
+        compilation_count++;
+        
         Plugin_Required_Decls decls = find_decls(ast_ctx);
-        if(decls.error.flag != Compiler_Success)
+        if(!decls.worked)
         {
-            errors_push_custom(error_log, decls.audio_callback.error);
-            errors_push_custom(error_log, decls.default_parameters.error);
-            errors_push_custom(error_log, decls.initialize_state.error);
-            errors_push_custom(error_log, decls.audio_callback.error);
-            errors_push_custom(error_log, decls.audio_callback.error);
-            error = {.type = Compiler_Error_Type_Custom, .custom = {Compiler_Could_Not_Get_Decls}};
+            decls_search_log = {
+                decls.audio_callback.error,
+                decls.default_parameters.error,
+                decls.initialize_state.error,
+                decls.parameters_struct.error,
+                decls.state_struct.error
+            };
+            
+            error = Compiler_Failure_Stage_Finding_Decls;
             return;
         }
         
@@ -487,11 +501,7 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
         descriptor.name = plugin_filename;
         
         if(descriptor.error.flag != Compiler_Success){
-            for(u32 i = 0; i < descriptor.num_parameters; i++)
-            {
-                errors_push_custom(error_log, descriptor.parameters[i].error);
-            }
-            error = {.type = Compiler_Error_Type_Custom, .custom = {Compiler_Struct_Parsing_Error}};
+            error = Compiler_Failure_Stage_Parsing_Parameters;
             return;
         }
         
@@ -500,7 +510,7 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
                                            compiler_instance.getLangOpts(), 
                                            compiler_instance.getSourceManager().getMainFileID());
         octave_assert(new_buffer);
-        error.type = Compiler_Error_Type_Success;
+        error = Compiler_Failure_Stage_No_Failure;
     };
     
     auto action = make_action(visit_ast);
@@ -509,18 +519,29 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
     
     if(diagnostics.getNumErrors() != 0) 
     {
+        octave_assert(compilation_count == 0);
+        plugin->clang_error_log = {
+            (Clang_Error*)plugin_allocate(allocator, sizeof(Clang_Error) * diagnostics.getNumErrors()),
+            0,
+            diagnostics.getNumErrors()
+        };
+        
         for(auto error_it = diagnostics.err_begin(); error_it < diagnostics.err_end(); error_it++)
         {
-            errors_push_clang(error_log, {allocate_and_copy_std_string(allocator, error_it->second)});
+            errors_push_clang(&plugin->clang_error_log, {allocate_and_copy_std_string(allocator, error_it->second)});
         }
-        plugin->error = {Compiler_Clang_Error};
-        plugin->descriptor = descriptor;
+        plugin->failure_stage = {Compiler_Failure_Stage_Clang_First_Pass};
         return;
     }
-    //succesfully compiled, but failed at some parsing stage
-    else if(error.type != Compiler_Error_Type_Success) 
+    else if(error == Compiler_Failure_Stage_Finding_Decls)
     {
-        plugin->error = {Compiler_Error_Recurse}; 
+        plugin->failure_stage = error;
+        plugin->decls_search_log = decls_search_log;
+        return;
+    }
+    else if(error == Compiler_Failure_Stage_Parsing_Parameters) 
+    {
+        plugin->failure_stage = error; 
         plugin->descriptor = descriptor;
         return;
     }
@@ -532,7 +553,6 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
                     descriptor,
                     &clang_ctx->llvm_context,
                     plugin, allocator);
-        errors_push_custom(error_log, plugin->error);
         return;
     }
 }
@@ -743,12 +763,10 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
        initialize_state_decl.error.flag != Compiler_Success)
     {
         return Plugin_Required_Decls{
-            {Compiler_Error_Recurse},
+            false,
             audio_callback_decl,
             default_parameters_decl,
             initialize_state_decl,
-            Decl_Handle{.error = Compiler_Error_Recurse},
-            Decl_Handle{.error = Compiler_Error_Recurse}
         };
     }
     
@@ -767,6 +785,7 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
     const auto& parameters_type = default_parameters_return_type;
     const auto& state_type = initialize_state_return_type;
     
+    /////////////////////////////////////////////////////////////
     Decl_Handle parameters_struct_decl = {Compiler_Success};
     
     if(&default_parameters_return_type != &initialize_state_parameter_type ||
@@ -779,11 +798,12 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
             decl_to_loc(*audio_callback_decl.fun->getParamDecl(0), source_manager)
         };
     }
-    
-    else if(!parameters_type.isRecordType()){
+    else if(!parameters_type.isRecordType())
+    {
         parameters_struct_decl.error = { Compiler_Not_Record_Type, fun_to_return_loc(*default_parameters_decl.fun, source_manager)};
     }
-    else {
+    else 
+    {
         parameters_struct_decl.record = parameters_type.getAsCXXRecordDecl();
         if(parameters_struct_decl.record->isPolymorphic())
         {
@@ -791,6 +811,7 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
         }
     }
     
+    /////////////////////////////////////////////////////////////
     Decl_Handle state_struct_decl = {Compiler_Success};
     
     if(&initialize_state_return_type != &audio_callback_state_type)
@@ -800,13 +821,15 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
             decl_to_loc(*state_struct_decl.record, source_manager), fun_to_return_loc(*initialize_state_decl.fun, source_manager)
         };
     }
-    else if(!state_type.isRecordType()){
+    else if(!state_type.isRecordType())
+    {
         state_struct_decl.error = {
             Compiler_Not_Record_Type, 
             decl_to_loc(*state_struct_decl.record, source_manager)
         };
     }
-    else {
+    else 
+    {
         state_struct_decl.record = state_type.getAsCXXRecordDecl();
         if(state_struct_decl.record->isPolymorphic())
         {
@@ -817,13 +840,12 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
         }
     }
     
-    Custom_Error error = 
-    ( parameters_struct_decl.error.flag == Compiler_Success && state_struct_decl.error.flag == Compiler_Success ) 
-        ? Custom_Error { Compiler_Success } 
-    :   Custom_Error{ Compiler_Error_Recurse };
+    bool worked = 
+        parameters_struct_decl.error.flag == Compiler_Success && 
+        state_struct_decl.error.flag == Compiler_Success;
     
     return {
-        error,
+        worked,
         audio_callback_decl,
         default_parameters_decl,
         initialize_state_decl,
@@ -1148,12 +1170,18 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
         auto* diagnostics = static_cast<clang::TextDiagnosticBuffer*>(&compiler_instance.getDiagnosticClient()); 
         octave_assert(diagnostics->getNumErrors() != 0);
         
+        plugin->clang_error_log = {
+            (Clang_Error*)plugin_allocate(allocator, sizeof(Clang_Error) * diagnostics->getNumErrors()),
+            0,
+            diagnostics->getNumErrors()
+        };
+        
         for(auto error_it = diagnostics->err_begin(); error_it < diagnostics->err_end(); error_it++)
         {
-            errors_push_clang(&plugin->error_log, {allocate_and_copy_std_string(allocator, error_it->second)});
+            errors_push_clang(&plugin->clang_error_log, {allocate_and_copy_std_string(allocator, error_it->second)});
         }
         
-        plugin->error = { Compiler_Clang_Error};
+        plugin->failure_stage = { Compiler_Failure_Stage_Clang_Second_Pass };
         return;
     }
     std::unique_ptr<llvm::Module> module = compile_action->takeModule();
@@ -1199,7 +1227,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     
     octave_assert(audio_callback_f && default_parameters_f && initialize_state_f);
     
-    plugin->error = { Compiler_Success };
+    plugin->failure_stage = { Compiler_Failure_Stage_No_Failure };
     plugin->descriptor = descriptor;
     
     plugin->llvm_jit_engine = (void*)engine; 

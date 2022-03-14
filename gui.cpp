@@ -303,7 +303,6 @@ void parameter_slider(u32 parameter_idx, Plugin_Descriptor_Parameter *parameter_
             
             if(new_normalized_value != current_normalized_value)
             {
-                printf("%f\n", new_normalized_value);
                 *parameters_were_tweaked = true;
                 auto new_index = denormalize_enum_index(parameter_descriptor->enum_param, new_normalized_value);
                 auto new_value = enum_index_to_value(parameter_descriptor->enum_param, new_index);
@@ -323,7 +322,7 @@ void frame(Plugin_Descriptor& descriptor,
            IO frame_io, 
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Thread_Context *audio_ctx,
-           Compiler_Error_Log *error_log,
+           Compiler_Gui_Log *error_log,
            bool *parameters_were_tweaked,
            bool *load_wav_was_clicked,
            bool *load_plugin_was_clicked)
@@ -349,7 +348,6 @@ void frame(Plugin_Descriptor& descriptor,
     
     switch(plugin_state)
     {
-        
         case Asset_File_State_IN_USE:
         case Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE :
         case Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING :
@@ -477,16 +475,10 @@ void frame(Plugin_Descriptor& descriptor,
             draw_text(StringLit("Compilation Error"), header_bounds, Color_Front, &graphics_ctx->atlas);
             
             Rect error_message_bounds = rect_take_top(main_panel_bounds, TITLE_HEIGHT);
-            for(i32 i = 0; i < error_log->count; i++)
+            
+            for(i32 i = 0; i < error_log->message_count; i++)
             {
-                Compiler_Error *error = &error_log->errors[i];
-                if(error->type == Compiler_Error_Type_Clang)
-                    draw_text(error->clang.error_message, error_message_bounds, Color_Front, &graphics_ctx->atlas);
-                else if(error->type == Compiler_Error_Type_Custom)
-                    draw_text(compiler_error_flag_to_string(error->custom.flag), error_message_bounds, Color_Front, &graphics_ctx->atlas);
-                else
-                    octave_assert(false);
-                
+                draw_text(error_log->messages[i], error_message_bounds, Color_Front, &graphics_ctx->atlas);
                 error_message_bounds = rect_move_by(error_message_bounds, {0.0f, TITLE_HEIGHT});
             }
             
