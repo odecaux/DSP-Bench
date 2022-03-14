@@ -296,7 +296,7 @@ i32 main(i32 argc, char** argv)
               frame_io, 
               plugin_manager.current_handle->parameter_values_ui_side, 
               &audio_context, 
-              //&plugin_manager.current_handle->clang_error_log,
+              &plugin_manager.gui_log,
               &parameters_were_tweaked,
               &load_wav_was_clicked,
               &load_plugin_was_clicked

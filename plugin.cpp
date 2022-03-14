@@ -222,7 +222,7 @@ void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, cha
         .source_filename = source_filename,
         
         .gui_log = {
-            .messages = m_allocate_array(Compiler_Gui_Message, 256),
+            .messages = m_allocate_array(String, 256),
             .message_count = 0,
             .message_capacity = 256,
             
@@ -303,6 +303,7 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
             octave_assert(!m->current_handle->parameter_values_audio_side);
             octave_assert(!m->current_handle->parameter_values_ui_side);
             octave_assert(!m->current_handle->ring.buffer);
+            plugin_manager_print_errors(m->current_handle, &m->gui_log);
             
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
             audio_context->plugin = m->current_handle;
@@ -341,6 +342,8 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
             octave_assert(!m->hot_reload_handle->parameter_values_audio_side);
             octave_assert(!m->hot_reload_handle->parameter_values_ui_side);
             octave_assert(!m->hot_reload_handle->ring.buffer);
+            
+            plugin_manager_print_errors(m->hot_reload_handle, &m->gui_log);
             
             printf("hot : done cleaning up, back in use\n");
             
@@ -489,16 +492,46 @@ String compiler_error_flag_to_string(Compiler_Error_Flag flag)
 void maybe_append_error(Compiler_Gui_Log *log, Custom_Error error)
 {
     if(error.flag == Compiler_Success) return;
+    octave_assert(log->message_count < log->message_capacity);
+    
+    String *new_message = &log->messages[log->message_count++];
+    new_message->str = log->holder_current;
+    
+    
+    const char* flag_string_lit;
+#define CUSTOM_ERROR_FLAG(flag) case flag : flag_string_lit = #flag; break;
+    switch(error.flag)
+    {
+#include "errors.inc"
+    }
+#undef CUSTOM_ERROR_FLAG
+    
+    i32 written_chars =
+        sprintf(new_message->str, "%lu.%lu : %s", error.location.line, error.location.column, flag_string_lit); 
+    assert(written_chars > 0);
+    
+    new_message->size = written_chars + 1;
+    log->holder_current += align(new_message->size);
     
 }
 
 void copy_message_to_log(Compiler_Gui_Log *log, String message)
 {
+    octave_assert(log->message_count < log->message_capacity);
+    String *new_message = &log->messages[log->message_count++];
+    new_message->str = log->holder_current;
+    new_message->size = message.size;
     
+    strncpy(new_message->str, message.str, message.size);
+    //TODO assert error
+    log->holder_current += align(new_message->size);
 }
 
 void plugin_manager_print_errors(Plugin *handle, Compiler_Gui_Log *log)
 {
+    log->message_count = 0;
+    log->holder_current = log->holder_base;
+    
     switch(handle->failure_stage)
     {
         case Compiler_Failure_Stage_Clang_Second_Pass :

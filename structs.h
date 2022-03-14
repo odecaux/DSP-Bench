@@ -86,12 +86,13 @@ struct Clang_Error_Log{
     u32 capacity;
 };
 
-
+/*
 struct Compiler_Gui_Message{
     String message;
 };
+*/
 struct Compiler_Gui_Log{
-    Compiler_Gui_Message *messages;
+    String *messages;
     u32 message_count;
     u32 message_capacity;
     
@@ -423,7 +424,7 @@ typedef void(*frame_t)(
                        IO frame_io, 
                        Plugin_Parameter_Value* current_parameter_values, 
                        Audio_Thread_Context *audio_ctx, 
-                       //Clang_Error_Log *error_log, 
+                       Compiler_Gui_Log *error_log, 
                        bool *parameters_were_tweaked, 
                        bool *load_was_clicked, 
                        bool *load_plugin_was_clicked);

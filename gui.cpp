@@ -322,7 +322,7 @@ void frame(Plugin_Descriptor& descriptor,
            IO frame_io, 
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Thread_Context *audio_ctx,
-           //Clang_Error_Log *error_log,
+           Compiler_Gui_Log *error_log,
            bool *parameters_were_tweaked,
            bool *load_wav_was_clicked,
            bool *load_plugin_was_clicked)
@@ -475,20 +475,13 @@ void frame(Plugin_Descriptor& descriptor,
             draw_text(StringLit("Compilation Error"), header_bounds, Color_Front, &graphics_ctx->atlas);
             
             Rect error_message_bounds = rect_take_top(main_panel_bounds, TITLE_HEIGHT);
-            /*
-            for(i32 i = 0; i < error_log->count; i++)
+            
+            for(i32 i = 0; i < error_log->message_count; i++)
             {
-                Compiler_Error *error = &error_log->errors[i];
-                if(error->type == Compiler_Error_Type_Clang)
-                    draw_text(error->clang.error_message, error_message_bounds, Color_Front, &graphics_ctx->atlas);
-                else if(error->type == Compiler_Error_Type_Custom)
-                    draw_text(compiler_error_flag_to_string(error->custom.flag), error_message_bounds, Color_Front, &graphics_ctx->atlas);
-                else
-                    octave_assert(false);
-                
+                draw_text(error_log->messages[i], error_message_bounds, Color_Front, &graphics_ctx->atlas);
                 error_message_bounds = rect_move_by(error_message_bounds, {0.0f, TITLE_HEIGHT});
             }
-            */
+            
             if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, &ui_state, &frame_io))
             {
                 *load_plugin_was_clicked = true;
