@@ -225,7 +225,7 @@ void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m)
         .clang_ctx = m->clang_ctx,
         .stage = m->plugin_state
     };
-    auto old_state = exchange_32(*m->plugin_state, Asset_File_State_STAGE_BACKGROUND_LOADING);
+    auto old_state = exchange_32(m->plugin_state, Asset_File_State_STAGE_BACKGROUND_LOADING);
     
     octave_assert(old_state == Asset_File_State_NONE || old_state == Asset_File_State_UNLOADING);
     
@@ -468,7 +468,22 @@ void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m)
 
 //~ Error messages
 
-void maybe_append_error(Compiler_Gui_Log *log, Custom_Error error)
+
+#define CUSTOM_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
+String compiler_error_flag_to_string(Compiler_Error_Flag flag)
+{
+    switch(flag)
+    {
+#include "errors.inc"
+        default : {
+            octave_assert(false && "why doesn't this switch cover all compiler errors ?\n");
+            return {};
+        }
+    }
+}
+#undef CUSTOM_ERROR_FLAG
+
+void maybe_append_fun_error(Compiler_Gui_Log *log, String function_name, Custom_Error error)
 {
     if(error.flag == Compiler_Success) return;
     octave_assert(log->message_count < log->message_capacity);
@@ -476,23 +491,96 @@ void maybe_append_error(Compiler_Gui_Log *log, Custom_Error error)
     String *new_message = &log->messages[log->message_count++];
     new_message->str = log->holder_current;
     
+    String flag_string = compiler_error_flag_to_string(error.flag);
+    i32 written_chars;
     
-    const char* flag_string_lit;
-#define CUSTOM_ERROR_FLAG(flag) case flag : flag_string_lit = #flag; break;
     switch(error.flag)
     {
-#include "errors.inc"
+        case Compiler_Too_Many_Fun : {
+            written_chars = sprintf(new_message->str, "%s : %s between %lu:%lu and %lu:%lu", function_name.str, flag_string.str, error.location.line, error.location.column, error.location_2.line, error.location_2.column);
+        }break;
+        case Compiler_No_Fun :{
+            written_chars = sprintf(new_message->str, "%s : %s", function_name.str, flag_string.str);
+        }break;
+        case Compiler_Wrong_Signature_Fun : {
+            written_chars = sprintf(new_message->str, "%s : %s at %lu:%lu", function_name.str, flag_string.str, error.location.line, error.location.column); 
+        }break;
+        default : assert(false && "invalid function decl flag"); break;
     }
-#undef CUSTOM_ERROR_FLAG
     
-    i32 written_chars =
-        sprintf(new_message->str, "%lu.%lu : %s", error.location.line, error.location.column, flag_string_lit); 
+    //TODO written_chars = sprintf only valid because C string literals are null terminated
+    
     assert(written_chars > 0);
     
     new_message->size = written_chars + 1;
     log->holder_current += align(new_message->size);
-    
 }
+
+
+
+void maybe_append_struct_error(Compiler_Gui_Log *log, String struct_name, Custom_Error error)
+{
+    if(error.flag == Compiler_Success) return;
+    octave_assert(log->message_count < log->message_capacity);
+    
+    String *new_message = &log->messages[log->message_count++];
+    new_message->str = log->holder_current;
+    
+    String flag_string = compiler_error_flag_to_string(error.flag);
+    i32 written_chars;
+    
+    switch(error.flag)
+    {
+        case Compiler_Types_Mismatch : {
+            written_chars = sprintf(new_message->str, "%s : %s between %lu:%lu, %lu:%lu and %lu:%lu", struct_name.str, flag_string.str, error.location.line, error.location.column, error.location_2.line, error.location_2.column, error.location_3.line, error.location_3.column);
+            
+        }break;
+        case Compiler_Not_Record_Type :
+        case Compiler_Polymorphic : {
+            written_chars = sprintf(new_message->str, "%s : %s at %lu.%lu", struct_name.str, flag_string.str, error.location.line, error.location.column); 
+        }break;
+        default : assert(false && "invalid function decl flag"); break;
+    }
+    
+    assert(written_chars > 0);
+    
+    new_message->size = written_chars + 1;
+    log->holder_current += align(new_message->size);
+}
+
+
+void maybe_append_parameter_error(Compiler_Gui_Log *log, u32 parameter_idx, Plugin_Descriptor_Parameter *param)
+{
+    Custom_Error error = param->error;
+    if(error.flag == Compiler_Success) return;
+    octave_assert(log->message_count < log->message_capacity);
+    
+    String *new_message = &log->messages[log->message_count++];
+    new_message->str = log->holder_current;
+    
+    String flag_string = compiler_error_flag_to_string(error.flag);
+    i32 written_chars;
+    
+    switch(error.flag)
+    {
+        case Compiler_Empty_Annotation : 
+        case Compiler_Invalid_Annotation : 
+        case Compiler_Annotation_Type_Mismatch :
+        case Compiler_Missing_Min_Max : 
+        case Compiler_Invalid_Min_Value : 
+        case Compiler_Invalid_Max_Value : 
+        case Compiler_Min_Greater_Than_Max : {
+            written_chars = sprintf(new_message->str, "parameter %lu : %s at %lu.%lu", parameter_idx, flag_string.str, error.location.line, error.location.column); 
+        }break;
+        default : assert(false && "invalid function decl flag"); break;
+    }
+    
+    assert(written_chars > 0);
+    
+    new_message->size = written_chars + 1;
+    log->holder_current += align(new_message->size);
+}
+
 
 void copy_message_to_log(Compiler_Gui_Log *log, String message)
 {
@@ -530,14 +618,14 @@ void plugin_write_all_errors_on_log(Plugin *handle, Compiler_Gui_Log *log)
                decls->default_parameters.flag == Compiler_Success&& 
                decls->initialize_state.flag == Compiler_Success)
             {
-                maybe_append_error(log, decls->parameters_struct);
-                maybe_append_error(log, decls->state_struct);
+                maybe_append_struct_error(log, StringLit("Parameter struct"), decls->parameters_struct);
+                maybe_append_struct_error(log, StringLit("State struct"), decls->state_struct);
             }
             else 
             {
-                maybe_append_error(log, decls->audio_callback);
-                maybe_append_error(log, decls->default_parameters);
-                maybe_append_error(log, decls->initialize_state);
+                maybe_append_fun_error(log, StringLit("audio_callback"), decls->audio_callback);
+                maybe_append_fun_error(log, StringLit("default_parameters"), decls->default_parameters);
+                maybe_append_fun_error(log, StringLit("initalize_state"), decls->initialize_state);
             }
         }break;
         
@@ -548,7 +636,7 @@ void plugin_write_all_errors_on_log(Plugin *handle, Compiler_Gui_Log *log)
             for(u32 param_idx = 0; param_idx < descriptor->num_parameters; param_idx++)
             {
                 Plugin_Descriptor_Parameter *param = &descriptor->parameters[param_idx];
-                maybe_append_error(log, param->error);
+                maybe_append_parameter_error(log, param_idx, param);
             }
         }break;
         

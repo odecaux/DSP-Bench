@@ -579,7 +579,7 @@ Decl_Handle find_audio_callback(clang::ASTContext& ast_ctx)
         if(audio_callback_decl == nullptr)
             audio_callback_decl = decl;
         else
-            error = {Compiler_Too_Many_Fun, decl_to_loc(*decl, source_manager)}; 
+            error = {Compiler_Too_Many_Fun, decl_to_loc(*audio_callback_decl, source_manager), decl_to_loc(*decl, source_manager)}; 
     };
     match_ast(audio_callback_matcher, audio_callback_lambda, ast_ctx);
     
