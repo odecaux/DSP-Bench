@@ -114,6 +114,7 @@ class Consumer : public clang::ASTConsumer
     
     virtual void HandleTranslationUnit(clang::ASTContext &Context)
     {
+        if(Context.getDiagnostics().hasErrorOccurred()) return;
         exec(Context);
     }
     
@@ -186,11 +187,11 @@ internal void match_node(Matcher& matcher, Exec& exec, const Node& node, clang::
     
     auto match_finder = MatchFinder{};
     
-    
     auto matcher_callback = make_match_callback(exec);
     match_finder.addMatcher(matcher, &matcher_callback);
     match_finder.match<Node>(node, ast_ctx);
 } 
+
 
 
 Compiler_Location fun_to_return_loc(const clang::FunctionDecl& fun, const clang::SourceManager& source_manager)
@@ -392,28 +393,18 @@ void try_compile(const char* filename, void* clang_ctx_ptr, Plugin *plugin, Plug
 {
     try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr, plugin, allocator);
 }
-/*
-void errors_push(Compiler_Error_Log *error_log, Compiler_Error new_error)
+
+Clang_Error to_clang_error(const std::pair< clang::SourceLocation, std::string > &error, const clang::SourceManager &source_manager,
+                           Plugin_Allocator *allocator)
 {
-    if(error_log->count >= error_log->capacity) return; 
-    if(new_error.type == Compiler_Error_Type_Success) return;
-    if(new_error.type == Compiler_Error_Type_Custom && new_error.custom.flag == Compiler_Success) return; 
+    auto [file_id, offset] = source_manager.getDecomposedLoc(error.first);
+    Compiler_Location loc = {
+        .line = source_manager.getLineNumber(file_id, offset),
+        .column = source_manager.getColumnNumber(file_id, offset)
+    };
     
-    error_log->errors[error_log->count++] = new_error;
+    return { allocate_and_copy_std_string(allocator, error.second), loc};
 }
-
-
-void errors_push_custom(Compiler_Error_Log *error_log, Custom_Error new_error)
-{
-    errors_push(error_log, {.type = Compiler_Error_Type_Custom, .custom = new_error});  
-}
-
-
-void errors_push_clang(Compiler_Error_Log *error_log, Clang_Error new_error)
-{
-    errors_push(error_log, {.type = Compiler_Error_Type_Clang, .clang = new_error});  
-}
-*/
 
 void errors_push_clang(Clang_Error_Log *error_log, Clang_Error new_error)
 {
@@ -514,12 +505,11 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
     };
     
     auto action = make_action(visit_ast);
-    compiler_instance.ExecuteAction(action);
+    bool result = compiler_instance.ExecuteAction(action);
     
     
     if(diagnostics.getNumErrors() != 0) 
     {
-        octave_assert(compilation_count == 0);
         plugin->clang_error_log = {
             (Clang_Error*)plugin_allocate(allocator, sizeof(Clang_Error) * diagnostics.getNumErrors()),
             0,
@@ -528,9 +518,11 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
         
         for(auto error_it = diagnostics.err_begin(); error_it < diagnostics.err_end(); error_it++)
         {
-            errors_push_clang(&plugin->clang_error_log, {allocate_and_copy_std_string(allocator, error_it->second)});
+            errors_push_clang(&plugin->clang_error_log, to_clang_error(*error_it, compiler_instance.getSourceManager(), allocator));
         }
         plugin->failure_stage = {Compiler_Failure_Stage_Clang_First_Pass};
+        octave_assert(result == false);
+        octave_assert(compilation_count == 0);
         return;
     }
     else if(error == Compiler_Failure_Stage_Finding_Decls)

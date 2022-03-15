@@ -7,13 +7,16 @@ enum slope_type{
     logarythmic
 };
 
-
+struct wrong_type{
+    
+};
 
 
 struct Parameters{
     FLOAT_ARAM(2.0f, 0.0f) initial_gain;
-    ENUM_ARAM(slope_type) slope;
+    ENUM_ARAM(wrong_type) slope;
     FLOAT_ARAM(0.0f, 0.1f) step;
+    nochin;
 };
 
 struct State{
@@ -33,7 +36,8 @@ State initialize_state(const Parameters& param,
                        void *allocator)
 {
     State initial_state = {};
-    return initial_state;
+    nocheck()
+        return initial_state;
 }
 
 typedef float real32;

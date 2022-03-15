@@ -582,15 +582,17 @@ void maybe_append_parameter_error(Compiler_Gui_Log *log, u32 parameter_idx, Plug
 }
 
 
-void copy_message_to_log(Compiler_Gui_Log *log, String message)
+void append_clang_message_to_log(Compiler_Gui_Log *log, Clang_Error *error)
 {
     octave_assert(log->message_count < log->message_capacity);
     String *new_message = &log->messages[log->message_count++];
     new_message->str = log->holder_current;
-    new_message->size = message.size;
     
-    strncpy(new_message->str, message.str, message.size);
-    //TODO assert error
+    i32 location_char_length = sprintf(new_message->str, "%lu:%lu : ", error->location.line, error->location.column);
+    
+    strncpy(new_message->str + location_char_length, error->message.str, error->message.size);
+    
+    new_message->size = error->message.size + location_char_length;
     log->holder_current += align(new_message->size);
 }
 
@@ -606,8 +608,7 @@ void plugin_write_all_errors_on_log(Plugin *handle, Compiler_Gui_Log *log)
             Clang_Error_Log *error_log = &handle->clang_error_log;
             for(u32 i = 0; i < error_log->count; i++)
             {
-                String message = error_log->errors[i].error_message;
-                copy_message_to_log(log, message);
+                append_clang_message_to_log(log, &error_log->errors[i]);
             }
         }break;
         

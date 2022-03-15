@@ -78,7 +78,8 @@ struct Decl_Search_Log{
 };
 
 struct Clang_Error{
-    String error_message;
+    String message;
+    Compiler_Location location;
 };
 struct Clang_Error_Log{
     Clang_Error *errors;
