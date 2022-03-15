@@ -111,7 +111,6 @@ i32 main(i32 argc, char** argv)
     }
     
     //~ Graphics Init
-    
     Graphics_Context graphics_ctx = {};
     graphics_ctx.window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT}; 
     
@@ -119,9 +118,9 @@ i32 main(i32 argc, char** argv)
     
     graphics_ctx.atlas = {
         .font = load_fonts(DEFAULT_FONT_FILENAME),
-        .draw_vertices = m_allocate_array(Vertex, ATLAS_MAX_VERTEX_COUNT),
+        .draw_vertices = m_allocate_array(Vertex, ATLAS_MAX_VERTEX_COUNT, "graphics : draw vertices"),
         .draw_vertices_count = 0,
-        .draw_indices = m_allocate_array(u32, ATLAS_MAX_VERTEX_COUNT), 
+        .draw_indices = m_allocate_array(u32, ATLAS_MAX_VERTEX_COUNT, "graphics : draw indices"), 
         .draw_indices_count = 0
     };
     
@@ -130,7 +129,6 @@ i32 main(i32 argc, char** argv)
     win32_print_elapsed(time_program_begin, "time to graphics");
     
     //~ Audio Thread Init
-    CoInitializeEx(NULL, COINIT_MULTITHREADED); 
     
     Asset_File_State wav_state = Asset_File_State_NONE;
     Asset_File_State plugin_state = Asset_File_State_NONE;
@@ -183,22 +181,23 @@ i32 main(i32 argc, char** argv)
     release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
     create_clang_context = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context");
     release_clang_context = (release_clang_context_t)GetProcAddress(compiler_dll, "release_clang_context");
+    
 #endif
     
     void* clang_ctx = create_clang_context();
     
-    Plugin_Loading_Manager plugin_manager;
-    plugin_loading_manager_init(&plugin_manager, clang_ctx, source_filename, &plugin_state);
+    Plugin_Reloading_Manager plugin_reloading_manager;
+    plugin_reloading_manager_init(&plugin_reloading_manager, clang_ctx, source_filename, &plugin_state);
     
     //~ IR/FFT
     
     graphics_ctx.ir = {
-        .IR_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH),
+        .IR_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH, "graphics : ir buffer"),
         .IR_sample_count = IR_BUFFER_LENGTH,
         .zoom_state = 1.0f
     };
     graphics_ctx.fft = {
-        .fft_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH * 2),
+        .fft_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH * 2, "graphics : fft buffer"),
         .fft_sample_count = IR_BUFFER_LENGTH * 2
     };
     
@@ -257,8 +256,8 @@ i32 main(i32 argc, char** argv)
                                     Asset_File_State_COLD_RELOAD_STAGE_UNLOAD)) 
         {
             for(i32 channel = 0; channel < wav_file.num_channels; channel++)
-                m_free(wav_file.deinterleaved_buffer[channel]);
-            m_free(wav_file.deinterleaved_buffer);
+                m_free(wav_file.deinterleaved_buffer[channel], "wav : deinterleaved buffer");
+            m_free(wav_file.deinterleaved_buffer, "wav : deinterleaved buffers[]");
             
             wav_thread_param = {
                 .filename = audio_filename,
@@ -276,7 +275,7 @@ i32 main(i32 argc, char** argv)
         }
         
         Plugin *plugin_to_pull_ir_from = nullptr;
-        plugin_loading_update(&plugin_manager, &audio_context, audio_parameters, &plugin_to_pull_ir_from);
+        plugin_reloading_update(&plugin_reloading_manager, &audio_context, audio_parameters, &plugin_to_pull_ir_from);
         
         if(plugin_to_pull_ir_from)
         {
@@ -290,13 +289,13 @@ i32 main(i32 argc, char** argv)
         bool parameters_were_tweaked = false;
         bool load_wav_was_clicked = false;
         bool load_plugin_was_clicked = false;
-        frame(plugin_manager.current_handle->descriptor, 
+        frame(plugin_reloading_manager.current_handle->descriptor, 
               &graphics_ctx, 
               ui_state, 
               frame_io, 
-              plugin_manager.current_handle->parameter_values_ui_side, 
+              plugin_reloading_manager.current_handle->parameter_values_ui_side, 
               &audio_context, 
-              &plugin_manager.gui_log,
+              &plugin_reloading_manager.gui_log,
               &parameters_were_tweaked,
               &load_wav_was_clicked,
               &load_plugin_was_clicked
@@ -304,11 +303,11 @@ i32 main(i32 argc, char** argv)
         
         if(parameters_were_tweaked)
         {
-            plugin_parameters_buffer_push(plugin_manager.current_handle->ring, plugin_manager.current_handle->parameter_values_ui_side);
-            compute_IR(*plugin_manager.current_handle, fft.IR_buffer, 
+            plugin_parameters_push_to_ring(plugin_reloading_manager.current_handle->ring, plugin_reloading_manager.current_handle->parameter_values_ui_side);
+            compute_IR(*plugin_reloading_manager.current_handle, fft.IR_buffer, 
                        IR_BUFFER_LENGTH, 
                        audio_parameters, 
-                       plugin_manager.current_handle->parameter_values_ui_side);
+                       plugin_reloading_manager.current_handle->parameter_values_ui_side);
             fft_perform(&fft);
             
             memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
@@ -357,12 +356,12 @@ i32 main(i32 argc, char** argv)
             char filter[] = "C++ File\0*.cpp\0";
             if(win32_open_file(source_filename, sizeof(source_filename), filter))
             {
-                plugin_load_button_was_clicked(&plugin_manager);
+                plugin_load_button_was_clicked(&plugin_reloading_manager);
             }
             frame_io.mouse_down = false;
         }
         else {
-            plugin_loading_check_and_stage_hot_reload(&plugin_manager);
+            plugin_check_for_save_and_stage_hot_reload(&plugin_reloading_manager);
         }
         
         //TODO les id c'est un hack
@@ -395,11 +394,9 @@ i32 main(i32 argc, char** argv)
                 octave_assert(frame != nullptr);
                 gui_dll_last_write_time = temp_gui_write_time;
             }
-            
         }
 #endif
     }
-    
     
     opengl_uninitialize(&opengl_ctx);
     
@@ -412,8 +409,8 @@ i32 main(i32 argc, char** argv)
                                  Asset_File_State_UNLOADING,
                                  Asset_File_State_OK_TO_UNLOAD));
     
-    release_jit(plugin_manager.current_handle);
-    release_jit(plugin_manager.hot_reload_handle);
+    release_jit(plugin_reloading_manager.current_handle);
+    release_jit(plugin_reloading_manager.hot_reload_handle);
     
     audio_uninitialize(platform_audio_context);
     printf("done\n");

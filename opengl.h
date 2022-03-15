@@ -645,7 +645,7 @@ OpenGL_Context_IR opengl_initialize_ir()
         .ir_integrate_attribute_pos = ir_integrate_attribute_pos,
         .ir_integrate_attribute_quad_pos = ir_integrate_attribute_quad_pos,
         
-        .ir_integrate_temp_buffer = m_allocate_array(Vec2, IR_MAX_PIXEL_WIDTH),
+        .ir_integrate_temp_buffer = m_allocate_array(Vec2, IR_MAX_PIXEL_WIDTH, "graphics : ir integration buffer"),
         
         .ir_interpolate_shader_program = ir_interpolate_shader_program,
         .ir_interpolate_vao = ir_interpolate_vao, 
@@ -782,7 +782,7 @@ OpenGL_Context opengl_initialize(Window_Context *window, Font* font)
     OpenGL_Context_FFT ctx_fft = opengl_initialize_fft();
     
     
-    m_free(font->atlas_pixels);
+    m_free(font->atlas_pixels, "opengl : atlas pixels");
     font->atlas_pixels = nullptr;
     
     ReleaseDC(window->window, ctx_win32.window_dc);

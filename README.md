@@ -10,12 +10,12 @@ For now there are two heavy dependencies : clang/llvm and Intel Performance Prim
 Core: \
 \
 Plugin should allocate memory \
-Rewrite error reporting \
 FFT processing available to the plugins \
 Disable hot-reload button \
 \
 Optional: \
 \
+Offline rendering \
 Panel toggle : compiler log and IR \
 Bug : wrong field macro \
 Bug : Exiting while hot reloading crashes \
@@ -30,6 +30,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+Rewrote the error reporting system \
 Plugin allocator \
 cli : optional plugin source \
 Plugin loading abstraction \
@@ -53,4 +54,4 @@ FFT windowing & zero padding \
 Background thread compilation \
 Background wav loading \
 Play, Pause, Enable\Disable buttons\
-Footer and header\
+Footer and header

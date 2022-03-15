@@ -3,22 +3,8 @@
 #ifndef DESCRIPTOR_H
 #define DESCRIPTOR_H
 
-
-
-
-typedef struct {
-    const char* source_filename;
-    Plugin *handle;
-    Plugin_Allocator *allocator;
-    void *clang_ctx;
-    
-    Asset_File_State *stage;
-} Compiler_Thread_Param;
-
-
 #define word_size (sizeof(void*))
 #define align(n) ((n + word_size - 1) & ~(word_size - 1))
-
 
 internal void *plugin_allocate(Plugin_Allocator *allocator, u64 size)
 {
@@ -32,67 +18,37 @@ internal void *plugin_allocate(Plugin_Allocator *allocator, u64 size)
     else return nullptr;
 }
 
-struct Plugin_Loading_Manager
-{
-    Plugin handle_a;
-    Plugin handle_b;
-    Plugin_Allocator allocator_a;
-    Plugin_Allocator allocator_b;
-    
-    Plugin *current_handle;
-    Plugin *hot_reload_handle;
-    
-    Plugin_Allocator *current_allocator;
-    Plugin_Allocator *hot_reload_allocator;
-    
-    Compiler_Thread_Param compiler_thread_param;
-    HANDLE compiler_thread_handle;
-    u64 plugin_last_write_time;
-    void *clang_ctx;
-    Asset_File_State *plugin_state;
-    char *source_filename;
-    
-    Compiler_Gui_Log gui_log;
-};
 
-
-void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, char *source_filename, Asset_File_State *plugin_state);
-
-void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audio_context, Audio_Parameters audio_parameters, Plugin **handle_to_pull_ir_from);
-
-void plugin_load_button_was_clicked(Plugin_Loading_Manager *m);
-
-void plugin_loading_check_and_stage_hot_reload(Plugin_Loading_Manager *m);
-
-
-void plugin_manager_print_errors(Plugin *handle, Compiler_Gui_Log *log);
+void plugin_reset_handle(Plugin *plugin);
 
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b);
+
+void plugin_write_all_errors_on_log(Plugin *handle, Compiler_Gui_Log *log);
+
+
+//~ Can't name this stuff, everything tying the ui representation of parameter states with the actual memory blob passed to the plugin
 
 
 void plugin_set_parameter_values_from_holder(Plugin_Descriptor *descriptor,
                                              Plugin_Parameter_Value *parameter_values_out,
-                                             char* holder);
+                                             char* plugin_parameters_holder);
 
 void plugin_set_parameter_holder_from_values(Plugin_Descriptor* descriptor, 
                                              Plugin_Parameter_Value* new_values,
                                              char* plugin_parameters_holder);
 
 //TODO, ça marche pas, on sait pas qui c'est
-void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_Parameter_Value *new_parameters);
+void plugin_parameters_push_to_ring(Plugin_Parameters_Ring_Buffer& ring, Plugin_Parameter_Value *new_parameters);
 
 
-void plugin_reset_handle(Plugin *plugin);
+Plugin_Parameter_Value* plugin_parameters_pull_from_ring(Plugin_Parameters_Ring_Buffer& ring);
 
-Plugin_Parameter_Value* plugin_parameters_buffer_pull(Plugin_Parameters_Ring_Buffer& ring);
 
 
 function real32 normalize_parameter_int_value(Parameter_Int param, real32 value)
 {
     return real32(value - param.min)/real32(param.max - param.min);
 }
-
-
 
 function real32 normalize_parameter_float_value(Parameter_Float param, real32 value)
 {
@@ -150,5 +106,50 @@ function u32 enum_value_to_index(Parameter_Enum& parameter, i64 value)
     octave_assert(false);
     return 0;
 }
+
+//~ Reloading Manager
+
+typedef struct {
+    const char* source_filename;
+    Plugin *handle;
+    Plugin_Allocator *allocator;
+    void *clang_ctx;
+    
+    Asset_File_State *stage;
+} Compiler_Thread_Param;
+
+
+struct Plugin_Reloading_Manager
+{
+    Plugin handle_a;
+    Plugin handle_b;
+    Plugin_Allocator allocator_a;
+    Plugin_Allocator allocator_b;
+    
+    Plugin *current_handle;
+    Plugin *hot_reload_handle;
+    
+    Plugin_Allocator *current_allocator;
+    Plugin_Allocator *hot_reload_allocator;
+    
+    Compiler_Thread_Param compiler_thread_param;
+    HANDLE compiler_thread_handle;
+    u64 plugin_last_write_time;
+    void *clang_ctx;
+    Asset_File_State *plugin_state;
+    char *source_filename;
+    
+    Compiler_Gui_Log gui_log;
+};
+
+
+void plugin_reloading_manager_init(Plugin_Reloading_Manager *m, void *clang_ctx, char *source_filename, Asset_File_State *plugin_state);
+
+void plugin_reloading_update(Plugin_Reloading_Manager *m, Audio_Thread_Context *audio_context, Audio_Parameters audio_parameters, Plugin **handle_to_pull_ir_from);
+
+void plugin_load_button_was_clicked(Plugin_Reloading_Manager *m);
+
+void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m);
+
 
 #endif //DESCRIPTOR_H

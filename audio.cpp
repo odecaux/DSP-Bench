@@ -174,7 +174,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
         case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
         case Asset_File_State_HOT_RELOAD_DISPOSING :
         {
-            Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_buffer_pull(ctx->plugin->ring);
+            Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_pull_from_ring(ctx->plugin->ring);
             if(maybe_new_parameter_values)
             {
                 for(auto param_idx = 0; param_idx < ctx->plugin->ring.num_fields_by_plugin; param_idx++)

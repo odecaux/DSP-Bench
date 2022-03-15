@@ -102,7 +102,7 @@ void plugin_set_parameter_values_from_holder(Plugin_Descriptor *descriptor,
 
 void plugin_set_parameter_holder_from_values(Plugin_Descriptor* descriptor, 
                                              Plugin_Parameter_Value* new_values,
-                                             char* plugin_parameters_holder)
+                                             char* holder)
 {
     for(auto param_idx = 0; param_idx < descriptor->num_parameters ; param_idx++)
     {
@@ -112,15 +112,15 @@ void plugin_set_parameter_holder_from_values(Plugin_Descriptor* descriptor,
         switch(param_descriptor.type){
             case Int :
             {
-                *(int*)(plugin_parameters_holder + offset) = new_values[param_idx].int_value;
+                *(int*)(holder + offset) = new_values[param_idx].int_value;
             }break;
             case Float : 
             {
-                *(float*)(plugin_parameters_holder + offset) = new_values[param_idx].float_value;
+                *(float*)(holder + offset) = new_values[param_idx].float_value;
             }break;
             case Enum : 
             {
-                *(int*)(plugin_parameters_holder + offset) = new_values[param_idx].enum_value;
+                *(int*)(holder + offset) = new_values[param_idx].enum_value;
             }break;
         }
     }
@@ -128,7 +128,7 @@ void plugin_set_parameter_holder_from_values(Plugin_Descriptor* descriptor,
 
 
 //TODO, ça marche pas, on sait pas qui c'est
-void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_Parameter_Value *new_parameters)
+void plugin_parameters_push_to_ring(Plugin_Parameters_Ring_Buffer& ring, Plugin_Parameter_Value *new_parameters)
 {
     Plugin_Parameter_Value *pointer_to_push = &ring.buffer[ring.writer_idx];
     
@@ -142,13 +142,12 @@ void plugin_parameters_buffer_push(Plugin_Parameters_Ring_Buffer& ring, Plugin_P
     exchange_ptr((void**)&ring.head, pointer_to_push);
 }
 
-Plugin_Parameter_Value* plugin_parameters_buffer_pull(Plugin_Parameters_Ring_Buffer& ring)
+Plugin_Parameter_Value* plugin_parameters_pull_from_ring(Plugin_Parameters_Ring_Buffer& ring)
 {
     Plugin_Parameter_Value *maybe_plugin_array =  (Plugin_Parameter_Value*) exchange_ptr((void**)&ring.head, nullptr);
     
     return maybe_plugin_array;
 }
-
 
 
 #ifdef DEBUG
@@ -169,6 +168,8 @@ void plugin_reset_handle(Plugin *handle)
     release_jit(handle);
     *handle = {};
 }
+
+
 
 DWORD compiler_thread_proc(void *void_param)
 {
@@ -199,14 +200,26 @@ DWORD compiler_thread_proc(void *void_param)
 Plugin_Allocator plugin_allocator_init(u64 size)
 {
     Plugin_Allocator allocator = {
-        .base = (char*)m_allocate(size),
+        .base = (char*)m_allocate(size, "plugin : allocator"),
         .current = allocator.base,
         .capacity = size,
     };
     return allocator;
 }
 
-void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, char *source_filename, Asset_File_State *plugin_state)
+
+HANDLE launch_compiler_thread(Compiler_Thread_Param *thread_parameters)
+{
+    return CreateThread(0, 0,
+                        &compiler_thread_proc,
+                        thread_parameters,
+                        0, 0);
+}
+
+void plugin_reloading_manager_init(Plugin_Reloading_Manager *m, 
+                                   void *clang_ctx, 
+                                   char *source_filename, 
+                                   Asset_File_State *plugin_state)
 {
     *m = {
         .allocator_a = plugin_allocator_init(1024 * 1024),
@@ -222,16 +235,17 @@ void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, cha
         .source_filename = source_filename,
         
         .gui_log = {
-            .messages = m_allocate_array(String, 256),
+            .messages = m_allocate_array(String, 256, "gui error log : messages"),
             .message_count = 0,
             .message_capacity = 256,
             
-            .holder_base = m_allocate_array(char, 1024*16),
+            .holder_base = m_allocate_array(char, 1024*16, "gui error log : holder"),
             .holder_current = m->gui_log.holder_base,
             .holder_capacity = 1024*16
         }
     };
     
+    //TODO should not be tied to initialization
     if(m->source_filename[0] != 0)
     {
         m->compiler_thread_param = Compiler_Thread_Param {
@@ -244,16 +258,14 @@ void plugin_loading_manager_init(Plugin_Loading_Manager *m, void *clang_ctx, cha
         *m->plugin_state = Asset_File_State_STAGE_BACKGROUND_LOADING;
         MemoryBarrier();
         
-        m->compiler_thread_handle = 
-            CreateThread(0, 0,
-                         &compiler_thread_proc,
-                         &m->compiler_thread_param,
-                         0, 0);
+        m->compiler_thread_handle = launch_compiler_thread(&m->compiler_thread_param);
     }
 }
 
 
-void plugin_populate_from_descriptor(Plugin *handle, Plugin_Allocator *allocator, Audio_Parameters audio_parameters)
+void plugin_populate_from_descriptor(Plugin *handle, 
+                                     Plugin_Allocator *allocator, 
+                                     Audio_Parameters audio_parameters)
 {
     handle->parameter_values_audio_side = (Plugin_Parameter_Value*)plugin_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
     
@@ -276,8 +288,10 @@ void plugin_populate_from_descriptor(Plugin *handle, Plugin_Allocator *allocator
 
 
 
-void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audio_context, Audio_Parameters audio_parameters, 
-                           Plugin **handle_to_pull_ir_from)
+void plugin_reloading_update(Plugin_Reloading_Manager *m, 
+                             Audio_Thread_Context *audio_context, 
+                             Audio_Parameters audio_parameters,
+                             Plugin **handle_to_pull_ir_from)
 {
     
     if(compare_exchange_32(m->plugin_state,
@@ -303,7 +317,7 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
             octave_assert(!m->current_handle->parameter_values_audio_side);
             octave_assert(!m->current_handle->parameter_values_ui_side);
             octave_assert(!m->current_handle->ring.buffer);
-            plugin_manager_print_errors(m->current_handle, &m->gui_log);
+            plugin_write_all_errors_on_log(m->current_handle, &m->gui_log);
             
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
             audio_context->plugin = m->current_handle;
@@ -343,7 +357,7 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
             octave_assert(!m->hot_reload_handle->parameter_values_ui_side);
             octave_assert(!m->hot_reload_handle->ring.buffer);
             
-            plugin_manager_print_errors(m->hot_reload_handle, &m->gui_log);
+            plugin_write_all_errors_on_log(m->hot_reload_handle, &m->gui_log);
             
             printf("hot : done cleaning up, back in use\n");
             
@@ -411,15 +425,15 @@ void plugin_loading_update(Plugin_Loading_Manager *m, Audio_Thread_Context *audi
 }
 
 
-void plugin_load_button_was_clicked(Plugin_Loading_Manager *m)
+void plugin_load_button_was_clicked(Plugin_Reloading_Manager *m)
 {
-    //Auto old_wave_state = 
-    exchange_32(m->plugin_state, Asset_File_State_COLD_RELOAD_STAGE_UNUSE);
+    auto old_wave_state = 
+        exchange_32(m->plugin_state, Asset_File_State_COLD_RELOAD_STAGE_UNUSE);
     //TODO octave_assert, dans quels états peut être old_wav_state qui nous foutraient dans la merde ?
 }
 
 
-void plugin_loading_check_and_stage_hot_reload(Plugin_Loading_Manager *m)
+void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m)
 {
     bool was_in_use = compare_exchange_32(m->plugin_state, 
                                           Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE,
@@ -527,7 +541,7 @@ void copy_message_to_log(Compiler_Gui_Log *log, String message)
     log->holder_current += align(new_message->size);
 }
 
-void plugin_manager_print_errors(Plugin *handle, Compiler_Gui_Log *log)
+void plugin_write_all_errors_on_log(Plugin *handle, Compiler_Gui_Log *log)
 {
     log->message_count = 0;
     log->holder_current = log->holder_base;

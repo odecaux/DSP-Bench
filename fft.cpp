@@ -23,26 +23,27 @@ void ipp_octave_assert_impl(IppStatus status, const char* file, u32 line)
     }
 }
 
+//TODO cette API a aucun sens ?????
 FFT fft_initialize(u32 ir_sample_count, u32 num_channels)
 {
-    real32** IR_buffer = m_allocate_array(real32*, num_channels);
-    real32** windowed_zero_padded_buffer = m_allocate_array(real32*, num_channels);
+    real32** IR_buffer = m_allocate_array(real32*, num_channels, "rename");
+    real32** windowed_zero_padded_buffer = m_allocate_array(real32*, num_channels, "rename");
     
     for(u32 channel = 0; channel < num_channels; channel++)
     {
-        IR_buffer[channel] = m_allocate_array(real32, ir_sample_count);
-        windowed_zero_padded_buffer[channel] = m_allocate_array(real32, ir_sample_count * 4);
+        IR_buffer[channel] = m_allocate_array(real32, ir_sample_count, "rename");
+        windowed_zero_padded_buffer[channel] = m_allocate_array(real32, ir_sample_count * 4, "rename");
         memset(windowed_zero_padded_buffer[channel], 0, ir_sample_count * 4 * sizeof(real32));
     }
     
-    return {
+    return FFT {
         .ir_sample_count = ir_sample_count,
         .ir_num_channels = num_channels,
         .ipp_context = ipp_initialize(),
         .IR_buffer = IR_buffer,
         .windowed_zero_padded_buffer = windowed_zero_padded_buffer,
-        .fft_out = m_allocate_array(Vec2, ir_sample_count * 4),
-        .magnitudes  = m_allocate_array(real32, ir_sample_count * 4)
+        .fft_out = m_allocate_array(Vec2, ir_sample_count * 4, "rename"),
+        .magnitudes  = m_allocate_array(real32, ir_sample_count * 4, "rename")
     };
 }
 
@@ -129,7 +130,6 @@ Ipp_Context ipp_initialize()
     ipp_octave_assert(ippSetFlushToZero(1, 0));
     ipp_octave_assert(ippSetDenormAreZeros(1));
     ipp_octave_assert(ippGetCpuFeatures(&cpuFeatures, 0));/* Get CPU features and features enabled with selected library level */
-    
     
     Ipp_Order_Context *order_to_ctx = (Ipp_Order_Context*) malloc( sizeof(Ipp_Order_Context) *  (MAX_FFT_ORDER + 1));
     for(i32 i = 0; i < MAX_FFT_ORDER + 1; i++)

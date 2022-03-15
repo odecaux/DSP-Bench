@@ -143,8 +143,8 @@ void compute_IR(Plugin& handle,
         }
     }
     
-    char* IR_parameters_holder = (char*) m_allocate(handle.descriptor.parameters_struct.size);
-    char* IR_state_holder = (char*) m_allocate(handle.descriptor.state_struct.size);
+    char* IR_parameters_holder = (char*) m_allocate(handle.descriptor.parameters_struct.size, "ir parameter blob");
+    char* IR_state_holder = (char*) m_allocate(handle.descriptor.state_struct.size, "ir state blob");
     
     plugin_set_parameter_holder_from_values(&handle.descriptor, current_parameters_values, IR_parameters_holder);
     
@@ -161,6 +161,6 @@ void compute_IR(Plugin& handle,
                             IR_length, 
                             audio_parameters.sample_rate);
     
-    m_free(IR_parameters_holder);
-    m_free(IR_state_holder);
+    m_free(IR_parameters_holder, "ir parameter blob");
+    m_free(IR_state_holder, "ir state blob");
 }

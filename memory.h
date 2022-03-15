@@ -20,6 +20,13 @@
 //Memory_Log_Node *free_list;
 //} Memory_Log;
 //
+
+#define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
+
+//#define LOG_ALLOCATIONS 1
+
+#ifdef LOG_ALLOCATIONS
+
 static void* instrumented_malloc(size_t size, const char* file, int line)
 {
     printf("malloc : %llu bytes at %s:%d\n", size, file, line);
@@ -39,24 +46,19 @@ static void instrumented_free(void* address, const char* file, int line)
     free(address);
 }
 
-#define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
 
-//#define LOG_ALLOCATIONS 1
-
-#ifdef LOG_ALLOCATIONS
-
-#define m_allocate(size) instrumented_malloc(size, __FILENAME__, __LINE__)
-#define m_allocate_array(type, count) ((type) *)instrumented_array_malloc(count, sizeof(type), #type,__FILENAME__, __LINE__)
-#define m_free(address) instrumented_free(address, __FILENAME__, __LINE__)
+#define m_allocate(size, tag) instrumented_malloc((size), __FILENAME__, __LINE__)
+#define m_allocate_array(type, count, tag) ((type) *)instrumented_array_malloc(count, sizeof(type), #type,__FILENAME__, __LINE__)
+#define m_free(address, tag) instrumented_free(address, __FILENAME__, __LINE__)
 
 #else 
 
-#define m_allocate(size) malloc(size)
-#define m_allocate_array(type, count) (type *)malloc((count) * sizeof(type))
-#define m_free(address) free(address)
+#define m_allocate(size, tag) malloc((size))
+#define m_allocate_array(type, count, tag) (type *)malloc((count) * sizeof(type))
+#define m_free(address, tag) free((address))
 
 #endif
 
-#define m_safe_free(pointer) if(pointer) { m_free(pointer); pointer = 0; }
+#define m_safe_free(pointer) if((pointer)) { m_free((pointer)); (pointer) = 0; }
 
 #endif //MEMORY_H

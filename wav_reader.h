@@ -162,7 +162,7 @@ internal Audio_File windows_load_wav(const char* filename)
     
     if(format.format == 1)
     {
-        float_buffer = m_allocate_array(real32, num_samples); 
+        float_buffer = m_allocate_array(real32, num_samples, "format conversion buffer"); 
         
         if(format.bit_depth == 16)
             convertInt16ToFloat(data, float_buffer, num_samples);
@@ -190,10 +190,10 @@ internal Audio_File windows_load_wav(const char* filename)
     u32 num_channels = format.num_channels;
     u32 samples_by_channel = num_samples / num_channels;
     
-    real32 **deinterleaved_buffer = m_allocate_array(real32*,num_channels);
+    real32 **deinterleaved_buffer = m_allocate_array(real32*, num_channels, "deinterleaved buffers[]");
     for(u32 channel = 0; channel < num_channels; channel++)
     {
-        deinterleaved_buffer[channel] = m_allocate_array(real32, samples_by_channel);
+        deinterleaved_buffer[channel] = m_allocate_array(real32, samples_by_channel, "deinterleaved buffer");
     }
     
     deinterleave(deinterleaved_buffer, float_buffer, samples_by_channel, num_channels);

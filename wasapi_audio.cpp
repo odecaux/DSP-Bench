@@ -11,10 +11,10 @@
 #include "winuser.h"
 
 #include "base.h"
-#include "win32_helpers.h"
 #include "structs.h"
 #include "plugin.h"
 #include "audio.h"
+#include "memory.h"
 
 const IID IID_IAudioClient  = __uuidof(IAudioClient);
 const IID IID_IAudioRenderClient = __uuidof(IAudioRenderClient);
@@ -218,8 +218,9 @@ bool audio_initialize(void **out_ctx,
                       Audio_Parameters *out_parameters, 
                       Audio_Thread_Context* audio_context)
 {
-    auto *ctx = (WasapiContext*) malloc(sizeof(WasapiContext));
+    auto *ctx = (WasapiContext*) m_allocate(sizeof(WasapiContext), "Wasapi Context");
     
+    CoInitializeEx(NULL, COINIT_MULTITHREADED); 
     
     ctx->audio_sample_ready_event = CreateEventEx(0,0,0, EVENT_MODIFY_STATE | SYNCHRONIZE);
     ctx->shutdown_event = CreateEventEx(0,0,0, EVENT_MODIFY_STATE | SYNCHRONIZE);
