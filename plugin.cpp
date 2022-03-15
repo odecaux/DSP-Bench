@@ -12,9 +12,6 @@
 
 #include "hardcoded_values.h"
 
-//Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_fields_by_plugin, u32 buffer_slot_count);
-
-
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b)
 {
     if(a->parameters_struct.size            != b->parameters_struct.size) return false;
@@ -159,7 +156,7 @@ void release_jit(Plugin *plugin);
 void try_compile(const char* filename, void* clang_ctx_ptr, Plugin *plugin, Plugin_Allocator *allocator);
 #endif
 
-void plugin_reset_handle(Plugin *handle)
+void plugin_reset_handle(Plugin *handle, Plugin_Allocator *allocator)
 {
     handle->parameter_values_audio_side = nullptr;
     handle->parameter_values_ui_side = nullptr;
@@ -167,6 +164,7 @@ void plugin_reset_handle(Plugin *handle)
     
     release_jit(handle);
     *handle = {};
+    allocator->current = allocator->base;
 }
 
 
@@ -216,6 +214,41 @@ HANDLE launch_compiler_thread(Compiler_Thread_Param *thread_parameters)
                         0, 0);
 }
 
+void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m)
+{
+    octave_assert(m->source_filename[0] != 0);
+    
+    m->compiler_thread_param = Compiler_Thread_Param {
+        .source_filename = m->source_filename,
+        .handle = m->current_handle,
+        .allocator = m->current_allocator,
+        .clang_ctx = m->clang_ctx,
+        .stage = m->plugin_state
+    };
+    auto old_state = exchange_32(*m->plugin_state, Asset_File_State_STAGE_BACKGROUND_LOADING);
+    
+    octave_assert(old_state == Asset_File_State_NONE || old_state == Asset_File_State_UNLOADING);
+    
+    m->compiler_thread_handle = launch_compiler_thread(&m->compiler_thread_param);
+}
+
+void plugin_reloader_stage_hot_compilation(Plugin_Reloading_Manager *m)
+{
+    octave_assert(m->source_filename[0] != 0);
+    
+    m->compiler_thread_param = Compiler_Thread_Param {
+        .source_filename = m->source_filename,
+        .handle = m->hot_reload_handle,
+        .allocator = m->hot_reload_allocator,
+        .clang_ctx = m->clang_ctx,
+        .stage = m->plugin_state
+    };
+    octave_assert(compare_exchange_32(m->plugin_state, Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING,
+                                      Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
+    
+    m->compiler_thread_handle = launch_compiler_thread(&m->compiler_thread_param);
+}
+
 void plugin_reloading_manager_init(Plugin_Reloading_Manager *m, 
                                    void *clang_ctx, 
                                    char *source_filename, 
@@ -244,22 +277,6 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
             .holder_capacity = 1024*16
         }
     };
-    
-    //TODO should not be tied to initialization
-    if(m->source_filename[0] != 0)
-    {
-        m->compiler_thread_param = Compiler_Thread_Param {
-            .source_filename = source_filename,
-            .handle = m->current_handle,
-            .allocator = m->current_allocator,
-            .clang_ctx = m->clang_ctx,
-            .stage = m->plugin_state
-        };
-        *m->plugin_state = Asset_File_State_STAGE_BACKGROUND_LOADING;
-        MemoryBarrier();
-        
-        m->compiler_thread_handle = launch_compiler_thread(&m->compiler_thread_param);
-    }
 }
 
 
@@ -377,27 +394,8 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
                                 Asset_File_State_UNLOADING,
                                 Asset_File_State_COLD_RELOAD_STAGE_UNLOAD)) 
     {
-        plugin_reset_handle(m->current_handle);
-        
-        m->current_allocator->current = m->current_allocator->base;
-        
-        m->compiler_thread_param = {
-            .source_filename = m->source_filename,
-            .handle = m->current_handle,
-            .allocator = m->current_allocator,
-            .clang_ctx = m->clang_ctx,
-            .stage = m->plugin_state
-        };
-        
-        octave_assert(exchange_32(m->plugin_state,
-                                  Asset_File_State_STAGE_BACKGROUND_LOADING)
-                      == Asset_File_State_UNLOADING);
-        
-        m->compiler_thread_handle = 
-            CreateThread(0, 0,
-                         &compiler_thread_proc,
-                         &m->compiler_thread_param,
-                         0, 0);
+        plugin_reset_handle(m->current_handle, m->current_allocator);
+        plugin_reloader_stage_cold_compilation(m);
     }
     else if(compare_exchange_32(m->plugin_state,
                                 Asset_File_State_HOT_RELOAD_DISPOSING,
@@ -413,8 +411,7 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
         m->hot_reload_allocator = m->current_allocator;
         m->current_allocator = temp_alloc;
         
-        plugin_reset_handle(m->hot_reload_handle);
-        m->hot_reload_allocator->current = m->hot_reload_allocator->base;
+        plugin_reset_handle(m->hot_reload_handle, m->hot_reload_allocator);
         
         compare_exchange_32(m->plugin_state,
                             Asset_File_State_STAGE_USAGE,
@@ -449,29 +446,10 @@ void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m)
             octave_assert(!m->hot_reload_handle->parameter_values_audio_side);
             octave_assert(!m->hot_reload_handle->parameter_values_ui_side);
             octave_assert(!m->hot_reload_handle->ring.buffer);
+            octave_assert(!m->hot_reload_handle->llvm_jit_engine);
             
-            m->hot_reload_allocator->current = m->hot_reload_allocator->base;
-            
-            *m->hot_reload_handle = {};
-            
-            printf("source : %s\n", m->source_filename);
-            m->compiler_thread_param = {
-                .source_filename = m->source_filename,
-                .handle = m->hot_reload_handle,
-                .allocator = m->hot_reload_allocator,
-                .clang_ctx = m->clang_ctx,
-                .stage = m->plugin_state
-            };
-            
-            octave_assert(compare_exchange_32(m->plugin_state, Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING,
-                                              Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
-            printf("hot : file stage backround loading\n");
-            m->compiler_thread_handle = CreateThread(0, 0,
-                                                     &compiler_thread_proc,
-                                                     &m->compiler_thread_param,
-                                                     0, 0);
-            
-            
+            plugin_reset_handle(m->hot_reload_handle, m->hot_reload_allocator);
+            plugin_reloader_stage_hot_compilation(m);
         }
         else if(was_in_use)
         {
@@ -488,20 +466,7 @@ void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m)
     }
 }
 
-#define CUSTOM_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
-String compiler_error_flag_to_string(Compiler_Error_Flag flag)
-{
-    switch(flag)
-    {
-#include "errors.inc"
-        default : {
-            octave_assert(false && "why doesn't this switch cover all compiler errors ?\n");
-            return {};
-        }
-    }
-}
-#undef CUSTOM_ERROR_FLAG
-
+//~ Error messages
 
 void maybe_append_error(Compiler_Gui_Log *log, Custom_Error error)
 {

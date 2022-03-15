@@ -441,5 +441,4 @@ void audio_uninitialize(void *ctx)
     CloseHandle(audio_context->audio_client);
     
     //delete audio_context;
-    
 }

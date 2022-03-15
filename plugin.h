@@ -145,6 +145,10 @@ struct Plugin_Reloading_Manager
 
 void plugin_reloading_manager_init(Plugin_Reloading_Manager *m, void *clang_ctx, char *source_filename, Asset_File_State *plugin_state);
 
+void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m);
+
+void plugin_reloader_stage_hot_compilation(Plugin_Reloading_Manager *m);
+
 void plugin_reloading_update(Plugin_Reloading_Manager *m, Audio_Thread_Context *audio_context, Audio_Parameters audio_parameters, Plugin **handle_to_pull_ir_from);
 
 void plugin_load_button_was_clicked(Plugin_Reloading_Manager *m);

@@ -188,7 +188,7 @@ i32 main(i32 argc, char** argv)
     
     Plugin_Reloading_Manager plugin_reloading_manager;
     plugin_reloading_manager_init(&plugin_reloading_manager, clang_ctx, source_filename, &plugin_state);
-    
+    plugin_reloader_stage_cold_compilation(&plugin_reloading_manager);
     //~ IR/FFT
     
     graphics_ctx.ir = {
