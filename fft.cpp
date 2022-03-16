@@ -5,8 +5,8 @@
 #include "math.h"
 #include "string.h"
 
-#include "ipp.h"
-#include "ipps.h"
+#include <ipp.h>
+#include <ipps.h>
 #include <ippdefs.h>
 
 #include "memory.h"

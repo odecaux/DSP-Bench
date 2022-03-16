@@ -1,3 +1,4 @@
+#include "llvm_include.h"
 
 
 #if _WIN32
@@ -9,17 +10,17 @@
 #include <cstring>
 #include <sstream>
 #include <iterator>
+#include "math.h"
 
 
 #include "windows.h"
 
-#include "math.h"
 #include "base.h"
-#include "win32_helpers.h"
+//#include "win32_helpers.h"
 #include "structs.h"
 #include "plugin.h"
-#include "compiler.h"
 
+#include "compiler.h"
 
 struct Clang_Context {
     llvm::LLVMContext llvm_context;

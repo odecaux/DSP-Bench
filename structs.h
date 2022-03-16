@@ -201,7 +201,7 @@ typedef struct {
 
 
 //TODO pour l'instant il y a un bug : si l'ui arrive à emettre 4096 blocs pendant que le thread audio fait 1 copie
-typedef struct{
+typedef struct  {
     Plugin_Parameter_Value *buffer;
     volatile Plugin_Parameter_Value **head;
     u32 writer_idx;
@@ -210,7 +210,7 @@ typedef struct{
 } Plugin_Parameters_Ring_Buffer;
 
 
-typedef struct {
+typedef struct Plugin {
     Compiler_Failure_Stage failure_stage;
     Clang_Error_Log clang_error_log;
     Decl_Search_Log decls_search_log;

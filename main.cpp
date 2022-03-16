@@ -57,6 +57,7 @@ DWORD wav_loader_thread_proc(void *void_param)
 
 bool check_extension(const char* filename, const char* extension)
 {
+    nocheckin;
     const char *maybe_ext = filename + strlen(filename) - 3; 
     return maybe_ext > filename && (strncmp(maybe_ext, extension, 3) == 0);
 }
