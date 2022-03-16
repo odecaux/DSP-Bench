@@ -15,7 +15,7 @@ struct Parameters{
     //INT_ARAM(0, 4) test_int_param;
     FLOAT_ARAM(0.0f, 1.0f) gain;
     FLOAT_ARAM(500.0f, 20000.0f) frequency;
-    ENUM_ARAM(random_enum) test_enum_param;
+    ENUM_ARAM(random_enum) test_enum_param;  
 };
 
 struct State{

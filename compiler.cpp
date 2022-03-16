@@ -11,47 +11,6 @@
 #include <iterator>
 
 
-#include <clang/Lex/PreprocessorOptions.h>
-
-
-#include <clang/Sema/Sema.h>
-#include <llvm/Passes/OptimizationLevel.h>
-#include <clang/Serialization/PCHContainerOperations.h>
-#include <clang/Rewrite/Core/Rewriter.h>
-#include <clang/Basic/Builtins.h>
-#include <clang/AST/ASTContext.h>
-#include <clang/AST/RecordLayout.h>
-#include <clang/AST/ASTConsumer.h>
-#include <clang/Parse/ParseAST.h>
-#include <clang/ASTMatchers/ASTMatchers.h>
-#include <clang/ASTMatchers/ASTMatchFinder.h>
-
-#include <clang/Basic/DiagnosticOptions.h>
-#include <clang/Basic/Diagnostic.h>
-#include <clang/Basic/LangOptions.h>
-#include <clang/Basic/TargetInfo.h>
-#include <clang/CodeGen/CodeGenAction.h>
-
-
-#include "clang/Frontend/TextDiagnosticBuffer.h"
-#include <clang/Frontend/FrontendAction.h>
-#include <clang/Frontend/FrontendActions.h>
-#include <clang/Frontend/CompilerInstance.h>
-#include <clang/Frontend/CompilerInvocation.h>
-#include <clang/Tooling/Tooling.h>
-#include <clang/Rewrite/Frontend/FrontendActions.h>
-
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/ExecutionEngine/SectionMemoryManager.h>
-#include <llvm/InitializePasses.h>
-#include <llvm/Passes/PassBuilder.h>
-#include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Support/Host.h>
-#include <llvm/Support/DynamicLibrary.h>
-#include <llvm/Analysis/AliasAnalysis.h>
-
 #include "windows.h"
 
 #include "math.h"
@@ -264,9 +223,9 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
                  Plugin *plugin,
                  Plugin_Allocator *allocator);
 
-void try_compile_impl(const char* filename, 
-                      Clang_Context* clang_cts,
-                      Plugin *plugin, Plugin_Allocator *allocator);
+Plugin try_compile_impl(const char* filename, 
+                        Clang_Context* clang_cts,
+                        Plugin_Allocator *allocator);
 
 
 #ifdef DEBUG
@@ -544,7 +503,7 @@ Plugin try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin_A
                     compiler_instance, 
                     descriptor,
                     &clang_ctx->llvm_context,
-                    plugin, allocator);
+                    &plugin, allocator);
         return plugin;
     }
 }

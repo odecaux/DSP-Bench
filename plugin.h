@@ -129,6 +129,9 @@ struct Plugin_Reloading_Manager
     Plugin *front_handle;
     Plugin *back_handle;
     
+    Plugin *front_handle_audio_side;
+    Plugin *back_handle_audio_side;
+    
     Plugin_Allocator *front_allocator;
     Plugin_Allocator *back_allocator;
     

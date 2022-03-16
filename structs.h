@@ -253,7 +253,7 @@ typedef struct
     u32 bit_depth;
 } Audio_Parameters;
 
-
+struct Plugin_Reloading_Manager;
 
 typedef struct 
 {
@@ -264,9 +264,8 @@ typedef struct
     Asset_File_State *plugin_state;
     Asset_File_State *audio_file_state;
     
+    Plugin_Reloading_Manager *m;
     Audio_File *audio_file;
-    Plugin *front_plugin;
-    Plugin *back_plugin;
 } Audio_Thread_Context;
 
 //~ UI

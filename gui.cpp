@@ -343,7 +343,7 @@ void frame(Plugin_Descriptor& descriptor,
     
     
     MemoryBarrier();
-    auto plugin_state = *audio_ctx->plugin_state;
+    auto plugin_state = *audio_ctx->m->plugin_state;
     MemoryBarrier();
     
     switch(plugin_state)

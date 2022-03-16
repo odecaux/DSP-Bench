@@ -260,6 +260,10 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
         
         .front_handle = &m->handle_a,
         .back_handle = &m->handle_b,
+        
+        .front_handle_audio_side = &m->handle_a,
+        .back_handle_audio_side = &m->handle_b,
+        
         .front_allocator = &m->allocator_a,
         .back_allocator = &m->allocator_b,
         
@@ -319,7 +323,6 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
         {
             plugin_populate_from_descriptor(m->front_handle, m->front_allocator, audio_parameters);
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
-            audio_context->front_plugin = m->front_handle;
             
             octave_assert(exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE)
                           == Asset_File_State_VALIDATING);
@@ -337,7 +340,6 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
             plugin_write_all_errors_on_log(m->front_handle, &m->gui_log);
             
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
-            audio_context->front_plugin = m->front_handle;
             
             printf("done cleaning up\n");
             octave_assert(exchange_32(m->plugin_state, Asset_File_State_FAILED)
@@ -356,7 +358,6 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
             plugin_populate_from_descriptor(m->back_handle, m->back_allocator, audio_parameters);
             
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
-            audio_context->back_plugin = m->back_handle;
             *handle_to_pull_ir_from = m->back_handle;
             
             octave_assert(compare_exchange_32(m->plugin_state,

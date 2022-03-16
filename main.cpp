@@ -138,6 +138,7 @@ i32 main(i32 argc, char** argv)
     audio_context.audio_file_play = 0;
     audio_context.audio_file_state = &wav_state;
     audio_context.plugin_state = &plugin_state;
+    audio_context.m = nullptr;
     Audio_Parameters audio_parameters = {};
     MemoryBarrier();
     
@@ -188,6 +189,8 @@ i32 main(i32 argc, char** argv)
     
     Plugin_Reloading_Manager plugin_reloading_manager;
     plugin_reloading_manager_init(&plugin_reloading_manager, clang_ctx, source_filename, &plugin_state);
+    
+    audio_context.m = &plugin_reloading_manager;
     
     if(source_filename[0] != 0)
         plugin_reloader_stage_cold_compilation(&plugin_reloading_manager);
