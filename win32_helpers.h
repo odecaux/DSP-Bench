@@ -3,6 +3,9 @@
 #ifndef WIN32_HELPERS_H
 #define WIN32_HELPERS_H
 
+#include <strsafe.h>
+
+
 #define compare_exchange_8(address, new_value, old_value) (InterlockedCompareExchange((CHAR volatile *) address, new_value, old_value) == old_value)
 
 #define compare_exchange_32(address, new_value, old_value) (InterlockedCompareExchange((LONG volatile *) address, new_value, old_value) == old_value)
@@ -177,6 +180,39 @@ function void win32_print_elapsed(i64 last_time, const char* text)
     real32 elapsed_time;
     win32_get_elapsed_ms_since(last_time, nullptr, &elapsed_time);
     //printf("%s : %f\n", text, elapsed_time);
+}
+
+
+
+function void win32_exit_on_error_code() 
+{ 
+    // Retrieve the system error message for the last-error code
+    LPVOID lpMsgBuf;
+    LPVOID lpDisplayBuf;
+    DWORD dw = GetLastError(); 
+    
+    FormatMessage(
+                  FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+                  FORMAT_MESSAGE_FROM_SYSTEM |
+                  FORMAT_MESSAGE_IGNORE_INSERTS,
+                  NULL,
+                  dw,
+                  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                  (LPTSTR) &lpMsgBuf,
+                  0, NULL );
+    
+    // Display the error message and exit the process
+    
+    lpDisplayBuf = (LPVOID)LocalAlloc(LMEM_ZEROINIT, 
+                                      (lstrlen((LPCTSTR)lpMsgBuf) + 40) * sizeof(TCHAR)); 
+    StringCchPrintf((LPTSTR)lpDisplayBuf, 
+                    LocalSize(lpDisplayBuf) / sizeof(TCHAR),
+                    TEXT("%s failed with error %d: %s"), dw, lpMsgBuf); 
+    MessageBox(NULL, (LPCTSTR)lpDisplayBuf, TEXT("Error"), MB_OK); 
+    
+    LocalFree(lpMsgBuf);
+    LocalFree(lpDisplayBuf);
+    ExitProcess(dw); 
 }
 
 #endif //WIN32_HELPERS_H

@@ -310,6 +310,7 @@ enum Colors : u32 {
 typedef struct{
     i64 selected_parameter_id;
     i64 previous_selected_parameter_id;
+    bool show_error_log;
 } UI_State;
 
 struct Window_Context;

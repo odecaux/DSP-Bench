@@ -336,14 +336,20 @@ void frame(Plugin_Descriptor& descriptor,
     
     Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };
     Rect header_bounds = rect_remove_padding(rect_take_top(window_bounds, TITLE_HEIGHT + 10.0f), 5.0f, 10.0f);
-    window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT);
+    window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT); 
+    
+    Rect tab_switcher_bounds = rect_remove_padding(rect_take_top(window_bounds, TITLE_HEIGHT), 5.0f, 5.0f); 
+    window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT); 
+    
+    
     Rect footer_bounds = rect_remove_padding(rect_take_bottom(window_bounds, TITLE_HEIGHT + 10.0f
                                                               ), 5.0f, 10.0f);
     Rect main_panel_bounds = rect_drop_bottom(window_bounds, TITLE_HEIGHT);
     
     
+    
     MemoryBarrier();
-    auto plugin_state = *audio_ctx->m->plugin_state;
+    auto plugin_state = *audio_ctx->m->plugin_state; 
     MemoryBarrier();
     
     switch(plugin_state)
@@ -385,56 +391,84 @@ void frame(Plugin_Descriptor& descriptor,
                 audio_ctx->plugin_play = audio_ctx->plugin_play == 0 ? 1 : 0;
             }
             
-            Rect left_panel_bounds = rect_remove_padding(rect_take_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
-            Rect right_panel_bounds = rect_remove_padding(rect_drop_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
-            
-            draw_rectangle(left_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-            
-            Rect parameter_bounds = left_panel_bounds;
-            parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
-            
-            for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters && descriptor.error.flag == Compiler_Success; parameter_idx++)
+            tab_switcher_bounds = rect_take_left(tab_switcher_bounds, 100.0f);
+            if(button(tab_switcher_bounds, StringLit("Log"), 444, graphics_ctx, &ui_state, &frame_io))
             {
-                auto *current_parameter_value = &current_parameter_values[parameter_idx];
-                auto *parameter_descriptor = &descriptor.parameters[parameter_idx];
-                
-                parameter_slider(parameter_idx, parameter_descriptor, current_parameter_value, parameter_bounds, &ui_state, frame_io, parameters_were_tweaked, graphics_ctx);
-                
-                parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN * 2;
+                ui_state.show_error_log = !ui_state.show_error_log;
             }
             
-            
-            draw_rectangle(right_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-            
-            
-            Rect ir_panel_bounds;
-            Rect fft_panel_bounds;
-            rect_split_vert_middle(right_panel_bounds, &ir_panel_bounds, &fft_panel_bounds);
-            
-            //~IR
-            
-            draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-            Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
-            draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &graphics_ctx->atlas); 
-            
-            Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
-            Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
-            ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
-            
-            graphics_ctx->ir.zoom_state = simple_slider(graphics_ctx->ir.zoom_state, 600, zoom_slider_bounds, frame_io, &ui_state, graphics_ctx);
-            
-            draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-            graphics_ctx->ir.bounds = ir_graph_bounds;
-            
-            
-            //~fft
-            draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-            Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
-            Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
-            
-            draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &graphics_ctx->atlas); 
-            draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-            graphics_ctx->fft.bounds = fft_graph_bounds;
+            if(!ui_state.show_error_log)
+            {
+                Rect left_panel_bounds;
+                Rect right_panel_bounds;
+                
+                left_panel_bounds = rect_remove_padding(rect_take_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
+                right_panel_bounds = rect_remove_padding(rect_drop_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
+                
+                draw_rectangle(left_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+                
+                Rect parameter_bounds = left_panel_bounds;
+                parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
+                
+                for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters && descriptor.error.flag == Compiler_Success; parameter_idx++)
+                {
+                    auto *current_parameter_value = &current_parameter_values[parameter_idx];
+                    auto *parameter_descriptor = &descriptor.parameters[parameter_idx];
+                    
+                    parameter_slider(parameter_idx, parameter_descriptor, current_parameter_value, parameter_bounds, &ui_state, frame_io, parameters_were_tweaked, graphics_ctx);
+                    
+                    parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN * 2;
+                }
+                
+                draw_rectangle(right_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+                
+                
+                Rect ir_panel_bounds;
+                Rect fft_panel_bounds;
+                rect_split_vert_middle(right_panel_bounds, &ir_panel_bounds, &fft_panel_bounds);
+                
+                
+                //~IR
+                
+                
+                
+                draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+                Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
+                draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &graphics_ctx->atlas); 
+                
+                Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
+                Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
+                ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
+                
+                graphics_ctx->ir.zoom_state = simple_slider(graphics_ctx->ir.zoom_state, 600, zoom_slider_bounds, frame_io, &ui_state, graphics_ctx);
+                
+                draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+                graphics_ctx->ir.bounds = ir_graph_bounds;
+                
+                
+                //~fft
+                draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+                Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
+                Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
+                
+                draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &graphics_ctx->atlas); 
+                draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+                graphics_ctx->fft.bounds = fft_graph_bounds;
+            }
+            else
+            {
+                
+                main_panel_bounds = rect_remove_padding(main_panel_bounds, 5.0f, 5.0f);
+                
+                draw_rectangle(main_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+                Rect error_message_bounds = rect_take_top(main_panel_bounds, TITLE_HEIGHT);
+                
+                for(i32 i = 0; i < error_log->message_count; i++)
+                {
+                    draw_text(error_log->messages[i], error_message_bounds, Color_Front, &graphics_ctx->atlas);
+                    error_message_bounds = rect_move_by(error_message_bounds, {0.0f, TITLE_HEIGHT});
+                }
+            }
         } break;
         case Asset_File_State_STAGE_BACKGROUND_LOADING :
         case Asset_File_State_BACKGROUND_LOADING :

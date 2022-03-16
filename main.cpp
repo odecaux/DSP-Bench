@@ -57,7 +57,6 @@ DWORD wav_loader_thread_proc(void *void_param)
 
 bool check_extension(const char* filename, const char* extension)
 {
-    nocheckin;
     const char *maybe_ext = filename + strlen(filename) - 3; 
     return maybe_ext > filename && (strncmp(maybe_ext, extension, 3) == 0);
 }
@@ -220,7 +219,7 @@ i32 main(i32 argc, char** argv)
 #endif
     
     IO frame_io = io_initial_state();
-    UI_State ui_state = {-1};
+    UI_State ui_state = {-1, -1, false};
     i64 last_time = win32_get_time();
     bool done = false;
     
@@ -379,7 +378,7 @@ i32 main(i32 argc, char** argv)
             ShowCursor(TRUE);
         
         
-        if(plugin_state == Asset_File_State_IN_USE)
+        if(plugin_state == Asset_File_State_IN_USE && !ui_state.show_error_log)
             opengl_render_ui(&opengl_ctx, &graphics_ctx);
         else
             opengl_render_generic(&opengl_ctx, &graphics_ctx);
@@ -393,7 +392,10 @@ i32 main(i32 argc, char** argv)
             u64 temp_gui_write_time = gui_dll_last_write_time;
             if(win32_query_file_change("gui.dll", &temp_gui_write_time))
             {
+                printf("reload gui\n");
                 FreeLibrary(gui_dll);
+                if(CopyFile("gui.dll", "gui_temp.dll", FALSE) == 0)
+                    win32_exit_on_error_code();
                 HMODULE gui_dll = LoadLibraryA("gui_temp.dll");
                 octave_assert(gui_dll != NULL);
                 frame = (frame_t)GetProcAddress(gui_dll, "frame");
