@@ -126,11 +126,11 @@ struct Plugin_Reloading_Manager
     Plugin_Allocator allocator_a;
     Plugin_Allocator allocator_b;
     
-    Plugin *current_handle;
-    Plugin *hot_reload_handle;
+    Plugin *front_handle;
+    Plugin *back_handle;
     
-    Plugin_Allocator *current_allocator;
-    Plugin_Allocator *hot_reload_allocator;
+    Plugin_Allocator *front_allocator;
+    Plugin_Allocator *back_allocator;
     
     Compiler_Thread_Param compiler_thread_param;
     HANDLE compiler_thread_handle;

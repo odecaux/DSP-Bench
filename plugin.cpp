@@ -153,7 +153,7 @@ extern try_compile_t try_compile;
 #endif
 #ifdef RELEASE
 void release_jit(Plugin *plugin);
-void try_compile(const char* filename, void* clang_ctx_ptr, Plugin *plugin, Plugin_Allocator *allocator);
+Plugin try_compile(const char* filename, void* clang_ctx_ptr, Plugin_Allocator *allocator);
 #endif
 
 void plugin_reset_handle(Plugin *handle, Plugin_Allocator *allocator)
@@ -175,7 +175,7 @@ DWORD compiler_thread_proc(void *void_param)
     if(compare_exchange_32(param->stage, Asset_File_State_BACKGROUND_LOADING, Asset_File_State_STAGE_BACKGROUND_LOADING) )
     {
         
-        try_compile(param->source_filename, param->clang_ctx, param->handle, param->allocator);
+        *param->handle = try_compile(param->source_filename, param->clang_ctx, param->allocator);
         octave_assert(compare_exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION, Asset_File_State_BACKGROUND_LOADING));
     }
     else if(compare_exchange_32(param->stage, 
@@ -183,7 +183,7 @@ DWORD compiler_thread_proc(void *void_param)
                                 Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING) )
     {
         
-        try_compile(param->source_filename, param->clang_ctx, param->handle, param->allocator);
+        *param->handle = try_compile(param->source_filename, param->clang_ctx, param->allocator);
         octave_assert(compare_exchange_32(param->stage, Asset_File_State_HOT_RELOAD_STAGE_VALIDATION, Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING));
     }
     else
@@ -220,8 +220,8 @@ void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m)
     
     m->compiler_thread_param = Compiler_Thread_Param {
         .source_filename = m->source_filename,
-        .handle = m->current_handle,
-        .allocator = m->current_allocator,
+        .handle = m->front_handle,
+        .allocator = m->front_allocator,
         .clang_ctx = m->clang_ctx,
         .stage = m->plugin_state
     };
@@ -238,8 +238,8 @@ void plugin_reloader_stage_hot_compilation(Plugin_Reloading_Manager *m)
     
     m->compiler_thread_param = Compiler_Thread_Param {
         .source_filename = m->source_filename,
-        .handle = m->hot_reload_handle,
-        .allocator = m->hot_reload_allocator,
+        .handle = m->back_handle,
+        .allocator = m->back_allocator,
         .clang_ctx = m->clang_ctx,
         .stage = m->plugin_state
     };
@@ -258,10 +258,10 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
         .allocator_a = plugin_allocator_init(1024 * 1024),
         .allocator_b = plugin_allocator_init(1024 * 1204),
         
-        .current_handle = &m->handle_a,
-        .hot_reload_handle = &m->handle_b,
-        .current_allocator = &m->allocator_a,
-        .hot_reload_allocator = &m->allocator_b,
+        .front_handle = &m->handle_a,
+        .back_handle = &m->handle_b,
+        .front_allocator = &m->allocator_a,
+        .back_allocator = &m->allocator_b,
         
         .clang_ctx = clang_ctx,
         .plugin_state = plugin_state,
@@ -315,29 +315,29 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
                            Asset_File_State_VALIDATING,
                            Asset_File_State_STAGE_VALIDATION))
     {
-        if(m->current_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
+        if(m->front_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
         {
-            plugin_populate_from_descriptor(m->current_handle, m->current_allocator, audio_parameters);
+            plugin_populate_from_descriptor(m->front_handle, m->front_allocator, audio_parameters);
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
-            audio_context->plugin = m->current_handle;
+            audio_context->front_plugin = m->front_handle;
             
             octave_assert(exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE)
                           == Asset_File_State_VALIDATING);
             
-            *handle_to_pull_ir_from = m->current_handle;
+            *handle_to_pull_ir_from = m->front_handle;
         }
         else
         {
             printf("compilation failed, cleaning up\n");
             
-            octave_assert(!m->current_handle->llvm_jit_engine);
-            octave_assert(!m->current_handle->parameter_values_audio_side);
-            octave_assert(!m->current_handle->parameter_values_ui_side);
-            octave_assert(!m->current_handle->ring.buffer);
-            plugin_write_all_errors_on_log(m->current_handle, &m->gui_log);
+            octave_assert(!m->front_handle->llvm_jit_engine);
+            octave_assert(!m->front_handle->parameter_values_audio_side);
+            octave_assert(!m->front_handle->parameter_values_ui_side);
+            octave_assert(!m->front_handle->ring.buffer);
+            plugin_write_all_errors_on_log(m->front_handle, &m->gui_log);
             
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
-            audio_context->plugin = m->current_handle;
+            audio_context->front_plugin = m->front_handle;
             
             printf("done cleaning up\n");
             octave_assert(exchange_32(m->plugin_state, Asset_File_State_FAILED)
@@ -349,15 +349,15 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
                                 Asset_File_State_HOT_RELOAD_STAGE_VALIDATION)) 
     {
         printf("hot : validating\n");
-        if(m->hot_reload_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
+        if(m->back_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
         {
             printf("hot : compiler success\n");
             
-            plugin_populate_from_descriptor(m->hot_reload_handle, m->hot_reload_allocator, audio_parameters);
+            plugin_populate_from_descriptor(m->back_handle, m->back_allocator, audio_parameters);
             
             m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
-            audio_context->hot_reload_plugin = m->hot_reload_handle;
-            *handle_to_pull_ir_from = m->hot_reload_handle;
+            audio_context->back_plugin = m->back_handle;
+            *handle_to_pull_ir_from = m->back_handle;
             
             octave_assert(compare_exchange_32(m->plugin_state,
                                               Asset_File_State_HOT_RELOAD_STAGE_SWAP,
@@ -369,16 +369,16 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
         {
             
             printf("hot : compilation failed\n");
-            octave_assert(!m->hot_reload_handle->llvm_jit_engine);
-            octave_assert(!m->hot_reload_handle->parameter_values_audio_side);
-            octave_assert(!m->hot_reload_handle->parameter_values_ui_side);
-            octave_assert(!m->hot_reload_handle->ring.buffer);
+            octave_assert(!m->back_handle->llvm_jit_engine);
+            octave_assert(!m->back_handle->parameter_values_audio_side);
+            octave_assert(!m->back_handle->parameter_values_ui_side);
+            octave_assert(!m->back_handle->ring.buffer);
             
-            plugin_write_all_errors_on_log(m->hot_reload_handle, &m->gui_log);
+            plugin_write_all_errors_on_log(m->back_handle, &m->gui_log);
             
             printf("hot : done cleaning up, back in use\n");
             
-            if(m->current_handle->descriptor.error.flag != Compiler_Success){
+            if(m->front_handle->descriptor.error.flag != Compiler_Success){
                 octave_assert(compare_exchange_32(m->plugin_state,
                                                   Asset_File_State_FAILED,
                                                   Asset_File_State_HOT_RELOAD_VALIDATING));
@@ -394,7 +394,7 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
                                 Asset_File_State_UNLOADING,
                                 Asset_File_State_COLD_RELOAD_STAGE_UNLOAD)) 
     {
-        plugin_reset_handle(m->current_handle, m->current_allocator);
+        plugin_reset_handle(m->front_handle, m->front_allocator);
         plugin_reloader_stage_cold_compilation(m);
     }
     else if(compare_exchange_32(m->plugin_state,
@@ -403,15 +403,15 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
     {
         printf("hot reload disposing\n");
         
-        Plugin *temp = m->hot_reload_handle;
-        m->hot_reload_handle = m->current_handle;
-        m->current_handle = temp;
+        Plugin *temp = m->back_handle;
+        m->back_handle = m->front_handle;
+        m->front_handle = temp;
         
-        Plugin_Allocator *temp_alloc = m->hot_reload_allocator;
-        m->hot_reload_allocator = m->current_allocator;
-        m->current_allocator = temp_alloc;
+        Plugin_Allocator *temp_alloc = m->back_allocator;
+        m->back_allocator = m->front_allocator;
+        m->front_allocator = temp_alloc;
         
-        plugin_reset_handle(m->hot_reload_handle, m->hot_reload_allocator);
+        plugin_reset_handle(m->back_handle, m->back_allocator);
         
         compare_exchange_32(m->plugin_state,
                             Asset_File_State_STAGE_USAGE,
@@ -443,12 +443,12 @@ void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m)
         if(win32_query_file_change(m->source_filename, &m->plugin_last_write_time))
         {
             printf("hot : file has changed\n");
-            octave_assert(!m->hot_reload_handle->parameter_values_audio_side);
-            octave_assert(!m->hot_reload_handle->parameter_values_ui_side);
-            octave_assert(!m->hot_reload_handle->ring.buffer);
-            octave_assert(!m->hot_reload_handle->llvm_jit_engine);
+            octave_assert(!m->back_handle->parameter_values_audio_side);
+            octave_assert(!m->back_handle->parameter_values_ui_side);
+            octave_assert(!m->back_handle->ring.buffer);
+            octave_assert(!m->back_handle->llvm_jit_engine);
             
-            plugin_reset_handle(m->hot_reload_handle, m->hot_reload_allocator);
+            plugin_reset_handle(m->back_handle, m->back_allocator);
             plugin_reloader_stage_hot_compilation(m);
         }
         else if(was_in_use)

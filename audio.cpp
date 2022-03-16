@@ -30,9 +30,9 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                            Asset_File_State_HOT_RELOAD_SWAPPING,
                            Asset_File_State_HOT_RELOAD_STAGE_SWAP))
     {
-        ctx->hot_reload_old_plugin = ctx->plugin;
-        ctx->plugin = ctx->hot_reload_plugin;
-        ctx->hot_reload_plugin = nullptr;
+        ctx->back_plugin = ctx->front_plugin;
+        ctx->front_plugin = ctx->back_plugin;
+        ctx->back_plugin = nullptr;
         
         octave_assert(compare_exchange_32(ctx->plugin_state,
                                           Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
@@ -51,7 +51,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                            Asset_File_State_OK_TO_UNLOAD,
                            Asset_File_State_STAGE_UNLOADING))
     {
-        ctx->plugin = nullptr;
+        ctx->front_plugin = nullptr;
     }
     
     if(compare_exchange_32(ctx->audio_file_state,
@@ -64,7 +64,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                            Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
                            Asset_File_State_COLD_RELOAD_STAGE_UNUSE))
     {
-        ctx->plugin = nullptr;
+        ctx->front_plugin = nullptr;
     }
     
     MemoryBarrier();
@@ -174,29 +174,29 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
         case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
         case Asset_File_State_HOT_RELOAD_DISPOSING :
         {
-            Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_pull_from_ring(ctx->plugin->ring);
+            Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_pull_from_ring(ctx->front_plugin->ring);
             if(maybe_new_parameter_values)
             {
-                for(auto param_idx = 0; param_idx < ctx->plugin->ring.num_fields_by_plugin; param_idx++)
+                for(auto param_idx = 0; param_idx < ctx->front_plugin->ring.num_fields_by_plugin; param_idx++)
                 {
-                    ctx->plugin->parameter_values_audio_side[param_idx] = maybe_new_parameter_values[param_idx];
+                    ctx->front_plugin->parameter_values_audio_side[param_idx] = maybe_new_parameter_values[param_idx];
                 }
                 
                 MemoryBarrier();
-                octave_assert(ctx->plugin->ring.num_fields_by_plugin == ctx->plugin->descriptor.num_parameters);
+                octave_assert(ctx->front_plugin->ring.num_fields_by_plugin == ctx->front_plugin->descriptor.num_parameters);
                 
-                plugin_set_parameter_holder_from_values(&ctx->plugin->descriptor, 
-                                                        ctx->plugin->parameter_values_audio_side, ctx->plugin->parameters_holder);
+                plugin_set_parameter_holder_from_values(&ctx->front_plugin->descriptor, 
+                                                        ctx->front_plugin->parameter_values_audio_side, ctx->front_plugin->parameters_holder);
             }
             
             if(plugin_play == 1)
             {
-                ctx->plugin->audio_callback_f(ctx->plugin->parameters_holder,
-                                              ctx->plugin->state_holder,
-                                              output_buffer,
-                                              parameters.num_channels,
-                                              parameters.num_samples,
-                                              parameters.sample_rate);
+                ctx->front_plugin->audio_callback_f(ctx->front_plugin->parameters_holder,
+                                                    ctx->front_plugin->state_holder,
+                                                    output_buffer,
+                                                    parameters.num_channels,
+                                                    parameters.num_samples,
+                                                    parameters.sample_rate);
             }
         }break;
         case Asset_File_State_HOT_RELOAD_SWAPPING :

@@ -291,11 +291,11 @@ i32 main(i32 argc, char** argv)
         bool parameters_were_tweaked = false;
         bool load_wav_was_clicked = false;
         bool load_plugin_was_clicked = false;
-        frame(plugin_reloading_manager.current_handle->descriptor, 
+        frame(plugin_reloading_manager.front_handle->descriptor, 
               &graphics_ctx, 
               ui_state, 
               frame_io, 
-              plugin_reloading_manager.current_handle->parameter_values_ui_side, 
+              plugin_reloading_manager.front_handle->parameter_values_ui_side, 
               &audio_context, 
               &plugin_reloading_manager.gui_log,
               &parameters_were_tweaked,
@@ -305,11 +305,11 @@ i32 main(i32 argc, char** argv)
         
         if(parameters_were_tweaked)
         {
-            plugin_parameters_push_to_ring(plugin_reloading_manager.current_handle->ring, plugin_reloading_manager.current_handle->parameter_values_ui_side);
-            compute_IR(*plugin_reloading_manager.current_handle, fft.IR_buffer, 
+            plugin_parameters_push_to_ring(plugin_reloading_manager.front_handle->ring, plugin_reloading_manager.front_handle->parameter_values_ui_side);
+            compute_IR(*plugin_reloading_manager.front_handle, fft.IR_buffer, 
                        IR_BUFFER_LENGTH, 
                        audio_parameters, 
-                       plugin_reloading_manager.current_handle->parameter_values_ui_side);
+                       plugin_reloading_manager.front_handle->parameter_values_ui_side);
             fft_perform(&fft);
             
             memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
@@ -411,8 +411,8 @@ i32 main(i32 argc, char** argv)
                                  Asset_File_State_UNLOADING,
                                  Asset_File_State_OK_TO_UNLOAD));
     
-    release_jit(plugin_reloading_manager.current_handle);
-    release_jit(plugin_reloading_manager.hot_reload_handle);
+    release_jit(plugin_reloading_manager.front_handle);
+    release_jit(plugin_reloading_manager.back_handle);
     
     audio_uninitialize(platform_audio_context);
     printf("done\n");
