@@ -3,22 +3,6 @@
 #ifndef DESCRIPTOR_H
 #define DESCRIPTOR_H
 
-//TODO move to memory
-#define word_size (sizeof(void*))
-#define align(n) ((n + word_size - 1) & ~(word_size - 1))
-
-internal void *plugin_allocate(Arena *allocator, u64 size)
-{
-    char *begin = allocator->current;
-    u64 aligned = align(size);
-    if(begin + aligned <= allocator->base + allocator->capacity)
-    {
-        allocator->current += aligned;
-        return begin;
-    }
-    else return nullptr;
-}
-
 
 void plugin_reset_handle(Plugin *plugin);
 

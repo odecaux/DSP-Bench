@@ -4,6 +4,7 @@
 
 #include "base.h"
 #include "structs.h"
+#include "memory.h"
 #include "plugin.h"
 
 #include "hardcoded_values.h"
@@ -674,7 +675,6 @@ void frame(Plugin_Descriptor& descriptor,
     
     //~footer
     {
-        
         bool clicked_on_load = false;
         bool clicked_on_play = false;
         bool clicked_on_loop = false;

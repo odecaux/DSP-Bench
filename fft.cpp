@@ -9,9 +9,9 @@
 #include <ipps.h>
 #include <ippdefs.h>
 
-#include "memory.h"
 #include "base.h"
 #include "structs.h"
+#include "memory.h"
 #include "fft.h"
 
 void ipp_octave_assert_impl(IppStatus status, const char* file, u32 line)

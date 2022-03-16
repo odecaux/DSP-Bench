@@ -7,9 +7,9 @@
 #include "string.h"
 
 
-#include "memory.h"
 #include "base.h"
 #include "structs.h"
+#include "memory.h"
 #include "plugin.h"
 #include "audio.h"
 #include "win32_helpers.h"
@@ -24,6 +24,11 @@
 
 
 #ifdef DEBUG
+typedef Plugin(*try_compile_t)(const char*, const void*, Arena *allocator);
+typedef void(*release_jit_t)(Plugin*);
+typedef void*(*create_clang_context_t)();
+typedef void(*release_clang_context_t)(void* clang_context_void);
+
 try_compile_t try_compile = nullptr;
 release_jit_t release_jit = nullptr;
 create_clang_context_t create_clang_context = nullptr;

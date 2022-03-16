@@ -1,6 +1,5 @@
 #include "hardcoded_values.h"
 
-
 #include "stdlib.h"
 #include "assert.h"
 #include "stdio.h"
@@ -10,10 +9,10 @@
 #include "windows.h"
 
 
-#include "memory.h"
 #include "base.h"
 #include "win32_helpers.h"
 #include "structs.h"
+#include "memory.h"
 #include "plugin.h"
 #include "draw.h"
 #include "app.h"

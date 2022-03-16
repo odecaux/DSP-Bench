@@ -231,18 +231,7 @@ typedef struct Plugin {
     
 } Plugin;
 
-//TODO move to memory
-struct Arena{
-    char *base;
-    char *current; 
-    u64 capacity;
-}; 
 
-
-typedef Plugin(*try_compile_t)(const char*, const void*, Arena *allocator);
-typedef void(*release_jit_t)(Plugin*);
-typedef void*(*create_clang_context_t)();
-typedef void(*release_clang_context_t)(void* clang_context_void);
 //~ Audio
 
 typedef struct 

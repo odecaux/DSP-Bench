@@ -148,6 +148,8 @@ Plugin_Parameter_Value* plugin_parameters_pull_from_ring(Plugin_Parameters_Ring_
 
 
 #ifdef DEBUG
+typedef Plugin(*try_compile_t)(const char*, const void*, Arena *allocator);
+typedef void(*release_jit_t)(Plugin*);
 extern release_jit_t release_jit;
 extern try_compile_t try_compile;
 #endif
@@ -166,8 +168,6 @@ void plugin_reset_handle(Plugin *handle, Arena *allocator)
     *handle = {};
     allocator->current = allocator->base;
 }
-
-
 
 DWORD compiler_thread_proc(void *void_param)
 {

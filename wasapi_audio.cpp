@@ -12,9 +12,9 @@
 
 #include "base.h"
 #include "structs.h"
+#include "memory.h"
 #include "plugin.h"
 #include "audio.h"
-#include "memory.h"
 
 const IID IID_IAudioClient  = __uuidof(IAudioClient);
 const IID IID_IAudioRenderClient = __uuidof(IAudioRenderClient);

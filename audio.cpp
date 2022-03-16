@@ -6,6 +6,7 @@
 #include "base.h"
 #include "win32_helpers.h"
 #include "structs.h"
+#include "memory.h"
 #include "plugin.h"
 #include "audio.h"
 
