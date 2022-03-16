@@ -45,6 +45,7 @@ void audio_callback(const Parameters& param,
                     const u32  num_samples,
                     const real32 sample_rate)
 {
+    //nocheckin();
     float x = 1.0f;
     float gain = param.gain;
     double lfo_freq = param.frequency;

@@ -280,7 +280,7 @@ i32 main(i32 argc, char** argv)
         }
         
         Plugin *plugin_to_pull_ir_from = nullptr;
-        plugin_reloading_update(&plugin_reloading_manager, &audio_context, audio_parameters, &plugin_to_pull_ir_from);
+        plugin_reloading_update_gui_side(&plugin_reloading_manager, &audio_context, audio_parameters, &plugin_to_pull_ir_from);
         
         if(plugin_to_pull_ir_from)
         {

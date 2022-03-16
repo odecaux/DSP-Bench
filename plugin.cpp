@@ -309,10 +309,10 @@ void plugin_populate_from_descriptor(Plugin *handle,
 
 
 
-void plugin_reloading_update(Plugin_Reloading_Manager *m, 
-                             Audio_Thread_Context *audio_context, 
-                             Audio_Parameters audio_parameters,
-                             Plugin **handle_to_pull_ir_from)
+void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m, 
+                                      Audio_Thread_Context *audio_context, 
+                                      Audio_Parameters audio_parameters,
+                                      Plugin **handle_to_pull_ir_from)
 {
     
     if(compare_exchange_32(m->plugin_state,
@@ -422,6 +422,81 @@ void plugin_reloading_update(Plugin_Reloading_Manager *m,
     
 }
 
+void plugin_reloading_update_audio_side(Plugin_Reloading_Manager *m)
+{
+    MemoryBarrier();
+    auto plugin_state = *m->plugin_state;
+    MemoryBarrier();
+    
+    switch(plugin_state)
+    {
+        case Asset_File_State_IN_USE :
+        case Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE :
+        case Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING :
+        case Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING :
+        case Asset_File_State_HOT_RELOAD_STAGE_VALIDATION :
+        case Asset_File_State_HOT_RELOAD_STAGE_SWAP :
+        case Asset_File_State_HOT_RELOAD_VALIDATING :
+        case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
+        case Asset_File_State_HOT_RELOAD_DISPOSING :
+        {
+            Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_pull_from_ring(m->front_handle_audio_side->ring);
+            if(maybe_new_parameter_values)
+            {
+                for(auto param_idx = 0; param_idx < m->front_handle_audio_side->ring.num_fields_by_plugin; param_idx++)
+                {
+                    m->front_handle_audio_side->parameter_values_audio_side[param_idx] = maybe_new_parameter_values[param_idx];
+                }
+                
+                MemoryBarrier();
+                octave_assert(m->front_handle_audio_side->ring.num_fields_by_plugin == m->front_handle_audio_side->descriptor.num_parameters);
+                
+                plugin_set_parameter_holder_from_values(&m->front_handle_audio_side->descriptor, 
+                                                        m->front_handle_audio_side->parameter_values_audio_side, m->front_handle_audio_side->parameters_holder);
+            }
+        }break;
+        case Asset_File_State_HOT_RELOAD_SWAPPING :
+        {
+            octave_assert(false);
+        }break;
+    }
+    
+    
+    if(compare_exchange_32(m->plugin_state,
+                           Asset_File_State_IN_USE,
+                           Asset_File_State_STAGE_USAGE))
+    {}
+    
+    if(compare_exchange_32(m->plugin_state,
+                           Asset_File_State_HOT_RELOAD_SWAPPING,
+                           Asset_File_State_HOT_RELOAD_STAGE_SWAP))
+    {
+        Plugin * temp = m->back_handle_audio_side;
+        m->back_handle_audio_side = m->front_handle_audio_side;
+        m->front_handle_audio_side = temp;
+        
+        octave_assert(compare_exchange_32(m->plugin_state,
+                                          Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
+                                          Asset_File_State_HOT_RELOAD_SWAPPING));
+    }
+    
+    
+    
+    if(compare_exchange_32(m->plugin_state,
+                           Asset_File_State_OK_TO_UNLOAD,
+                           Asset_File_State_STAGE_UNLOADING))
+    {
+        //m->front_handle_audio_side = nullptr;
+    }
+    
+    if(compare_exchange_32(m->plugin_state,
+                           Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
+                           Asset_File_State_COLD_RELOAD_STAGE_UNUSE))
+    {
+        //m->front_handle_audio_side = nullptr;
+    }
+    
+}
 
 void plugin_load_button_was_clicked(Plugin_Reloading_Manager *m)
 {
