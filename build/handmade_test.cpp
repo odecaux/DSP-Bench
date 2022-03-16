@@ -7,16 +7,11 @@ enum slope_type{
     logarythmic
 };
 
-struct wrong_type{
-    
-};
-
 
 struct Parameters{
-    FLOAT_ARAM(2.0f, 0.0f) initial_gain;
-    ENUM_ARAM(wrong_type) slope;
+    FLOAT_ARAM(0.0f, 1.0f) initial_gain;
+    ENUM_ARAM(slope_type) slope;
     FLOAT_ARAM(0.0f, 0.1f) step;
-    nochin;
 };
 
 struct State{
@@ -26,6 +21,7 @@ struct State{
 
 Parameters default_parameters()
 {
+    //no();
     Parameters initial_state = {0.9f, linear, 0.001f};
     return initial_state;
 }
@@ -36,8 +32,7 @@ State initialize_state(const Parameters& param,
                        void *allocator)
 {
     State initial_state = {};
-    nocheck()
-        return initial_state;
+    return initial_state;
 }
 
 typedef float real32;
@@ -50,6 +45,7 @@ void audio_callback(const Parameters& param,
                     const u32  num_samples,
                     const real32 sample_rate)
 {
+    //prout();
     float value = 0.5 * param.initial_gain;
     
     for(int sample = 0; sample < num_samples; sample++)

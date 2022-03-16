@@ -126,11 +126,14 @@ struct Plugin_Reloading_Manager
     Plugin_Allocator allocator_a;
     Plugin_Allocator allocator_b;
     
-    Plugin *current_handle;
-    Plugin *hot_reload_handle;
+    Plugin *front_handle;
+    Plugin *back_handle;
     
-    Plugin_Allocator *current_allocator;
-    Plugin_Allocator *hot_reload_allocator;
+    Plugin *front_handle_audio_side;
+    Plugin *back_handle_audio_side;
+    
+    Plugin_Allocator *front_allocator;
+    Plugin_Allocator *back_allocator;
     
     Compiler_Thread_Param compiler_thread_param;
     HANDLE compiler_thread_handle;
@@ -149,7 +152,10 @@ void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m);
 
 void plugin_reloader_stage_hot_compilation(Plugin_Reloading_Manager *m);
 
-void plugin_reloading_update(Plugin_Reloading_Manager *m, Audio_Thread_Context *audio_context, Audio_Parameters audio_parameters, Plugin **handle_to_pull_ir_from);
+void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m, Audio_Thread_Context *audio_context, Audio_Parameters audio_parameters, Plugin **handle_to_pull_ir_from);
+
+void plugin_reloading_update_audio_side(Plugin_Reloading_Manager *m);
+
 
 void plugin_load_button_was_clicked(Plugin_Reloading_Manager *m);
 

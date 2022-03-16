@@ -11,47 +11,6 @@
 #include <iterator>
 
 
-#include <clang/Lex/PreprocessorOptions.h>
-
-
-#include <clang/Sema/Sema.h>
-#include <llvm/Passes/OptimizationLevel.h>
-#include <clang/Serialization/PCHContainerOperations.h>
-#include <clang/Rewrite/Core/Rewriter.h>
-#include <clang/Basic/Builtins.h>
-#include <clang/AST/ASTContext.h>
-#include <clang/AST/RecordLayout.h>
-#include <clang/AST/ASTConsumer.h>
-#include <clang/Parse/ParseAST.h>
-#include <clang/ASTMatchers/ASTMatchers.h>
-#include <clang/ASTMatchers/ASTMatchFinder.h>
-
-#include <clang/Basic/DiagnosticOptions.h>
-#include <clang/Basic/Diagnostic.h>
-#include <clang/Basic/LangOptions.h>
-#include <clang/Basic/TargetInfo.h>
-#include <clang/CodeGen/CodeGenAction.h>
-
-
-#include "clang/Frontend/TextDiagnosticBuffer.h"
-#include <clang/Frontend/FrontendAction.h>
-#include <clang/Frontend/FrontendActions.h>
-#include <clang/Frontend/CompilerInstance.h>
-#include <clang/Frontend/CompilerInvocation.h>
-#include <clang/Tooling/Tooling.h>
-#include <clang/Rewrite/Frontend/FrontendActions.h>
-
-#include <llvm/ExecutionEngine/ExecutionEngine.h>
-#include <llvm/ExecutionEngine/MCJIT.h>
-#include <llvm/ExecutionEngine/SectionMemoryManager.h>
-#include <llvm/InitializePasses.h>
-#include <llvm/Passes/PassBuilder.h>
-#include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Support/TargetSelect.h>
-#include <llvm/Support/Host.h>
-#include <llvm/Support/DynamicLibrary.h>
-#include <llvm/Analysis/AliasAnalysis.h>
-
 #include "windows.h"
 
 #include "math.h"
@@ -264,9 +223,9 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
                  Plugin *plugin,
                  Plugin_Allocator *allocator);
 
-void try_compile_impl(const char* filename, 
-                      Clang_Context* clang_cts,
-                      Plugin *plugin, Plugin_Allocator *allocator);
+Plugin try_compile_impl(const char* filename, 
+                        Clang_Context* clang_cts,
+                        Plugin_Allocator *allocator);
 
 
 #ifdef DEBUG
@@ -389,9 +348,9 @@ Clang_Context* create_clang_context_impl()
 #ifdef DEBUG
 extern "C" __declspec(dllexport)
 #endif
-void try_compile(const char* filename, void* clang_ctx_ptr, Plugin *plugin, Plugin_Allocator *allocator)
+Plugin try_compile(const char* filename, void* clang_ctx_ptr, Plugin_Allocator *allocator)
 {
-    try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr, plugin, allocator);
+    return try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr, allocator);
 }
 
 Clang_Error to_clang_error(const std::pair< clang::SourceLocation, std::string > &error, const clang::SourceManager &source_manager,
@@ -413,9 +372,9 @@ void errors_push_clang(Clang_Error_Log *error_log, Clang_Error new_error)
 }
 
 
-void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *plugin, Plugin_Allocator *allocator)
+Plugin try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin_Allocator *allocator)
 {
-    
+    Plugin plugin;
     //Clang_Error_Log *error_log = &plugin->clang_error_log;
     clang::CompilerInstance compiler_instance{};
     clang::TextDiagnosticBuffer diagnostics{};
@@ -510,7 +469,7 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
     
     if(diagnostics.getNumErrors() != 0) 
     {
-        plugin->clang_error_log = {
+        plugin.clang_error_log = {
             (Clang_Error*)plugin_allocate(allocator, sizeof(Clang_Error) * diagnostics.getNumErrors()),
             0,
             diagnostics.getNumErrors()
@@ -518,24 +477,24 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
         
         for(auto error_it = diagnostics.err_begin(); error_it < diagnostics.err_end(); error_it++)
         {
-            errors_push_clang(&plugin->clang_error_log, to_clang_error(*error_it, compiler_instance.getSourceManager(), allocator));
+            errors_push_clang(&plugin.clang_error_log, to_clang_error(*error_it, compiler_instance.getSourceManager(), allocator));
         }
-        plugin->failure_stage = {Compiler_Failure_Stage_Clang_First_Pass};
+        plugin.failure_stage = {Compiler_Failure_Stage_Clang_First_Pass};
         octave_assert(result == false);
         octave_assert(compilation_count == 0);
-        return;
+        return plugin;
     }
     else if(error == Compiler_Failure_Stage_Finding_Decls)
     {
-        plugin->failure_stage = error;
-        plugin->decls_search_log = decls_search_log;
-        return;
+        plugin.failure_stage = error;
+        plugin.decls_search_log = decls_search_log;
+        return plugin;
     }
     else if(error == Compiler_Failure_Stage_Parsing_Parameters) 
     {
-        plugin->failure_stage = error; 
-        plugin->descriptor = descriptor;
-        return;
+        plugin.failure_stage = error; 
+        plugin.descriptor = descriptor;
+        return plugin;
     }
     else 
     {
@@ -544,8 +503,8 @@ void try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin *pl
                     compiler_instance, 
                     descriptor,
                     &clang_ctx->llvm_context,
-                    plugin, allocator);
-        return;
+                    &plugin, allocator);
+        return plugin;
     }
 }
 

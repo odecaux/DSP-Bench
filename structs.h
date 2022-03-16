@@ -239,7 +239,7 @@ struct Plugin_Allocator{
 }; 
 
 
-typedef void(*try_compile_t)(const char*, const void*, Plugin*, Plugin_Allocator *allocator);
+typedef Plugin(*try_compile_t)(const char*, const void*, Plugin_Allocator *allocator);
 typedef void(*release_jit_t)(Plugin*);
 typedef void*(*create_clang_context_t)();
 typedef void(*release_clang_context_t)(void* clang_context_void);
@@ -253,7 +253,7 @@ typedef struct
     u32 bit_depth;
 } Audio_Parameters;
 
-
+struct Plugin_Reloading_Manager;
 
 typedef struct 
 {
@@ -264,10 +264,8 @@ typedef struct
     Asset_File_State *plugin_state;
     Asset_File_State *audio_file_state;
     
+    Plugin_Reloading_Manager *m;
     Audio_File *audio_file;
-    Plugin *plugin;
-    Plugin *hot_reload_plugin;
-    Plugin *hot_reload_old_plugin;
 } Audio_Thread_Context;
 
 //~ UI
