@@ -231,15 +231,15 @@ typedef struct Plugin {
     
 } Plugin;
 
-
-struct Plugin_Allocator{
+//TODO move to memory
+struct Arena{
     char *base;
     char *current; 
     u64 capacity;
 }; 
 
 
-typedef Plugin(*try_compile_t)(const char*, const void*, Plugin_Allocator *allocator);
+typedef Plugin(*try_compile_t)(const char*, const void*, Arena *allocator);
 typedef void(*release_jit_t)(Plugin*);
 typedef void*(*create_clang_context_t)();
 typedef void(*release_clang_context_t)(void* clang_context_void);
@@ -401,6 +401,7 @@ typedef struct {
     u8 *work_buffer;
     real32 *temp_perm_buffer; //TODO rename, c'est pas clair si on connait pas IPP
 } Ipp_Order_Context;
+
 //TODO rename, c'est nul comme nom ORDER, en 
 typedef struct {
     i32 highest_order;

@@ -9,14 +9,14 @@ For now there are two heavy dependencies : clang/llvm and Intel Performance Prim
 
 Core: \
 \
+Refactor UI function
 Plugin should allocate memory \
 FFT processing available to the plugins \
-Disable hot-reload button \
 \
 Optional: \
 \
+Disable hot-reload button \
 Offline rendering \
-Panel toggle : compiler log and IR \
 Bug : wrong field macro \
 Bug : Exiting while hot reloading crashes \
 If the struct layout has not changed, and if initial_state produces the same thing, then do not swap \
@@ -30,6 +30,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+Panel toggle : compiler log and IR \
 Rewrote the error reporting system \
 Plugin allocator \
 cli : optional plugin source \

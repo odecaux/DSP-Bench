@@ -47,7 +47,7 @@ struct Plugin_Required_Decls{
 
 Clang_Context* create_clang_context_impl();
 
-internal String allocate_and_copy_llvm_stringref(Plugin_Allocator *allocator, llvm::StringRef llvm_stringref)
+internal String allocate_and_copy_llvm_stringref(Arena *allocator, llvm::StringRef llvm_stringref)
 {
     String new_string;
     new_string.size = llvm_stringref.size();
@@ -57,7 +57,7 @@ internal String allocate_and_copy_llvm_stringref(Plugin_Allocator *allocator, ll
 }
 
 
-internal String allocate_and_copy_std_string(Plugin_Allocator *allocator, const std::string& std_string)
+internal String allocate_and_copy_std_string(Arena *allocator, const std::string& std_string)
 {
     String new_string;
     new_string.size = std_string.size();
@@ -210,7 +210,7 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx);
 Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
                                           const clang::CXXRecordDecl* state_struct_decl,
                                           const clang::SourceManager& source_manager,
-                                          Plugin_Allocator *allocator);
+                                          Arena *allocator);
 
 std::unique_ptr<llvm::MemoryBuffer> 
 rewrite_plugin_source(Plugin_Required_Decls decls,
@@ -222,11 +222,11 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
                  Plugin_Descriptor& descriptor,
                  llvm::LLVMContext *llvm_context,
                  Plugin *plugin,
-                 Plugin_Allocator *allocator);
+                 Arena *allocator);
 
 Plugin try_compile_impl(const char* filename, 
                         Clang_Context* clang_cts,
-                        Plugin_Allocator *allocator);
+                        Arena *allocator);
 
 
 #ifdef DEBUG
@@ -349,13 +349,13 @@ Clang_Context* create_clang_context_impl()
 #ifdef DEBUG
 extern "C" __declspec(dllexport)
 #endif
-Plugin try_compile(const char* filename, void* clang_ctx_ptr, Plugin_Allocator *allocator)
+Plugin try_compile(const char* filename, void* clang_ctx_ptr, Arena *allocator)
 {
     return try_compile_impl(filename, (Clang_Context*) clang_ctx_ptr, allocator);
 }
 
 Clang_Error to_clang_error(const std::pair< clang::SourceLocation, std::string > &error, const clang::SourceManager &source_manager,
-                           Plugin_Allocator *allocator)
+                           Arena *allocator)
 {
     auto [file_id, offset] = source_manager.getDecomposedLoc(error.first);
     Compiler_Location loc = {
@@ -373,7 +373,7 @@ void errors_push_clang(Clang_Error_Log *error_log, Clang_Error new_error)
 }
 
 
-Plugin try_compile_impl(const char* filename, Clang_Context* clang_ctx, Plugin_Allocator *allocator)
+Plugin try_compile_impl(const char* filename, Clang_Context* clang_ctx, Arena *allocator)
 {
     Plugin plugin;
     //Clang_Error_Log *error_log = &plugin->clang_error_log;
@@ -810,7 +810,7 @@ Plugin_Required_Decls find_decls(clang::ASTContext& ast_ctx)
 Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters_struct_decl, 
                                           const clang::CXXRecordDecl* state_struct_decl,
                                           const clang::SourceManager& source_manager,
-                                          Plugin_Allocator *allocator)
+                                          Arena *allocator)
 {
     const clang::ASTRecordLayout& parameters_struct_layout  = parameters_struct_decl->getASTContext().getASTRecordLayout(parameters_struct_decl);
     
@@ -1104,7 +1104,7 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
 void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& compiler_instance,
                  Plugin_Descriptor& descriptor,
                  llvm::LLVMContext *llvm_context,
-                 Plugin *plugin, Plugin_Allocator *allocator)
+                 Plugin *plugin, Arena *allocator)
 {
     auto new_file = clang::FrontendInputFile{
         new_buffer, 

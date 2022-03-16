@@ -60,12 +60,12 @@ real32 slider(real32 normalized_value,
               Graphics_Context *graphics_ctx)
 {
     Rect title_bounds = rect_take_top(bounds, FIELD_TITLE_HEIGHT);
-    Rect current_value_bounds = rect_remove_padding(rect_drop_top(bounds, FIELD_TITLE_HEIGHT), 2.5f, 2.5f);
+    Rect current_value_bounds = rect_shrinked(rect_drop_top(bounds, FIELD_TITLE_HEIGHT), 2.5f, 2.5f);
     Rect slider_and_minmax_bounds = rect_move_by(current_value_bounds, {0.0f, FIELD_TITLE_HEIGHT});
     
     draw_text(title, title_bounds, Color_Front, &graphics_ctx->atlas);
     
-    Rect slider_bounds = rect_remove_padding(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH, 0.0f);
+    Rect slider_bounds = rect_shrinked(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH, 0.0f);
     Rect min_label_bounds = rect_take_left(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
     Rect max_label_bounds = rect_take_right(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
     
@@ -126,7 +126,7 @@ bool button(Rect bounds,
             UI_State *ui_state,
             IO *io)
 {
-    Rect outline_bounds = rect_remove_padding(bounds, 2.0f, 2.0f);
+    Rect outline_bounds = rect_shrinked(bounds, 2.0f, 2.0f);
     
     bool hovered = rect_contains(bounds,io->mouse_position); 
     bool clicked = false;
@@ -137,7 +137,7 @@ bool button(Rect bounds,
     }
     bool down = ui_state->selected_parameter_id == id;
     
-    Rect text_bounds = rect_remove_padding(bounds, 10.0f, 10.0f);
+    Rect text_bounds = rect_shrinked(bounds, 10.0f, 10.0f);
     if(down)
     {
         fill_rectangle(bounds, Color_Front, &graphics_ctx->atlas); 
@@ -169,7 +169,7 @@ bool toggle(Rect bounds,
             IO *io,
             bool *v)
 {
-    Rect outline_bounds = rect_remove_padding(bounds, 2.0f, 2.0f);
+    Rect outline_bounds = rect_shrinked(bounds, 2.0f, 2.0f);
     
     bool hovered = rect_contains(bounds,io->mouse_position); 
     bool clicked = false;
@@ -182,7 +182,7 @@ bool toggle(Rect bounds,
     
     bool down = ui_state->selected_parameter_id == id;
     
-    Rect text_bounds = rect_remove_padding(bounds, 10.0f, 10.0f);
+    Rect text_bounds = rect_shrinked(bounds, 10.0f, 10.0f);
     
     if(clicked)
         *v = !(*v);
@@ -313,6 +313,55 @@ void parameter_slider(u32 parameter_idx, Plugin_Descriptor_Parameter *parameter_
     }
 }
 
+void header(Asset_File_State plugin_state, 
+            String plugin_name,
+            Rect header_bounds, 
+            IO frame_io, 
+            UI_State *ui_state, 
+            Graphics_Context *graphics_ctx,
+            bool *load_plugin_was_clicked,
+            bool *mute_plugin_was_clicked);
+
+void main_panel_pluin_and_viz(Asset_File_State plugin_state, 
+                              Plugin_Descriptor *descriptor, 
+                              Plugin_Parameter_Value* current_parameter_values,
+                              Compiler_Gui_Log *error_log,
+                              Rect bounds, 
+                              IO frame_io, UI_State *ui_state, Graphics_Context *graphics_ctx,
+                              bool *parameters_were_tweaked);
+
+void draw_visualization_panel(IO frame_io, 
+                              UI_State *ui_state, 
+                              Rect bounds, 
+                              Graphics_Context *graphics_ctx);
+
+
+void plugin_parameter_panel(Plugin_Descriptor *descriptor, 
+                            Plugin_Parameter_Value* current_parameter_values,
+                            Rect bounds, 
+                            IO frame_io, UI_State *ui_state, Graphics_Context *graphics_ctx,
+                            bool *parameters_were_tweaked);
+
+void draw_compiler_log(Compiler_Gui_Log *error_log, 
+                       Rect bounds, 
+                       Graphics_Context *graphics_ctx);
+
+void audio_file_footer(Asset_File_State audio_file_state, 
+                       Rect footer_bounds, 
+                       IO frame_io,
+                       UI_State *ui_state,
+                       Graphics_Context *graphics_ctx,
+                       bool *clicked_on_load,
+                       bool *clicked_on_play,
+                       bool *clicked_on_loop);
+
+
+struct Frame_Context{
+    IO frame_io;
+    UI_State *ui_state;
+    Graphics_Context *graphics_ctx;
+};
+
 #ifdef DEBUG 
 extern "C" __declspec(dllexport)
 #endif
@@ -328,6 +377,8 @@ void frame(Plugin_Descriptor& descriptor,
            bool *load_plugin_was_clicked)
 {
     
+    Frame_Context frame{ frame_io, &ui_state, graphics_ctx };
+    
     if(frame_io.mouse_released)
     {
         ui_state.previous_selected_parameter_id = ui_state.selected_parameter_id;
@@ -335,23 +386,86 @@ void frame(Plugin_Descriptor& descriptor,
     }
     
     Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };
-    Rect header_bounds = rect_remove_padding(rect_take_top(window_bounds, TITLE_HEIGHT + 10.0f), 5.0f, 10.0f);
+    Rect header_bounds = rect_shrinked(rect_take_top(window_bounds, TITLE_HEIGHT + 10.0f), 5.0f, 10.0f);
+    
     window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT); 
-    
-    Rect tab_switcher_bounds = rect_remove_padding(rect_take_top(window_bounds, TITLE_HEIGHT), 5.0f, 5.0f); 
-    window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT); 
-    
-    
-    Rect footer_bounds = rect_remove_padding(rect_take_bottom(window_bounds, TITLE_HEIGHT + 10.0f
-                                                              ), 5.0f, 10.0f);
     Rect main_panel_bounds = rect_drop_bottom(window_bounds, TITLE_HEIGHT);
     
-    
+    Rect footer_bounds = rect_shrinked(rect_take_bottom(window_bounds, TITLE_HEIGHT + 10.0f), 5.0f, 10.0f);
+    draw_rectangle(footer_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
     
     MemoryBarrier();
     auto plugin_state = *audio_ctx->m->plugin_state; 
+    auto audio_file_state = *audio_ctx->audio_file_state;
     MemoryBarrier();
     
+    {
+        bool local_load_plugin_was_clicked = false;
+        bool mute_plugin_was_clicked = false;
+        
+        header(plugin_state, descriptor.name, header_bounds, frame_io, &ui_state, graphics_ctx, &local_load_plugin_was_clicked, &mute_plugin_was_clicked);
+        
+        if(mute_plugin_was_clicked)
+            audio_ctx->plugin_play = audio_ctx->plugin_play == 0 ? 1 : 0;
+        
+        if(local_load_plugin_was_clicked)
+            *load_plugin_was_clicked = true;
+    }
+    
+    
+    main_panel_pluin_and_viz(plugin_state, &descriptor, current_parameter_values, error_log,
+                             main_panel_bounds, frame_io, &ui_state, graphics_ctx, parameters_were_tweaked);
+    
+    
+    //~footer
+    {
+        
+        bool clicked_on_load = false;
+        bool clicked_on_play = false;
+        bool clicked_on_loop = false;
+        
+        audio_file_footer(audio_file_state,
+                          footer_bounds,
+                          frame_io,
+                          &ui_state,
+                          graphics_ctx,
+                          &clicked_on_load,
+                          &clicked_on_play,
+                          &clicked_on_loop);
+        
+        if(clicked_on_load)
+        {
+            *load_wav_was_clicked = true;
+        }
+        if(clicked_on_play)
+        {
+            if(audio_ctx->audio_file_play){
+                audio_ctx->audio_file_play = 0;
+                MemoryBarrier();
+                audio_ctx->audio_file->read_cursor = 0;
+            }
+            else{
+                audio_ctx->audio_file_play = 1;
+                MemoryBarrier();
+            }
+        }
+        if(clicked_on_loop)
+        {
+            audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
+            octave_assert(audio_file_state == Asset_File_State_IN_USE);
+        }
+    }
+}
+
+void header(Asset_File_State plugin_state, 
+            String plugin_name,
+            Rect header_bounds, 
+            IO frame_io, 
+            UI_State *ui_state, 
+            Graphics_Context *graphics_ctx,
+            bool *load_plugin_was_clicked,
+            bool *mute_plugin_was_clicked)
+{
     switch(plugin_state)
     {
         case Asset_File_State_IN_USE:
@@ -365,110 +479,30 @@ void frame(Plugin_Descriptor& descriptor,
         case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
         case Asset_File_State_HOT_RELOAD_DISPOSING :
         {
-            
             Rect title_bounds = rect_drop_right(header_bounds,  TITLE_HEIGHT);
             
             if(plugin_state == Asset_File_State_IN_USE)
             {
                 Rect load_plugin_button_bounds = rect_take_left(title_bounds, TITLE_HEIGHT * 3);
                 title_bounds = rect_drop_left(title_bounds, TITLE_HEIGHT * 3);
-                if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, &ui_state, &frame_io))
+                if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, ui_state, &frame_io))
                 {
                     *load_plugin_was_clicked = true;
                 }
             }
             
             draw_rectangle(title_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-            draw_rectangle(footer_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
             
             
-            draw_text(descriptor.name, title_bounds, Color_Front, &graphics_ctx->atlas);
+            draw_text(plugin_name, title_bounds, Color_Front, &graphics_ctx->atlas);
             Rect plugin_play_stop_bounds = rect_take_right(header_bounds, TITLE_HEIGHT);
             
             
-            if(button(plugin_play_stop_bounds, StringLit("Plugin"), 258, graphics_ctx, &ui_state, &frame_io))
+            if(button(plugin_play_stop_bounds, StringLit("Plugin"), 258, graphics_ctx, ui_state, &frame_io))
             {
-                audio_ctx->plugin_play = audio_ctx->plugin_play == 0 ? 1 : 0;
+                *mute_plugin_was_clicked = true;
             }
             
-            tab_switcher_bounds = rect_take_left(tab_switcher_bounds, 100.0f);
-            if(button(tab_switcher_bounds, StringLit("Log"), 444, graphics_ctx, &ui_state, &frame_io))
-            {
-                ui_state.show_error_log = !ui_state.show_error_log;
-            }
-            
-            if(!ui_state.show_error_log)
-            {
-                Rect left_panel_bounds;
-                Rect right_panel_bounds;
-                
-                left_panel_bounds = rect_remove_padding(rect_take_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
-                right_panel_bounds = rect_remove_padding(rect_drop_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
-                
-                draw_rectangle(left_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-                
-                Rect parameter_bounds = left_panel_bounds;
-                parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
-                
-                for(u32 parameter_idx = 0; parameter_idx < descriptor.num_parameters && descriptor.error.flag == Compiler_Success; parameter_idx++)
-                {
-                    auto *current_parameter_value = &current_parameter_values[parameter_idx];
-                    auto *parameter_descriptor = &descriptor.parameters[parameter_idx];
-                    
-                    parameter_slider(parameter_idx, parameter_descriptor, current_parameter_value, parameter_bounds, &ui_state, frame_io, parameters_were_tweaked, graphics_ctx);
-                    
-                    parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN * 2;
-                }
-                
-                draw_rectangle(right_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-                
-                
-                Rect ir_panel_bounds;
-                Rect fft_panel_bounds;
-                rect_split_vert_middle(right_panel_bounds, &ir_panel_bounds, &fft_panel_bounds);
-                
-                
-                //~IR
-                
-                
-                
-                draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-                Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
-                draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &graphics_ctx->atlas); 
-                
-                Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
-                Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
-                ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
-                
-                graphics_ctx->ir.zoom_state = simple_slider(graphics_ctx->ir.zoom_state, 600, zoom_slider_bounds, frame_io, &ui_state, graphics_ctx);
-                
-                draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-                graphics_ctx->ir.bounds = ir_graph_bounds;
-                
-                
-                //~fft
-                draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-                Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
-                Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
-                
-                draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &graphics_ctx->atlas); 
-                draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-                graphics_ctx->fft.bounds = fft_graph_bounds;
-            }
-            else
-            {
-                
-                main_panel_bounds = rect_remove_padding(main_panel_bounds, 5.0f, 5.0f);
-                
-                draw_rectangle(main_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-                Rect error_message_bounds = rect_take_top(main_panel_bounds, TITLE_HEIGHT);
-                
-                for(i32 i = 0; i < error_log->message_count; i++)
-                {
-                    draw_text(error_log->messages[i], error_message_bounds, Color_Front, &graphics_ctx->atlas);
-                    error_message_bounds = rect_move_by(error_message_bounds, {0.0f, TITLE_HEIGHT});
-                }
-            }
         } break;
         case Asset_File_State_STAGE_BACKGROUND_LOADING :
         case Asset_File_State_BACKGROUND_LOADING :
@@ -488,10 +522,9 @@ void frame(Plugin_Descriptor& descriptor,
         }break;
         case Asset_File_State_NONE :
         {
-            
             Rect load_plugin_button_bounds = rect_take_left(header_bounds, TITLE_HEIGHT * 3);
             header_bounds = rect_drop_left(header_bounds, TITLE_HEIGHT * 3);
-            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, &ui_state, &frame_io))
+            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, ui_state, &frame_io))
             {
                 *load_plugin_was_clicked = true;
             }
@@ -505,29 +538,162 @@ void frame(Plugin_Descriptor& descriptor,
             Rect load_plugin_button_bounds = rect_take_left(header_bounds, TITLE_HEIGHT * 3);
             header_bounds = rect_drop_left(header_bounds, TITLE_HEIGHT * 3);
             
-            draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
-            draw_text(StringLit("Compilation Error"), header_bounds, Color_Front, &graphics_ctx->atlas);
-            
-            Rect error_message_bounds = rect_take_top(main_panel_bounds, TITLE_HEIGHT);
-            
-            for(i32 i = 0; i < error_log->message_count; i++)
-            {
-                draw_text(error_log->messages[i], error_message_bounds, Color_Front, &graphics_ctx->atlas);
-                error_message_bounds = rect_move_by(error_message_bounds, {0.0f, TITLE_HEIGHT});
-            }
-            
-            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, &ui_state, &frame_io))
+            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, graphics_ctx, ui_state, &frame_io))
             {
                 *load_plugin_was_clicked = true;
             }
             
+            draw_rectangle(header_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+            draw_text(StringLit("Compilation Error"), header_bounds, Color_Front, &graphics_ctx->atlas);
         }break;
     }
     
-    //~footer
-    MemoryBarrier();
-    auto audio_file_state = *audio_ctx->audio_file_state;
-    MemoryBarrier();
+}
+
+void main_panel_pluin_and_viz(Asset_File_State plugin_state, 
+                              Plugin_Descriptor *descriptor, 
+                              Plugin_Parameter_Value* current_parameter_values,
+                              Compiler_Gui_Log *error_log,
+                              Rect main_panel_bounds, 
+                              IO frame_io, UI_State *ui_state, Graphics_Context *graphics_ctx,
+                              bool *parameters_were_tweaked)
+{
+    
+    switch(plugin_state)
+    {
+        case Asset_File_State_IN_USE:
+        case Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE :
+        case Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING :
+        case Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING :
+        case Asset_File_State_HOT_RELOAD_STAGE_VALIDATION :
+        case Asset_File_State_HOT_RELOAD_VALIDATING :
+        case Asset_File_State_HOT_RELOAD_STAGE_SWAP :
+        case Asset_File_State_HOT_RELOAD_SWAPPING :
+        case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
+        case Asset_File_State_HOT_RELOAD_DISPOSING :
+        {
+            Rect tab_switcher_bounds = rect_shrinked(rect_take_top(main_panel_bounds, TITLE_HEIGHT), 5.0f, 5.0f); 
+            
+            main_panel_bounds = rect_drop_top(main_panel_bounds, TITLE_HEIGHT); 
+            
+            tab_switcher_bounds = rect_take_left(tab_switcher_bounds, 100.0f);
+            if(button(tab_switcher_bounds, StringLit("Log"), 444, graphics_ctx, ui_state, &frame_io))
+            {
+                ui_state->show_error_log = !ui_state->show_error_log;
+            }
+            
+            if(!ui_state->show_error_log)
+            {
+                Rect left_panel_bounds = rect_shrinked(rect_take_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
+                Rect right_panel_bounds = rect_shrinked(rect_drop_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
+                
+                plugin_parameter_panel(descriptor, current_parameter_values, left_panel_bounds, frame_io, ui_state, graphics_ctx, parameters_were_tweaked);
+                
+                draw_visualization_panel(frame_io, ui_state, right_panel_bounds, graphics_ctx);
+            }
+            else
+            {
+                
+                rect_shrink(&main_panel_bounds, 5.0f, 5.0f);
+                draw_compiler_log(error_log, main_panel_bounds, graphics_ctx);
+            }
+        } break;
+        
+        case Asset_File_State_FAILED :
+        {
+            draw_compiler_log(error_log, main_panel_bounds, graphics_ctx);
+            
+        }break;
+    }
+    
+}
+
+void plugin_parameter_panel(Plugin_Descriptor *descriptor, 
+                            Plugin_Parameter_Value* current_parameter_values,
+                            Rect bounds, 
+                            IO frame_io, UI_State *ui_state, Graphics_Context *graphics_ctx,
+                            bool *parameters_were_tweaked)
+{
+    draw_rectangle(bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    
+    Rect parameter_bounds = bounds;
+    parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
+    
+    for(u32 parameter_idx = 0; parameter_idx < descriptor->num_parameters && descriptor->error.flag == Compiler_Success; parameter_idx++)
+    {
+        auto *current_parameter_value = &current_parameter_values[parameter_idx];
+        auto *parameter_descriptor = &descriptor->parameters[parameter_idx];
+        
+        parameter_slider(parameter_idx, parameter_descriptor, current_parameter_value, parameter_bounds, ui_state, frame_io, parameters_were_tweaked, graphics_ctx);
+        
+        parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN * 2;
+    }
+}
+
+void draw_visualization_panel(IO frame_io, 
+                              UI_State *ui_state, 
+                              Rect bounds, 
+                              Graphics_Context *graphics_ctx)
+{
+    draw_rectangle(bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    
+    
+    Rect ir_panel_bounds;
+    Rect fft_panel_bounds;
+    rect_split_vert_middle(bounds, &ir_panel_bounds, &fft_panel_bounds);
+    
+    //~IR
+    
+    draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
+    draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &graphics_ctx->atlas); 
+    
+    Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
+    Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
+    ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
+    
+    graphics_ctx->ir.zoom_state = simple_slider(graphics_ctx->ir.zoom_state, 600, zoom_slider_bounds, frame_io, ui_state, graphics_ctx);
+    
+    draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    graphics_ctx->ir.bounds = ir_graph_bounds;
+    
+    
+    //~fft
+    draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
+    Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
+    
+    draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &graphics_ctx->atlas); 
+    draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    graphics_ctx->fft.bounds = fft_graph_bounds;
+    
+}
+
+void draw_compiler_log(Compiler_Gui_Log *error_log, 
+                       Rect bounds, 
+                       Graphics_Context *graphics_ctx)
+{
+    
+    draw_rectangle(bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
+    
+    Rect message_bounds = rect_take_top(bounds, TITLE_HEIGHT);
+    
+    for(i32 i = 0; i < error_log->message_count; i++)
+    {
+        draw_text(error_log->messages[i], message_bounds, Color_Front, &graphics_ctx->atlas);
+        message_bounds = rect_move_by(message_bounds, {0.0f, TITLE_HEIGHT});
+    }
+}
+
+void audio_file_footer(Asset_File_State audio_file_state, 
+                       Rect footer_bounds, 
+                       IO frame_io,
+                       UI_State *ui_state,
+                       Graphics_Context *graphics_ctx,
+                       bool *clicked_on_load,
+                       bool *clicked_on_play,
+                       bool *clicked_on_loop)
+{
     switch(audio_file_state)
     {
         case Asset_File_State_IN_USE :
@@ -540,22 +706,12 @@ void frame(Plugin_Descriptor& descriptor,
             Rect play_stop_bounds = rect_take_left(play_loop_bounds, TITLE_HEIGHT);
             Rect loop_bounds = rect_move_by(play_stop_bounds, {TITLE_HEIGHT, 0.0f});
             
-            if(button(play_stop_bounds, StringLit("Play/Stop"), 256, graphics_ctx, &ui_state, &frame_io))
-            {
-                if(audio_ctx->audio_file_play){
-                    audio_ctx->audio_file_play = 0;
-                    MemoryBarrier();
-                    audio_ctx->audio_file->read_cursor = 0;
-                }
-                else{
-                    audio_ctx->audio_file_play = 1;
-                    MemoryBarrier();
-                }
-            }
-            if(button(loop_bounds, StringLit("Loop"), 257, graphics_ctx, &ui_state, &frame_io))
-            {
-                audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
-            }
+            if(button(play_stop_bounds, StringLit("Play/Stop"), 256, graphics_ctx, ui_state, &frame_io))
+                *clicked_on_play = true;
+            
+            if(button(loop_bounds, StringLit("Loop"), 257, graphics_ctx, ui_state, &frame_io))
+                *clicked_on_loop = true;
+            
             
             draw_text(StringLit("todo : draw filename, waveform idk"), footer_bounds, Color_Front, &graphics_ctx->atlas);
             
@@ -586,10 +742,9 @@ void frame(Plugin_Descriptor& descriptor,
     }
     Rect load_button_bounds = rect_take_left(footer_bounds, TITLE_HEIGHT * 3);
     footer_bounds = rect_drop_left(footer_bounds, TITLE_HEIGHT * 3);
-    if(button(load_button_bounds, StringLit("Load"), 1024, graphics_ctx, &ui_state, &frame_io))
-    {
-        *load_wav_was_clicked = true;
-    }
+    
+    if(button(load_button_bounds, StringLit("Load"), 1024, graphics_ctx, ui_state, &frame_io))
+        *clicked_on_load = true;
+    
     draw_rectangle(footer_bounds, 1.0f, Color_Front, &graphics_ctx->atlas);
 }
-

@@ -36,7 +36,6 @@ State initialize_state(const Parameters& param,
 {
     State initial_state = {0.0f};
     return initial_state;
-    nocheckin();
 }
 
 void audio_callback(const Parameters& param,

@@ -114,7 +114,7 @@ function void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_
 
 function void draw_rectangle(Rect bounds, real32 width, Color color, Graphics_Context_Atlas *graphics_ctx)
 {
-    bounds = rect_remove_padding(bounds, width / 2, width / 2);
+    bounds = rect_shrinked(bounds, width / 2, width / 2);
     auto top_left = bounds.origin;
     auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
     auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};

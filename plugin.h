@@ -3,10 +3,11 @@
 #ifndef DESCRIPTOR_H
 #define DESCRIPTOR_H
 
+//TODO move to memory
 #define word_size (sizeof(void*))
 #define align(n) ((n + word_size - 1) & ~(word_size - 1))
 
-internal void *plugin_allocate(Plugin_Allocator *allocator, u64 size)
+internal void *plugin_allocate(Arena *allocator, u64 size)
 {
     char *begin = allocator->current;
     u64 aligned = align(size);
@@ -112,7 +113,7 @@ function u32 enum_value_to_index(Parameter_Enum& parameter, i64 value)
 typedef struct {
     const char* source_filename;
     Plugin *handle;
-    Plugin_Allocator *allocator;
+    Arena *allocator;
     void *clang_ctx;
     
     Asset_File_State *stage;
@@ -123,8 +124,8 @@ struct Plugin_Reloading_Manager
 {
     Plugin handle_a;
     Plugin handle_b;
-    Plugin_Allocator allocator_a;
-    Plugin_Allocator allocator_b;
+    Arena allocator_a;
+    Arena allocator_b;
     
     Plugin *front_handle;
     Plugin *back_handle;
@@ -132,8 +133,8 @@ struct Plugin_Reloading_Manager
     Plugin *front_handle_audio_side;
     Plugin *back_handle_audio_side;
     
-    Plugin_Allocator *front_allocator;
-    Plugin_Allocator *back_allocator;
+    Arena *front_allocator;
+    Arena *back_allocator;
     
     Compiler_Thread_Param compiler_thread_param;
     HANDLE compiler_thread_handle;

@@ -193,7 +193,7 @@ internal void rect_split_vert_middle(Rect in, Rect *out_top, Rect *out_bottom)
     *out_bottom = in;
 }
 
-internal Rect rect_remove_padding(Rect rect, real32 padding_x, real32 padding_y)
+internal Rect rect_shrinked(Rect rect, real32 padding_x, real32 padding_y)
 {
     return Rect{
         {
@@ -205,6 +205,11 @@ internal Rect rect_remove_padding(Rect rect, real32 padding_x, real32 padding_y)
             octave_max(rect.dim.y - padding_y * 2, 0.0f)
         }
     };
+}
+
+internal void rect_shrink(Rect *rect, real32 padding_x, real32 padding_y)
+{
+    *rect = rect_shrinked(*rect, padding_x, padding_y);
 }
 
 internal bool float_cmp(real32 a, real32 b, real32 epsilon)

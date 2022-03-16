@@ -60,7 +60,7 @@ bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b)
 }
 
 Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_fields_by_plugin, u32 buffer_slot_count,
-                                                                       Plugin_Allocator *allocator)
+                                                                       Arena *allocator)
 {
     return {
         .buffer = (Plugin_Parameter_Value*)plugin_allocate(allocator, sizeof(Plugin_Parameter_Value) * buffer_slot_count * num_fields_by_plugin),
@@ -153,10 +153,10 @@ extern try_compile_t try_compile;
 #endif
 #ifdef RELEASE
 void release_jit(Plugin *plugin);
-Plugin try_compile(const char* filename, void* clang_ctx_ptr, Plugin_Allocator *allocator);
+Plugin try_compile(const char* filename, void* clang_ctx_ptr, Arena *allocator);
 #endif
 
-void plugin_reset_handle(Plugin *handle, Plugin_Allocator *allocator)
+void plugin_reset_handle(Plugin *handle, Arena *allocator)
 {
     handle->parameter_values_audio_side = nullptr;
     handle->parameter_values_ui_side = nullptr;
@@ -195,9 +195,9 @@ DWORD compiler_thread_proc(void *void_param)
 
 
 
-Plugin_Allocator plugin_allocator_init(u64 size)
+Arena plugin_allocator_init(u64 size)
 {
-    Plugin_Allocator allocator = {
+    Arena allocator = {
         .base = (char*)m_allocate(size, "plugin : allocator"),
         .current = allocator.base,
         .capacity = size,
@@ -285,7 +285,7 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
 
 
 void plugin_populate_from_descriptor(Plugin *handle, 
-                                     Plugin_Allocator *allocator, 
+                                     Arena *allocator, 
                                      Audio_Parameters audio_parameters)
 {
     handle->parameter_values_audio_side = (Plugin_Parameter_Value*)plugin_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
@@ -408,7 +408,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
         m->back_handle = m->front_handle;
         m->front_handle = temp;
         
-        Plugin_Allocator *temp_alloc = m->back_allocator;
+        Arena *temp_alloc = m->back_allocator;
         m->back_allocator = m->front_allocator;
         m->front_allocator = temp_alloc;
         

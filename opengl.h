@@ -824,7 +824,7 @@ void opengl_render_atlas(OpenGL_Context_Atlas* opengl_ctx,
 
 void opengl_render_ir(OpenGL_Context_IR* opengl_ctx, Graphics_Context_IR* graphics_ctx, real32 *projection_matrix)
 {
-    Rect bounds = rect_remove_padding(graphics_ctx->bounds, 1.0f, 1.0f);
+    Rect bounds = rect_shrinked(graphics_ctx->bounds, 1.0f, 1.0f);
     
     Vec2 top_left = bounds.origin;
     Vec2 top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
@@ -918,7 +918,7 @@ void opengl_render_ir(OpenGL_Context_IR* opengl_ctx, Graphics_Context_IR* graphi
 
 void opengl_render_fft(OpenGL_Context_FFT* opengl_ctx, Graphics_Context_FFT* graphics_ctx, real32 *projection_matrix)
 {
-    Rect bounds = rect_remove_padding(graphics_ctx->bounds, 1.0f, 1.0f);
+    Rect bounds = rect_shrinked(graphics_ctx->bounds, 1.0f, 1.0f);
     
     Vec2 top_left = bounds.origin;
     Vec2 top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };

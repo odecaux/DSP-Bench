@@ -11,7 +11,7 @@ void* create_clang_context();
 #ifdef DEBUG 
 extern "C" __declspec(dllexport)
 #endif
-Plugin try_compile(const char* filename, void* clang_ctx_ptr, Plugin_Allocator *allocator);
+Plugin try_compile(const char* filename, void* clang_ctx_ptr, Arena *allocator);
 
 #ifdef DEBUG
 extern "C" __declspec(dllexport) 
