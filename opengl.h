@@ -98,97 +98,14 @@ typedef struct {
 #define WGL_CONTEXT_PROFILE_MASK_ARB      0x9126
 #define WGL_CONTEXT_CORE_PROFILE_BIT_ARB  0x00000001
 
-typedef GLuint(*glCreateProgram_t) (void);
-static glCreateProgram_t glCreateProgram = nullptr;
-
-typedef GLuint(*glCreateShader_t)(GLenum);
-static glCreateShader_t glCreateShader = nullptr;
-
-typedef void (*glDeleteProgram_t) (GLuint program);
-static glDeleteProgram_t  glDeleteProgram = nullptr;
-
-typedef void (*glDeleteShader_t) (GLuint shader);
-static glDeleteShader_t  glDeleteShader = nullptr;
-
-typedef void (*glCompileShader_t) (GLuint shader);
-static glCompileShader_t  glCompileShader = nullptr;
-
-typedef void (*glLinkProgram_t) (GLuint program);
-static glLinkProgram_t  glLinkProgram = nullptr;
-
-typedef void (*glGenBuffers_t) (GLsizei n, GLuint *buffers);
-static glGenBuffers_t  glGenBuffers = nullptr;
-
-typedef void (*glBindBuffer_t) (GLenum target, GLuint buffer);
-static glBindBuffer_t  glBindBuffer = nullptr;
-
-typedef void (*glShaderSource_t)(GLuint shader, GLsizei count, const char *const* string, const GLint *length);
-static glShaderSource_t glShaderSource = nullptr;
-
-typedef void (*glBufferData_t) (GLenum target, i64 size, const void *data, GLenum usage);
-static glBufferData_t  glBufferData = nullptr;
-
-typedef void(*glAttachShader_t) (GLuint program, GLuint shader);
-static glAttachShader_t glAttachShader = nullptr;
-
-typedef void (*glGenVertexArrays_t) (GLsizei n, GLuint *arrays);
-static glGenVertexArrays_t glGenVertexArrays = nullptr;
-
-typedef void (*glBindVertexArray_t) (GLuint array);
-static glBindVertexArray_t glBindVertexArray = nullptr;
-
-typedef void (*glUseProgram_t) (GLuint program);
-static glUseProgram_t glUseProgram = nullptr;
-
-typedef void (*glVertexAttribPointer_t) (GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
-static glVertexAttribPointer_t glVertexAttribPointer = nullptr;
-
-typedef void (*glEnableVertexAttribArray_t) (GLuint index);
-static glEnableVertexAttribArray_t glEnableVertexAttribArray = nullptr;
-
-typedef GLint (*glGetUniformLocation_t)(GLuint program, const char *name);
-static glGetUniformLocation_t glGetUniformLocation = nullptr;
-
-typedef void (*glUniformMatrix4fv_t) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-static glUniformMatrix4fv_t glUniformMatrix4fv = nullptr;
+#define OPENGL_PROC(ret, name, param)  typedef ret(* name ## _t)param
+#include "opengl_proc.inc"
+#undef OPENGL_PROC
 
 
-typedef void (*glGetShaderiv_t)(GLuint shader, GLenum pname, GLint *params);
-static glGetShaderiv_t glGetShaderiv = nullptr;
-
-
-typedef void (*glGetProgramiv_t)(GLuint program, GLenum pname, GLint *params);
-static glGetProgramiv_t glGetProgramiv = nullptr;
-
-typedef BOOL(*wglSwapIntervalEXT_t)(int interval);
-static wglSwapIntervalEXT_t wglSwapIntervalEXT = nullptr;
-
-typedef int (*wglGetSwapIntervalEXT_t)(void);
-static wglGetSwapIntervalEXT_t wglGetSwapIntervalEXT = nullptr;
-
-typedef GLint (*glGetAttribLocation_t)(GLuint program, const char *name);
-static glGetAttribLocation_t glGetAttribLocation = nullptr;
-
-typedef void (*glUniform1i_t) (GLint location, GLint v0);
-static glUniform1i_t glUniform1i = nullptr; 
-
-typedef void (*glGetProgramInfoLog_t) (GLuint program, GLsizei bufSize, GLsizei *length, char*infoLog);
-static glGetProgramInfoLog_t glGetProgramInfoLog = nullptr;
-
-typedef void (*glTexBuffer_t)(GLenum target, GLenum internalformat, GLuint buffer);
-static glTexBuffer_t glTexBuffer = nullptr;
-
-typedef void (*glBufferSubData_t)(GLenum target, i32 *offset, i64 size, const void *data);
-static glBufferSubData_t glBufferSubData = nullptr;
-
-typedef void (*glActiveTexture_t)(GLenum texture);
-static glActiveTexture_t glActiveTexture = nullptr;
-
-typedef HGLRC (*wglCreateContextAttribsARB_t) (HDC hDC, HGLRC hShareContext, const int *attribList);
-typedef  void (*glTexBufferRange_t)(GLenum target​, GLenum internalFormat​, GLuint buffer​, i64 offset​, i64 size​);
-static glTexBufferRange_t glTexBufferRange = nullptr;
-
-#define LOAD_GL(function_name) function_name = (function_name##_t) wglGetProcAddress(#function_name); if(!function_name) { printf("failed to load" #function_name "\n"); return false; }
+#define OPENGL_PROC(ret, name, param)  static name ## _t name = nullptr 
+#include "opengl_proc.inc"
+#undef OPENGL_PROC
 
 GLenum opengl_check_error_(const char *file, int line)
 {
@@ -214,35 +131,11 @@ GLenum opengl_check_error_(const char *file, int line)
 
 bool load_opengl_functions()
 {
-    LOAD_GL(glEnableVertexAttribArray);
-    LOAD_GL(glCreateProgram);
-    LOAD_GL(glCreateShader);
-    LOAD_GL(glDeleteProgram);
-    LOAD_GL(glDeleteShader);
-    LOAD_GL(glCompileShader);
-    LOAD_GL(glLinkProgram);
-    LOAD_GL(glGenBuffers);
-    LOAD_GL(glBindBuffer);
-    LOAD_GL(glShaderSource);
-    LOAD_GL(glBufferData);
-    LOAD_GL(glAttachShader);
-    LOAD_GL(glGenVertexArrays);
-    LOAD_GL(glBindVertexArray);
-    LOAD_GL(glUseProgram);
-    LOAD_GL(glVertexAttribPointer);
-    LOAD_GL(glGetUniformLocation);
-    LOAD_GL(glUniformMatrix4fv);
-    LOAD_GL(glGetShaderiv );
-    LOAD_GL(glGetProgramiv);
-    LOAD_GL(wglSwapIntervalEXT);
-    LOAD_GL(wglGetSwapIntervalEXT);
-    LOAD_GL(glGetAttribLocation);
-    LOAD_GL(glUniform1i);
-    LOAD_GL(glGetProgramInfoLog);
-    LOAD_GL(glBufferSubData);
-    LOAD_GL(glTexBuffer);
-    LOAD_GL(glActiveTexture);
-    LOAD_GL(glTexBufferRange);
+    
+#define OPENGL_PROC(ret, function_name, param)  function_name = (function_name##_t) wglGetProcAddress(#function_name); if(!function_name) { printf("failed to load" #function_name "\n"); return false; }
+#include "opengl_proc.inc"
+#undef OPENGL_PROC
+    
     return true;
 }
 
