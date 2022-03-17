@@ -23,34 +23,6 @@
 #include "compiler.h"
 
 
-#ifdef DEBUG
-
-
-typedef float*(*plugin_allocate_buffer_t)(int num_sample, Arena* allocator);
-typedef float **(*plugin_allocate_buffers_t)(int num_samples, int num_channels, Arena* allocator);
-typedef void *(*plugin_allocate_bytes_t)(int num_bytes, Arena* allocator);
-
-static plugin_allocate_buffer_t plugin_allocate_buffer = nullptr;
-static plugin_allocate_buffers_t plugin_allocate_buffers = nullptr;
-static plugin_allocate_bytes_t plugin_allocate_bytes = nullptr;
-
-extern "C" __declspec(dllexport)
-void procedure_loader(void *plugin_allocate_buffer_proc, void *plugin_allocate_buffers_proc, void *plugin_allocate_bytes_proc)
-{
-    plugin_allocate_buffer = (plugin_allocate_buffer_t) plugin_allocate_buffer_proc;  
-    plugin_allocate_buffers = (plugin_allocate_buffers_t) plugin_allocate_buffers_proc;
-    plugin_allocate_bytes = (plugin_allocate_bytes_t) plugin_allocate_bytes_proc;
-}
-
-#endif 
-#ifdef RELEASE
-
-float *plugin_allocate_buffer(int num_sample, Arena* allocator);
-float **plugin_allocate_buffers(int num_samples, int num_channels, Arena* allocator);
-void *plugin_allocate_bytes(int num_bytes, Arena* allocator);
-
-#endif 
-
 float *allocate_buffer(int num_sample, void* allocator){
     return plugin_allocate_buffer(num_sample, (Arena*)allocator);
 }

@@ -4,6 +4,28 @@
 #define DESCRIPTOR_H
 
 
+
+internal float *plugin_allocate_buffer(int num_sample, Arena* allocator)
+{
+    return (real32*)arena_allocate(allocator, sizeof(real32) * num_sample);
+}
+
+internal float **plugin_allocate_buffers(int num_samples, int num_channels, Arena* allocator) 
+{
+    real32** channels = (real32**) arena_allocate(allocator, sizeof(real32*) * num_channels);
+    for(int i = 0; i < num_channels; i++)
+    {
+        channels[i] = (real32*) arena_allocate(allocator, sizeof(real32) * num_samples);
+    }
+    return channels;
+}
+
+internal void *plugin_allocate_bytes(int num_bytes, Arena* allocator)
+{
+    return arena_allocate(allocator, num_bytes);
+}
+
+
 void plugin_reset_handle(Plugin *plugin);
 
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b);

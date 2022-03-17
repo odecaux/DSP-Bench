@@ -27,13 +27,11 @@ typedef Plugin(*try_compile_t)(const char*, const void*, Arena *allocator);
 typedef void(*release_jit_t)(Plugin*);
 typedef void*(*create_clang_context_t)();
 typedef void(*release_clang_context_t)(void* clang_context_void);
-typedef void (*procedure_loader_t)(void *plugin_allocate_buffer_proc, void *plugin_allocate_buffers_proc, void *plugin_allocate_bytes_proc);
 
 try_compile_t try_compile = nullptr;
 release_jit_t release_jit = nullptr;
 create_clang_context_t create_clang_context = nullptr;
 release_clang_context_t release_clang_context = nullptr; 
-procedure_loader_t procedure_loader = nullptr;
 
 typedef void(*frame_t)(
                        Plugin_Descriptor&,
@@ -48,10 +46,6 @@ typedef void(*frame_t)(
                        bool *load_plugin_was_clicked);
 
 frame_t frame = nullptr;
-
-float *plugin_allocate_buffer(int num_sample, Arena* allocator);
-float **plugin_allocate_buffers(int num_samples, int num_channels, Arena* allocator);
-void *plugin_allocate_bytes(int num_bytes, Arena* allocator);
 
 #endif
 #ifdef RELEASE
@@ -206,9 +200,6 @@ i32 main(i32 argc, char** argv)
     release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
     create_clang_context = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context");
     release_clang_context = (release_clang_context_t)GetProcAddress(compiler_dll, "release_clang_context");
-    
-    procedure_loader = (procedure_loader_t)GetProcAddress(compiler_dll, "procedure_loader");
-    procedure_loader(plugin_allocate_buffer, plugin_allocate_buffers, plugin_allocate_bytes);
     
 #endif
     
