@@ -12,10 +12,10 @@ enum random_enum{
 
 
 struct Parameters{
-    //INT_ARAM(0, 4) test_int_param;
-    FLOAT_ARAM(0.0f, 0.5f) gain;
-    FLOAT_ARAM(500.0f, 20000.0f) frequency;
-    ENUM_ARAM(random_enum) test_enum_param;  
+    //INT_PARAM(0, 4) test_int_param;
+    FLOAT_PARAM(0.0f, 0.5f) gain;
+    FLOAT_PARAM(500.0f, 20000.0f) frequency;
+    ENUM_PARAM(random_enum) test_enum_param;  
 };
 
 struct State{

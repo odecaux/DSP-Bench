@@ -12,6 +12,23 @@
 
 #include "hardcoded_values.h"
 
+
+float *plugin_allocate_buffer(int num_sample, Arena* allocator){
+    return (real32*)arena_allocate(allocator, sizeof(real32) * num_sample);
+}
+float **plugin_allocate_buffers(int num_samples, int num_channels, Arena* allocator) {
+    real32** channels = (real32**) arena_allocate(allocator, sizeof(real32*) * num_channels);
+    for(int i = 0; i < num_channels; i++)
+    {
+        channels[i] = (real32*) arena_allocate(allocator, sizeof(real32) * num_samples);
+    }
+    return channels;
+}
+void *plugin_allocate_bytes(int num_bytes, Arena* allocator){
+    return arena_allocate(allocator, num_bytes);
+}
+
+
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b)
 {
     if(a->parameters_struct.size            != b->parameters_struct.size) return false;
@@ -63,7 +80,7 @@ Plugin_Parameters_Ring_Buffer plugin_parameters_ring_buffer_initialize(u32 num_f
                                                                        Arena *allocator)
 {
     return {
-        .buffer = (Plugin_Parameter_Value*)plugin_allocate(allocator, sizeof(Plugin_Parameter_Value) * buffer_slot_count * num_fields_by_plugin),
+        .buffer = (Plugin_Parameter_Value*)arena_allocate(allocator, sizeof(Plugin_Parameter_Value) * buffer_slot_count * num_fields_by_plugin),
         .head = nullptr,
         .writer_idx = 0,
         .buffer_size = buffer_slot_count * num_fields_by_plugin,
@@ -195,16 +212,6 @@ DWORD compiler_thread_proc(void *void_param)
 
 
 
-Arena plugin_allocator_init(u64 size)
-{
-    Arena allocator = {
-        .base = (char*)m_allocate(size, "plugin : allocator"),
-        .current = allocator.base,
-        .capacity = size,
-    };
-    return allocator;
-}
-
 
 HANDLE launch_compiler_thread(Compiler_Thread_Param *thread_parameters)
 {
@@ -257,8 +264,8 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
                                    Asset_File_State *plugin_state)
 {
     *m = {
-        .allocator_a = plugin_allocator_init(1024 * 1024),
-        .allocator_b = plugin_allocator_init(1024 * 1204),
+        .allocator_a = allocator_init(100 * 1024),
+        .allocator_b = allocator_init(100 * 1204),
         
         .front_handle = &m->handle_a,
         .back_handle = &m->handle_b,
@@ -290,19 +297,19 @@ void plugin_populate_from_descriptor(Plugin *handle,
                                      Arena *allocator, 
                                      Audio_Parameters audio_parameters)
 {
-    handle->parameter_values_audio_side = (Plugin_Parameter_Value*)plugin_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
+    handle->parameter_values_audio_side = (Plugin_Parameter_Value*)arena_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
     
-    handle->parameter_values_ui_side = (Plugin_Parameter_Value*)plugin_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
+    handle->parameter_values_ui_side = (Plugin_Parameter_Value*)arena_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
     
-    handle->parameters_holder = (char*) plugin_allocate(allocator, handle->descriptor.parameters_struct.size);
-    handle->state_holder = (char*) plugin_allocate(allocator, handle->descriptor.state_struct.size);
+    handle->parameters_holder = (char*) arena_allocate(allocator, handle->descriptor.parameters_struct.size);
+    handle->state_holder = (char*) arena_allocate(allocator, handle->descriptor.state_struct.size);
     
     handle->default_parameters_f(handle->parameters_holder);
     handle->initialize_state_f(handle->parameters_holder, 
                                handle->state_holder, 
                                audio_parameters.num_channels,
                                audio_parameters.sample_rate, 
-                               nullptr);
+                               allocator);
     
     plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_ui_side, handle->parameters_holder);
     plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_audio_side, handle->parameters_holder);

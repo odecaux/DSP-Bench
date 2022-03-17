@@ -10,7 +10,6 @@ For now there are two heavy dependencies : clang/llvm and Intel Performance Prim
 Core: \
 \
 Refactor UI function
-Plugin should allocate memory \
 FFT processing available to the plugins \
 \
 Optional: \
@@ -30,6 +29,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+Plugin can allocate memory \
 Panel toggle : compiler log and IR \
 Rewrote the error reporting system \
 Plugin allocator \

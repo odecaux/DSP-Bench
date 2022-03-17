@@ -4,13 +4,13 @@
 #define PLUGIN_HEADER_H
 
 
-#define INT_ARAM(min_value, max_value) __attribute__(( annotate( "Int " #min_value " " #max_value ) )) int
+#define INT_PARAM(min_value, max_value) __attribute__(( annotate( "Int " #min_value " " #max_value ) )) int
 
-#define FLOAT_ARAM(min_value, max_value) __attribute__(( annotate( "Float " #min_value " " #max_value ) )) float
+#define FLOAT_PARAM(min_value, max_value) __attribute__(( annotate( "Float " #min_value " " #max_value ) )) float
 
-#define FLOAT_ARAM_LOG(min_value, max_value) __attribute__(( annotate( "Float " #min_value " " #max_value " " "log") )) float
+#define FLOAT_PARAM_LOG(min_value, max_value) __attribute__(( annotate( "Float " #min_value " " #max_value " " "log") )) float
 
-#define ENUM_ARAM(enum_name)  __attribute__(( annotate( "Enum" ) )) enum_name
+#define ENUM_PARAM(enum_name)  __attribute__(( annotate( "Enum" ) )) enum_name
 
 
 

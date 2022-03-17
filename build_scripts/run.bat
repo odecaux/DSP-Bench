@@ -1,4 +1,4 @@
 @echo off
 pushd build 
-DSP_bench.exe sine_test.cpp
+DSP_bench.exe buffer_test.cpp
 popd

@@ -71,29 +71,33 @@ struct Arena{
 #define word_size (sizeof(void*))
 #define align(n) ((n + word_size - 1) & ~(word_size - 1))
 
-internal void *plugin_allocate(Arena *allocator, u64 size)
+internal Arena allocator_init(u64 size)
 {
-    char *begin = allocator->current;
-    u64 aligned = align(size);
-    if(begin + aligned <= allocator->base + allocator->capacity)
-    {
-        allocator->current += aligned;
-        return begin;
-    }
-    else return nullptr;
+    Arena allocator = {
+        .base = (char*)m_allocate(size, "plugin : allocator"),
+        .current = allocator.base,
+        .capacity = size,
+    };
+    return allocator;
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
+internal void *arena_allocate(Arena *allocator, u64 size)
+{
+    char *begin = allocator->current;
+    u64 aligned = align(size);
+    
+    if(begin + aligned <= allocator->base + allocator->capacity)
+    {
+        allocator->current += aligned;
+        
+        printf("%f\n", float(allocator->current - allocator->base) / float(allocator->capacity));
+        return begin;
+    }
+    else{
+        ensure(false);
+        return nullptr;
+    } 
+}
 
 #endif //MEMORY_H

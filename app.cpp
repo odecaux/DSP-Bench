@@ -131,7 +131,8 @@ void compute_IR(Plugin& handle,
                 real32** IR_buffer, 
                 u32 IR_length, 
                 Audio_Parameters& audio_parameters,
-                Plugin_Parameter_Value* current_parameters_values)
+                Plugin_Parameter_Value* current_parameters_values,
+                Arena *allocator)
 {
     for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
     {
@@ -151,7 +152,7 @@ void compute_IR(Plugin& handle,
                               IR_state_holder, 
                               audio_parameters.num_channels, 
                               audio_parameters.sample_rate, 
-                              nullptr);
+                              allocator);
     
     handle.audio_callback_f(IR_parameters_holder, 
                             IR_state_holder, 

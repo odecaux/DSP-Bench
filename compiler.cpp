@@ -22,6 +22,46 @@
 #include "plugin.h"
 #include "compiler.h"
 
+
+#ifdef DEBUG
+
+
+typedef float*(*plugin_allocate_buffer_t)(int num_sample, Arena* allocator);
+typedef float **(*plugin_allocate_buffers_t)(int num_samples, int num_channels, Arena* allocator);
+typedef void *(*plugin_allocate_bytes_t)(int num_bytes, Arena* allocator);
+
+static plugin_allocate_buffer_t plugin_allocate_buffer = nullptr;
+static plugin_allocate_buffers_t plugin_allocate_buffers = nullptr;
+static plugin_allocate_bytes_t plugin_allocate_bytes = nullptr;
+
+extern "C" __declspec(dllexport)
+void procedure_loader(void *plugin_allocate_buffer_proc, void *plugin_allocate_buffers_proc, void *plugin_allocate_bytes_proc)
+{
+    plugin_allocate_buffer = (plugin_allocate_buffer_t) plugin_allocate_buffer_proc;  
+    plugin_allocate_buffers = (plugin_allocate_buffers_t) plugin_allocate_buffers_proc;
+    plugin_allocate_bytes = (plugin_allocate_bytes_t) plugin_allocate_bytes_proc;
+}
+
+#endif 
+#ifdef RELEASE
+
+float *plugin_allocate_buffer(int num_sample, Arena* allocator);
+float **plugin_allocate_buffers(int num_samples, int num_channels, Arena* allocator);
+void *plugin_allocate_bytes(int num_bytes, Arena* allocator);
+
+#endif 
+
+float *allocate_buffer(int num_sample, void* allocator){
+    return plugin_allocate_buffer(num_sample, (Arena*)allocator);
+}
+float **allocate_buffers(int num_samples, int num_channels, void* allocator){
+    return plugin_allocate_buffers(num_samples, num_channels, (Arena*)allocator);;
+}
+void *allocate_bytes(int num_bytes, void* allocator){
+    return plugin_allocate_bytes(num_bytes, (Arena*) allocator);
+}
+
+
 struct Clang_Context {
     llvm::LLVMContext llvm_context;
 };
@@ -51,7 +91,7 @@ internal String allocate_and_copy_llvm_stringref(Arena *allocator, llvm::StringR
 {
     String new_string;
     new_string.size = llvm_stringref.size();
-    new_string.str = (char *)plugin_allocate(allocator, sizeof(char) * llvm_stringref.size()); 
+    new_string.str = (char *)arena_allocate(allocator, sizeof(char) * llvm_stringref.size()); 
     strncpy(new_string.str, llvm_stringref.data(), new_string.size);
     return new_string;
 }
@@ -61,7 +101,7 @@ internal String allocate_and_copy_std_string(Arena *allocator, const std::string
 {
     String new_string;
     new_string.size = std_string.size();
-    new_string.str = (char *)plugin_allocate(allocator, sizeof(char) * std_string.size()); 
+    new_string.str = (char *)arena_allocate(allocator, sizeof(char) * std_string.size()); 
     strncpy(new_string.str, std_string.data(), new_string.size);
     return new_string;
 }
@@ -309,7 +349,6 @@ Clang_Context* create_clang_context_impl()
     llvm::sys::DynamicLibrary::AddSymbol("cosh_32", oct_cosh_32);
     llvm::sys::DynamicLibrary::AddSymbol("tanh_32", oct_tanh_32);
     
-    
     llvm::sys::DynamicLibrary::AddSymbol("sin_64", oct_sin_64);
     llvm::sys::DynamicLibrary::AddSymbol("cos_64", oct_cos_64);
     llvm::sys::DynamicLibrary::AddSymbol("tan_64", oct_tan_64);
@@ -329,6 +368,10 @@ Clang_Context* create_clang_context_impl()
     llvm::sys::DynamicLibrary::AddSymbol("sinh_64", oct_sinh_64);
     llvm::sys::DynamicLibrary::AddSymbol("cosh_64", oct_cosh_64);
     llvm::sys::DynamicLibrary::AddSymbol("tanh_64", oct_tanh_64);
+    
+    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffer", allocate_buffer);
+    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffers", allocate_buffers);
+    llvm::sys::DynamicLibrary::AddSymbol("allocate_bytes", allocate_bytes);
     
     auto& Registry = *llvm::PassRegistry::getPassRegistry();
     llvm::initializeCore(Registry);
@@ -471,7 +514,7 @@ Plugin try_compile_impl(const char* filename, Clang_Context* clang_ctx, Arena *a
     if(diagnostics.getNumErrors() != 0) 
     {
         plugin.clang_error_log = {
-            (Clang_Error*)plugin_allocate(allocator, sizeof(Clang_Error) * diagnostics.getNumErrors()),
+            (Clang_Error*)arena_allocate(allocator, sizeof(Clang_Error) * diagnostics.getNumErrors()),
             0,
             diagnostics.getNumErrors()
         };
@@ -849,7 +892,7 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
     }
     
     bool there_was_an_error = false;
-    auto *anotated_parameters = (Plugin_Descriptor_Parameter*)plugin_allocate(allocator, sizeof(Plugin_Descriptor_Parameter) * num_annotated_parameters);
+    auto *anotated_parameters = (Plugin_Descriptor_Parameter*)arena_allocate(allocator, sizeof(Plugin_Descriptor_Parameter) * num_annotated_parameters);
     u32 anotated_parameter_idx = 0;
     for(const auto* field : parameters_struct_decl->fields())
     {
@@ -990,7 +1033,7 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
                     for(auto _: maybe_enum->getDecl()->enumerators())
                         enum_param.num_entries++;
                     
-                    enum_param.entries = (Parameter_Enum_Entry*)plugin_allocate(allocator, sizeof(Parameter_Enum_Entry) * enum_param.num_entries);
+                    enum_param.entries = (Parameter_Enum_Entry*)arena_allocate(allocator, sizeof(Parameter_Enum_Entry) * enum_param.num_entries);
                     
                     auto i = 0;
                     for(const auto *field : maybe_enum->getDecl()->enumerators())
@@ -1123,7 +1166,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
         ensure(diagnostics->getNumErrors() != 0);
         
         plugin->clang_error_log = {
-            (Clang_Error*)plugin_allocate(allocator, sizeof(Clang_Error) * diagnostics->getNumErrors()),
+            (Clang_Error*)arena_allocate(allocator, sizeof(Clang_Error) * diagnostics->getNumErrors()),
             0,
             diagnostics->getNumErrors()
         };

@@ -9,9 +9,9 @@ enum slope_type{
 
 
 struct Parameters{
-    FLOAT_ARAM(0.0f, 1.0f) initial_gain;
-    ENUM_ARAM(slope_type) slope;
-    FLOAT_ARAM(0.0f, 0.1f) step;
+    FLOAT_PARAM(0.0f, 1.0f) initial_gain;
+    ENUM_PARAM(slope_type) slope;
+    FLOAT_PARAM(0.0f, 0.1f) step;
 };
 
 struct State{

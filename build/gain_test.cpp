@@ -10,7 +10,7 @@ enum random_enum{
 
 
 struct Parameters{
-    FLOAT_ARAM(0.0f, 2.0f) gain;
+    FLOAT_PARAM(0.0f, 2.0f) gain;
 };
 
 struct State{

@@ -5,9 +5,9 @@
 #include "math.h"
 #include "string.h"
 
+#include <ippdefs.h>
 #include <ipp.h>
 #include <ipps.h>
-#include <ippdefs.h>
 
 #include "base.h"
 #include "structs.h"

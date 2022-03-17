@@ -27,12 +27,32 @@ typedef Plugin(*try_compile_t)(const char*, const void*, Arena *allocator);
 typedef void(*release_jit_t)(Plugin*);
 typedef void*(*create_clang_context_t)();
 typedef void(*release_clang_context_t)(void* clang_context_void);
+typedef void (*procedure_loader_t)(void *plugin_allocate_buffer_proc, void *plugin_allocate_buffers_proc, void *plugin_allocate_bytes_proc);
 
 try_compile_t try_compile = nullptr;
 release_jit_t release_jit = nullptr;
 create_clang_context_t create_clang_context = nullptr;
 release_clang_context_t release_clang_context = nullptr; 
+procedure_loader_t procedure_loader = nullptr;
+
+typedef void(*frame_t)(
+                       Plugin_Descriptor&,
+                       Graphics_Context *graphics_ctx, 
+                       UI_State& ui_state, 
+                       IO frame_io, 
+                       Plugin_Parameter_Value* current_parameter_values, 
+                       Audio_Thread_Context *audio_ctx, 
+                       Compiler_Gui_Log *error_log, 
+                       bool *parameters_were_tweaked, 
+                       bool *load_was_clicked, 
+                       bool *load_plugin_was_clicked);
+
 frame_t frame = nullptr;
+
+float *plugin_allocate_buffer(int num_sample, Arena* allocator);
+float **plugin_allocate_buffers(int num_samples, int num_channels, Arena* allocator);
+void *plugin_allocate_bytes(int num_bytes, Arena* allocator);
+
 #endif
 #ifdef RELEASE
 #include "compiler.h"
@@ -187,6 +207,9 @@ i32 main(i32 argc, char** argv)
     create_clang_context = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context");
     release_clang_context = (release_clang_context_t)GetProcAddress(compiler_dll, "release_clang_context");
     
+    procedure_loader = (procedure_loader_t)GetProcAddress(compiler_dll, "procedure_loader");
+    procedure_loader(plugin_allocate_buffer, plugin_allocate_buffers, plugin_allocate_bytes);
+    
 #endif
     
     void* clang_ctx = create_clang_context();
@@ -209,6 +232,8 @@ i32 main(i32 argc, char** argv)
         .fft_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH * 2, "graphics : fft buffer"),
         .fft_sample_count = IR_BUFFER_LENGTH * 2
     };
+    
+    Arena gui_IR_allocator = allocator_init(100 * 1204);
     
     FFT fft = fft_initialize(IR_BUFFER_LENGTH, audio_parameters.num_channels);
     
@@ -288,7 +313,10 @@ i32 main(i32 argc, char** argv)
         
         if(plugin_to_pull_ir_from)
         {
-            compute_IR(*plugin_to_pull_ir_from, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, plugin_to_pull_ir_from->parameter_values_ui_side);
+            
+            gui_IR_allocator.current = gui_IR_allocator.base;
+            
+            compute_IR(*plugin_to_pull_ir_from, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, plugin_to_pull_ir_from->parameter_values_ui_side, &gui_IR_allocator);
             fft_perform(&fft);
             
             memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
@@ -313,10 +341,12 @@ i32 main(i32 argc, char** argv)
         if(parameters_were_tweaked)
         {
             plugin_parameters_push_to_ring(plugin_reloading_manager.front_handle->ring, plugin_reloading_manager.front_handle->parameter_values_ui_side);
+            
+            gui_IR_allocator.current = gui_IR_allocator.base;
             compute_IR(*plugin_reloading_manager.front_handle, fft.IR_buffer, 
                        IR_BUFFER_LENGTH, 
                        audio_parameters, 
-                       plugin_reloading_manager.front_handle->parameter_values_ui_side);
+                       plugin_reloading_manager.front_handle->parameter_values_ui_side, &gui_IR_allocator);
             fft_perform(&fft);
             
             memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
