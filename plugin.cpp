@@ -176,7 +176,7 @@ DWORD compiler_thread_proc(void *void_param)
     {
         
         *param->handle = try_compile(param->source_filename, param->clang_ctx, param->allocator);
-        octave_assert(compare_exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION, Asset_File_State_BACKGROUND_LOADING));
+        ensure(compare_exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION, Asset_File_State_BACKGROUND_LOADING));
     }
     else if(compare_exchange_32(param->stage, 
                                 Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING, 
@@ -184,11 +184,11 @@ DWORD compiler_thread_proc(void *void_param)
     {
         
         *param->handle = try_compile(param->source_filename, param->clang_ctx, param->allocator);
-        octave_assert(compare_exchange_32(param->stage, Asset_File_State_HOT_RELOAD_STAGE_VALIDATION, Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING));
+        ensure(compare_exchange_32(param->stage, Asset_File_State_HOT_RELOAD_STAGE_VALIDATION, Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING));
     }
     else
     {
-        octave_assert(false && "someone touched plugin_state while I wasn't watching");
+        ensure(false && "someone touched plugin_state while I wasn't watching");
     }
     return 1;
 }
@@ -216,7 +216,7 @@ HANDLE launch_compiler_thread(Compiler_Thread_Param *thread_parameters)
 
 void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m)
 {
-    octave_assert(m->source_filename[0] != 0);
+    ensure(m->source_filename[0] != 0);
     
     m->compiler_thread_param = Compiler_Thread_Param {
         .source_filename = m->source_filename,
@@ -225,16 +225,17 @@ void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m)
         .clang_ctx = m->clang_ctx,
         .stage = m->plugin_state
     };
+    ATOMIC_HARNESS();
     auto old_state = exchange_32(m->plugin_state, Asset_File_State_STAGE_BACKGROUND_LOADING);
     
-    octave_assert(old_state == Asset_File_State_NONE || old_state == Asset_File_State_UNLOADING);
+    ensure(old_state == Asset_File_State_NONE || old_state == Asset_File_State_UNLOADING);
     
     m->compiler_thread_handle = launch_compiler_thread(&m->compiler_thread_param);
 }
 
 void plugin_reloader_stage_hot_compilation(Plugin_Reloading_Manager *m)
 {
-    octave_assert(m->source_filename[0] != 0);
+    ensure(m->source_filename[0] != 0);
     
     m->compiler_thread_param = Compiler_Thread_Param {
         .source_filename = m->source_filename,
@@ -243,8 +244,9 @@ void plugin_reloader_stage_hot_compilation(Plugin_Reloading_Manager *m)
         .clang_ctx = m->clang_ctx,
         .stage = m->plugin_state
     };
-    octave_assert(compare_exchange_32(m->plugin_state, Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING,
-                                      Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
+    ATOMIC_HARNESS();
+    ensure(compare_exchange_32(m->plugin_state, Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING,
+                               Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
     
     m->compiler_thread_handle = launch_compiler_thread(&m->compiler_thread_param);
 }
@@ -314,195 +316,233 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
                                       Audio_Parameters audio_parameters,
                                       Plugin **handle_to_pull_ir_from)
 {
+    auto old_plugin_state = *m->plugin_state;
+    MemoryBarrier();
     
-    if(compare_exchange_32(m->plugin_state,
-                           Asset_File_State_VALIDATING,
-                           Asset_File_State_STAGE_VALIDATION))
+    switch(old_plugin_state)
     {
-        if(m->front_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
+        case Asset_File_State_STAGE_VALIDATION :
         {
-            plugin_populate_from_descriptor(m->front_handle, m->front_allocator, audio_parameters);
-            m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
+            ATOMIC_HARNESS();
             
-            octave_assert(exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE)
-                          == Asset_File_State_VALIDATING);
-            
-            *handle_to_pull_ir_from = m->front_handle;
-        }
-        else
-        {
-            printf("compilation failed, cleaning up\n");
-            
-            octave_assert(!m->front_handle->llvm_jit_engine);
-            octave_assert(!m->front_handle->parameter_values_audio_side);
-            octave_assert(!m->front_handle->parameter_values_ui_side);
-            octave_assert(!m->front_handle->ring.buffer);
-            plugin_write_all_errors_on_log(m->front_handle, &m->gui_log);
-            
-            m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
-            
-            printf("done cleaning up\n");
-            octave_assert(exchange_32(m->plugin_state, Asset_File_State_FAILED)
-                          == Asset_File_State_VALIDATING);
-        }
-    }
-    else if(compare_exchange_32(m->plugin_state,
-                                Asset_File_State_HOT_RELOAD_VALIDATING,
-                                Asset_File_State_HOT_RELOAD_STAGE_VALIDATION)) 
-    {
-        printf("hot : validating\n");
-        if(m->back_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
-        {
-            printf("hot : compiler success\n");
-            
-            plugin_populate_from_descriptor(m->back_handle, m->back_allocator, audio_parameters);
-            
-            m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
-            *handle_to_pull_ir_from = m->back_handle;
-            
-            octave_assert(compare_exchange_32(m->plugin_state,
-                                              Asset_File_State_HOT_RELOAD_STAGE_SWAP,
-                                              Asset_File_State_HOT_RELOAD_VALIDATING));
-            
-            printf("hot reload validation done\n");
-        }
-        else 
-        {
-            
-            printf("hot : compilation failed\n");
-            octave_assert(!m->back_handle->llvm_jit_engine);
-            octave_assert(!m->back_handle->parameter_values_audio_side);
-            octave_assert(!m->back_handle->parameter_values_ui_side);
-            octave_assert(!m->back_handle->ring.buffer);
-            
-            plugin_write_all_errors_on_log(m->back_handle, &m->gui_log);
-            
-            printf("hot : done cleaning up, back in use\n");
-            
-            if(m->front_handle->descriptor.error.flag != Compiler_Success){
-                octave_assert(compare_exchange_32(m->plugin_state,
-                                                  Asset_File_State_FAILED,
-                                                  Asset_File_State_HOT_RELOAD_VALIDATING));
+            ensure(compare_exchange_32(m->plugin_state,
+                                       Asset_File_State_VALIDATING,
+                                       Asset_File_State_STAGE_VALIDATION));
+            ATOMIC_HARNESS();
+            if(m->front_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
+            {
+                plugin_populate_from_descriptor(m->front_handle, m->front_allocator, audio_parameters);
+                m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
+                
+                ensure(compare_exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE, Asset_File_State_VALIDATING));
+                
+                *handle_to_pull_ir_from = m->front_handle;
             }
-            else{
-                octave_assert(compare_exchange_32(m->plugin_state,
-                                                  Asset_File_State_STAGE_USAGE,
-                                                  Asset_File_State_HOT_RELOAD_VALIDATING));
+            else
+            {
+                printf("compilation failed, cleaning up\n");
+                
+                ensure(!m->front_handle->llvm_jit_engine);
+                ensure(!m->front_handle->parameter_values_audio_side);
+                ensure(!m->front_handle->parameter_values_ui_side);
+                ensure(!m->front_handle->ring.buffer);
+                plugin_write_all_errors_on_log(m->front_handle, &m->gui_log);
+                
+                m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
+                
+                printf("done cleaning up\n");
+                ATOMIC_HARNESS();
+                ensure(compare_exchange_32(m->plugin_state, Asset_File_State_FAILED,Asset_File_State_VALIDATING));
             }
-        }
+        }break;
+        
+        case Asset_File_State_HOT_RELOAD_STAGE_VALIDATION : 
+        {
+            ATOMIC_HARNESS();
+            ensure(compare_exchange_32(m->plugin_state,
+                                       Asset_File_State_HOT_RELOAD_VALIDATING,
+                                       Asset_File_State_HOT_RELOAD_STAGE_VALIDATION));
+            ATOMIC_HARNESS();
+            printf("hot : validating\n");
+            if(m->back_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
+            {
+                printf("hot : compiler success\n");
+                
+                plugin_populate_from_descriptor(m->back_handle, m->back_allocator, audio_parameters);
+                
+                m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
+                *handle_to_pull_ir_from = m->back_handle;
+                
+                ATOMIC_HARNESS();
+                ensure(compare_exchange_32(m->plugin_state,
+                                           Asset_File_State_HOT_RELOAD_STAGE_SWAP,
+                                           Asset_File_State_HOT_RELOAD_VALIDATING));
+                
+                printf("hot reload validation done\n");
+            }
+            else 
+            {
+                
+                printf("hot : compilation failed\n");
+                ensure(!m->back_handle->llvm_jit_engine);
+                ensure(!m->back_handle->parameter_values_audio_side);
+                ensure(!m->back_handle->parameter_values_ui_side);
+                ensure(!m->back_handle->ring.buffer);
+                
+                plugin_write_all_errors_on_log(m->back_handle, &m->gui_log);
+                
+                printf("hot : done cleaning up, back in use\n");
+                
+                if(m->front_handle->descriptor.error.flag != Compiler_Success){
+                    ATOMIC_HARNESS();
+                    ensure(compare_exchange_32(m->plugin_state,
+                                               Asset_File_State_FAILED,
+                                               Asset_File_State_HOT_RELOAD_VALIDATING));
+                }
+                else{
+                    ATOMIC_HARNESS();
+                    ensure(compare_exchange_32(m->plugin_state,
+                                               Asset_File_State_STAGE_USAGE,
+                                               Asset_File_State_HOT_RELOAD_VALIDATING));
+                }
+            }
+        }break;
+        
+        case Asset_File_State_COLD_RELOAD_STAGE_UNLOAD: 
+        {
+            ATOMIC_HARNESS();
+            ensure(compare_exchange_32(m->plugin_state,
+                                       Asset_File_State_UNLOADING,
+                                       Asset_File_State_COLD_RELOAD_STAGE_UNLOAD));
+            plugin_reset_handle(m->front_handle, m->front_allocator);
+            plugin_reloader_stage_cold_compilation(m);
+        }break;
+        
+        case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
+        {
+            ATOMIC_HARNESS();
+            ensure(compare_exchange_32(m->plugin_state,
+                                       Asset_File_State_HOT_RELOAD_DISPOSING,
+                                       Asset_File_State_HOT_RELOAD_STAGE_DISPOSE));
+            printf("hot reload disposing\n");
+            
+            Plugin *temp = m->back_handle;
+            m->back_handle = m->front_handle;
+            m->front_handle = temp;
+            
+            Arena *temp_alloc = m->back_allocator;
+            m->back_allocator = m->front_allocator;
+            m->front_allocator = temp_alloc;
+            
+            plugin_reset_handle(m->back_handle, m->back_allocator);
+            
+            ATOMIC_HARNESS();
+            ensure(compare_exchange_32(m->plugin_state,
+                                       Asset_File_State_STAGE_USAGE,
+                                       Asset_File_State_HOT_RELOAD_DISPOSING));
+            printf("hot : in use\n");
+        }break;
     }
-    else if(compare_exchange_32(m->plugin_state,
-                                Asset_File_State_UNLOADING,
-                                Asset_File_State_COLD_RELOAD_STAGE_UNLOAD)) 
-    {
-        plugin_reset_handle(m->front_handle, m->front_allocator);
-        plugin_reloader_stage_cold_compilation(m);
-    }
-    else if(compare_exchange_32(m->plugin_state,
-                                Asset_File_State_HOT_RELOAD_DISPOSING,
-                                Asset_File_State_HOT_RELOAD_STAGE_DISPOSE))
-    {
-        printf("hot reload disposing\n");
-        
-        Plugin *temp = m->back_handle;
-        m->back_handle = m->front_handle;
-        m->front_handle = temp;
-        
-        Arena *temp_alloc = m->back_allocator;
-        m->back_allocator = m->front_allocator;
-        m->front_allocator = temp_alloc;
-        
-        plugin_reset_handle(m->back_handle, m->back_allocator);
-        
-        compare_exchange_32(m->plugin_state,
-                            Asset_File_State_STAGE_USAGE,
-                            Asset_File_State_HOT_RELOAD_DISPOSING);
-        printf("hot : in use\n");
-    }
-    
 }
 
 void plugin_reloading_update_audio_side(Plugin_Reloading_Manager *m)
 {
-    MemoryBarrier();
-    auto plugin_state = *m->plugin_state;
-    MemoryBarrier();
-    
-    switch(plugin_state)
+    //update plugin_state
     {
-        case Asset_File_State_IN_USE :
-        case Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE :
-        case Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING :
-        case Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING :
-        case Asset_File_State_HOT_RELOAD_STAGE_VALIDATION :
-        case Asset_File_State_HOT_RELOAD_STAGE_SWAP :
-        case Asset_File_State_HOT_RELOAD_VALIDATING :
-        case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
-        case Asset_File_State_HOT_RELOAD_DISPOSING :
-        {
-            Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_pull_from_ring(m->front_handle_audio_side->ring);
-            if(maybe_new_parameter_values)
-            {
-                for(auto param_idx = 0; param_idx < m->front_handle_audio_side->ring.num_fields_by_plugin; param_idx++)
-                {
-                    m->front_handle_audio_side->parameter_values_audio_side[param_idx] = maybe_new_parameter_values[param_idx];
-                }
-                
-                MemoryBarrier();
-                octave_assert(m->front_handle_audio_side->ring.num_fields_by_plugin == m->front_handle_audio_side->descriptor.num_parameters);
-                
-                plugin_set_parameter_holder_from_values(&m->front_handle_audio_side->descriptor, 
-                                                        m->front_handle_audio_side->parameter_values_audio_side, m->front_handle_audio_side->parameters_holder);
-            }
-        }break;
-        case Asset_File_State_HOT_RELOAD_SWAPPING :
-        {
-            octave_assert(false);
-        }break;
-    }
-    
-    
-    if(compare_exchange_32(m->plugin_state,
-                           Asset_File_State_IN_USE,
-                           Asset_File_State_STAGE_USAGE))
-    {}
-    
-    if(compare_exchange_32(m->plugin_state,
-                           Asset_File_State_HOT_RELOAD_SWAPPING,
-                           Asset_File_State_HOT_RELOAD_STAGE_SWAP))
-    {
-        Plugin * temp = m->back_handle_audio_side;
-        m->back_handle_audio_side = m->front_handle_audio_side;
-        m->front_handle_audio_side = temp;
+        MemoryBarrier();
+        auto old_plugin_state  = *m->plugin_state;
+        MemoryBarrier();
         
-        octave_assert(compare_exchange_32(m->plugin_state,
-                                          Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
-                                          Asset_File_State_HOT_RELOAD_SWAPPING));
+        switch(old_plugin_state)
+        {
+            case Asset_File_State_STAGE_USAGE :
+            {
+                ATOMIC_HARNESS();
+                ensure(compare_exchange_32(m->plugin_state,
+                                           Asset_File_State_IN_USE,
+                                           Asset_File_State_STAGE_USAGE));
+            }break;
+            
+            case Asset_File_State_HOT_RELOAD_STAGE_SWAP :
+            {
+                ATOMIC_HARNESS();
+                ensure(compare_exchange_32(m->plugin_state,
+                                           Asset_File_State_HOT_RELOAD_SWAPPING,
+                                           Asset_File_State_HOT_RELOAD_STAGE_SWAP));
+                Plugin * temp = m->back_handle_audio_side;
+                m->back_handle_audio_side = m->front_handle_audio_side;
+                m->front_handle_audio_side = temp;
+                ATOMIC_HARNESS();
+                ensure(compare_exchange_32(m->plugin_state,
+                                           Asset_File_State_HOT_RELOAD_STAGE_DISPOSE,
+                                           Asset_File_State_HOT_RELOAD_SWAPPING));
+            }break;
+            
+            case Asset_File_State_STAGE_UNLOADING :
+            {
+                ATOMIC_HARNESS();
+                ensure(compare_exchange_32(m->plugin_state,
+                                           Asset_File_State_OK_TO_UNLOAD,
+                                           Asset_File_State_STAGE_UNLOADING));
+            }break;
+            
+            case Asset_File_State_COLD_RELOAD_STAGE_UNUSE :
+            {
+                ATOMIC_HARNESS();
+                ensure(compare_exchange_32(m->plugin_state,
+                                           Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
+                                           Asset_File_State_COLD_RELOAD_STAGE_UNUSE));
+            }break;
+        }
+        
     }
     
-    
-    
-    if(compare_exchange_32(m->plugin_state,
-                           Asset_File_State_OK_TO_UNLOAD,
-                           Asset_File_State_STAGE_UNLOADING))
+    //pull parameter states from the ring
     {
-        //m->front_handle_audio_side = nullptr;
+        MemoryBarrier();
+        auto plugin_state = *m->plugin_state;
+        MemoryBarrier();
+        
+        switch(plugin_state)
+        {
+            case Asset_File_State_IN_USE :
+            case Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE :
+            case Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING :
+            case Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING :
+            case Asset_File_State_HOT_RELOAD_STAGE_VALIDATION :
+            case Asset_File_State_HOT_RELOAD_STAGE_SWAP :
+            case Asset_File_State_HOT_RELOAD_VALIDATING :
+            case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
+            case Asset_File_State_HOT_RELOAD_DISPOSING :
+            {
+                Plugin_Parameter_Value* maybe_new_parameter_values = plugin_parameters_pull_from_ring(m->front_handle_audio_side->ring);
+                if(maybe_new_parameter_values)
+                {
+                    for(auto param_idx = 0; param_idx < m->front_handle_audio_side->ring.num_fields_by_plugin; param_idx++)
+                    {
+                        m->front_handle_audio_side->parameter_values_audio_side[param_idx] = maybe_new_parameter_values[param_idx];
+                    }
+                    
+                    MemoryBarrier();
+                    ensure(m->front_handle_audio_side->ring.num_fields_by_plugin == m->front_handle_audio_side->descriptor.num_parameters);
+                    
+                    plugin_set_parameter_holder_from_values(&m->front_handle_audio_side->descriptor, 
+                                                            m->front_handle_audio_side->parameter_values_audio_side, m->front_handle_audio_side->parameters_holder);
+                }
+            }break;
+            case Asset_File_State_HOT_RELOAD_SWAPPING :
+            {
+                ensure(false);
+            }break;
+        }
     }
-    
-    if(compare_exchange_32(m->plugin_state,
-                           Asset_File_State_COLD_RELOAD_STAGE_UNLOAD,
-                           Asset_File_State_COLD_RELOAD_STAGE_UNUSE))
-    {
-        //m->front_handle_audio_side = nullptr;
-    }
-    
 }
 
 void plugin_load_button_was_clicked(Plugin_Reloading_Manager *m)
 {
     auto old_wave_state = 
         exchange_32(m->plugin_state, Asset_File_State_COLD_RELOAD_STAGE_UNUSE);
-    //TODO octave_assert, dans quels états peut être old_wav_state qui nous foutraient dans la merde ?
+    //TODO ensure, dans quels états peut être old_wav_state qui nous foutraient dans la merde ?
 }
 
 
@@ -519,32 +559,30 @@ void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m)
         if(win32_query_file_change(m->source_filename, &m->plugin_last_write_time))
         {
             printf("hot : file has changed\n");
-            octave_assert(!m->back_handle->parameter_values_audio_side);
-            octave_assert(!m->back_handle->parameter_values_ui_side);
-            octave_assert(!m->back_handle->ring.buffer);
-            octave_assert(!m->back_handle->llvm_jit_engine);
+            ensure(!m->back_handle->parameter_values_audio_side);
+            ensure(!m->back_handle->parameter_values_ui_side);
+            ensure(!m->back_handle->ring.buffer);
+            ensure(!m->back_handle->llvm_jit_engine);
             
             plugin_reset_handle(m->back_handle, m->back_allocator);
             plugin_reloader_stage_hot_compilation(m);
         }
         else if(was_in_use)
         {
-            octave_assert(compare_exchange_32(m->plugin_state, 
-                                              Asset_File_State_IN_USE,
-                                              Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
+            ensure(compare_exchange_32(m->plugin_state, 
+                                       Asset_File_State_IN_USE,
+                                       Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
         }
         else if(was_failed)
         {
-            octave_assert(compare_exchange_32(m->plugin_state, 
-                                              Asset_File_State_FAILED,
-                                              Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
+            ensure(compare_exchange_32(m->plugin_state, 
+                                       Asset_File_State_FAILED,
+                                       Asset_File_State_HOT_RELOAD_CHECK_FILE_FOR_UPDATE));
         }
     }
 }
 
 //~ Error messages
-
-
 #define CUSTOM_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
 String compiler_error_flag_to_string(Compiler_Error_Flag flag)
 {
@@ -552,7 +590,7 @@ String compiler_error_flag_to_string(Compiler_Error_Flag flag)
     {
 #include "errors.inc"
         default : {
-            octave_assert(false && "why doesn't this switch cover all compiler errors ?\n");
+            ensure(false && "why doesn't this switch cover all compiler errors ?\n");
             return {};
         }
     }
@@ -562,7 +600,7 @@ String compiler_error_flag_to_string(Compiler_Error_Flag flag)
 void maybe_append_fun_error(Compiler_Gui_Log *log, String function_name, Custom_Error error)
 {
     if(error.flag == Compiler_Success) return;
-    octave_assert(log->message_count < log->message_capacity);
+    ensure(log->message_count < log->message_capacity);
     
     String *new_message = &log->messages[log->message_count++];
     new_message->str = log->holder_current;
@@ -597,7 +635,7 @@ void maybe_append_fun_error(Compiler_Gui_Log *log, String function_name, Custom_
 void maybe_append_struct_error(Compiler_Gui_Log *log, String struct_name, Custom_Error error)
 {
     if(error.flag == Compiler_Success) return;
-    octave_assert(log->message_count < log->message_capacity);
+    ensure(log->message_count < log->message_capacity);
     
     String *new_message = &log->messages[log->message_count++];
     new_message->str = log->holder_current;
@@ -629,7 +667,7 @@ void maybe_append_parameter_error(Compiler_Gui_Log *log, u32 parameter_idx, Plug
 {
     Custom_Error error = param->error;
     if(error.flag == Compiler_Success) return;
-    octave_assert(log->message_count < log->message_capacity);
+    ensure(log->message_count < log->message_capacity);
     
     String *new_message = &log->messages[log->message_count++];
     new_message->str = log->holder_current;
@@ -660,7 +698,7 @@ void maybe_append_parameter_error(Compiler_Gui_Log *log, u32 parameter_idx, Plug
 
 void append_clang_message_to_log(Compiler_Gui_Log *log, Clang_Error *error)
 {
-    octave_assert(log->message_count < log->message_capacity);
+    ensure(log->message_count < log->message_capacity);
     String *new_message = &log->messages[log->message_count++];
     new_message->str = log->holder_current;
     
@@ -709,7 +747,7 @@ void plugin_write_all_errors_on_log(Plugin *handle, Compiler_Gui_Log *log)
         case Compiler_Failure_Stage_Parsing_Parameters :{
             
             Plugin_Descriptor *descriptor = &handle->descriptor;
-            octave_assert(descriptor->error.flag == Compiler_Error_Recurse);
+            ensure(descriptor->error.flag == Compiler_Error_Recurse);
             for(u32 param_idx = 0; param_idx < descriptor->num_parameters; param_idx++)
             {
                 Plugin_Descriptor_Parameter *param = &descriptor->parameters[param_idx];
@@ -718,7 +756,7 @@ void plugin_write_all_errors_on_log(Plugin *handle, Compiler_Gui_Log *log)
         }break;
         
         case Compiler_Failure_Stage_No_Failure :{
-            octave_assert(false && "don't call this function if there's no error\n");
+            ensure(false && "don't call this function if there's no error\n");
         }break;
     }
 }

@@ -44,12 +44,17 @@ typedef double real64;
 
 
 #ifdef DEBUG
-#define octave_assert(expr) assert(expr)
+#define ensure(expr) assert(expr)
 #endif
 #ifdef RELEASE
-#define octave_assert(expr) if(!(expr)) { printf(AT " : " #expr); exit(-1); } 
+#define ensure(expr) if(!(expr)) { printf(AT " : " #expr); exit(-1); } 
 #endif
 
+#ifdef ATOMIC_FORCE_SLEEP
+#define ATOMIC_HARNESS() { Sleep(rand() * 60 / (RAND_MAX + 1)); }
+#else
+#define ATOMIC_HARNESS()
+#endif
 
 typedef struct{
     union { 

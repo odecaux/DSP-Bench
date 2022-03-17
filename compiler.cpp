@@ -460,7 +460,7 @@ Plugin try_compile_impl(const char* filename, Clang_Context* clang_ctx, Arena *a
                                            compiler_instance.getSourceManager(), 
                                            compiler_instance.getLangOpts(), 
                                            compiler_instance.getSourceManager().getMainFileID());
-        octave_assert(new_buffer);
+        ensure(new_buffer);
         error = Compiler_Failure_Stage_No_Failure;
     };
     
@@ -481,8 +481,8 @@ Plugin try_compile_impl(const char* filename, Clang_Context* clang_ctx, Arena *a
             errors_push_clang(&plugin.clang_error_log, to_clang_error(*error_it, compiler_instance.getSourceManager(), allocator));
         }
         plugin.failure_stage = {Compiler_Failure_Stage_Clang_First_Pass};
-        octave_assert(result == false);
-        octave_assert(compilation_count == 0);
+        ensure(result == false);
+        ensure(compilation_count == 0);
         return plugin;
     }
     else if(error == Compiler_Failure_Stage_Finding_Decls)
@@ -677,7 +677,7 @@ Decl_Handle find_initialize_state(clang::ASTContext& ast_ctx)
             return false;
         }
         
-        //TODO octave_assert que float est 32 bit
+        //TODO ensure que float est 32 bit
         if(!sample_rate_type.isSpecificBuiltinType(clang::BuiltinType::Float))
         {
             std::cout << "third parameter should be float sample_rate\n";
@@ -986,7 +986,7 @@ Plugin_Descriptor parse_plugin_descriptor(const clang::CXXRecordDecl* parameters
                     Parameter_Enum enum_param = {};
                     
                     auto *enum_decl = maybe_enum->getDecl();
-                    //TODO octave_assert que le getIntegerType soit un int normal
+                    //TODO ensure que le getIntegerType soit un int normal
                     for(auto _: maybe_enum->getDecl()->enumerators())
                         enum_param.num_entries++;
                     
@@ -1120,7 +1120,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     {
         //NOTE only possible because we set this ourselves
         auto* diagnostics = static_cast<clang::TextDiagnosticBuffer*>(&compiler_instance.getDiagnosticClient()); 
-        octave_assert(diagnostics->getNumErrors() != 0);
+        ensure(diagnostics->getNumErrors() != 0);
         
         plugin->clang_error_log = {
             (Clang_Error*)plugin_allocate(allocator, sizeof(Clang_Error) * diagnostics->getNumErrors()),
@@ -1138,7 +1138,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     }
     std::unique_ptr<llvm::Module> module = compile_action->takeModule();
     
-    octave_assert(module); 
+    ensure(module); 
     //return { Compiler_Cant_Take_Module };
     
     //Optimizations
@@ -1166,7 +1166,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     builder.setOptLevel(llvm::CodeGenOpt::Level::Aggressive);
     
     llvm::ExecutionEngine *engine = builder.create();
-    octave_assert(engine); 
+    ensure(engine); 
     //return { Compiler_Cant_Launch_Jit };
     
     //on en a pas vraiment besoin de faire ça. C'est dans le cas où on chargerait plusieur modules sur le même executionEngine
@@ -1177,7 +1177,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     auto initialize_state_f = (initialize_state_t)engine->getFunctionAddress("initialize_state_wrapper");
     
     
-    octave_assert(audio_callback_f && default_parameters_f && initialize_state_f);
+    ensure(audio_callback_f && default_parameters_f && initialize_state_f);
     
     plugin->failure_stage = { Compiler_Failure_Stage_No_Failure };
     plugin->descriptor = descriptor;

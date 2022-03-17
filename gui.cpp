@@ -10,7 +10,6 @@
 #include "hardcoded_values.h"
 #include "draw.h"
 
-
 struct UI_Context{
     IO io;
     UI_State *state;
@@ -28,7 +27,7 @@ real32 simple_slider(real32 normalized_value, i32 id,
     
     if(ui.io.mouse_clicked && rect_contains(bounds, ui.io.mouse_position))
     {
-        octave_assert(ui.state->selected_parameter_id == -1);
+        ensure(ui.state->selected_parameter_id == -1);
         ui.state->selected_parameter_id = id;
     }
     
@@ -87,7 +86,7 @@ real32 slider(real32 normalized_value,
     
     if(ui.io.mouse_clicked && rect_contains(slider_bounds, ui.io.mouse_position))
     {
-        octave_assert(ui.state->selected_parameter_id == -1);
+        ensure(ui.state->selected_parameter_id == -1);
         ui.state->selected_parameter_id = id;
     }
     
@@ -178,7 +177,7 @@ bool toggle(Rect bounds,
     if(hovered && ui.io.mouse_clicked)
     {
         clicked = true;
-        octave_assert(ui.state->selected_parameter_id == -1);
+        ensure(ui.state->selected_parameter_id == -1);
         ui.state->selected_parameter_id = id;
     }
     
@@ -221,7 +220,7 @@ void parameter_slider(u32 parameter_idx, Plugin_Descriptor_Parameter *parameter_
             int current_value = current_parameter_value->int_value; 
             char current_value_text[256];
             int text_size = sprintf(current_value_text, "%d", current_value);
-            octave_assert(text_size >= 0);
+            ensure(text_size >= 0);
             String current_value_label = {.str = current_value_text, .size = (u64)text_size};
             
             real32 current_normalized_value = normalize_parameter_int_value(parameter_descriptor->int_param, current_value);
@@ -230,13 +229,13 @@ void parameter_slider(u32 parameter_idx, Plugin_Descriptor_Parameter *parameter_
             i32 min_value = parameter_descriptor->int_param.min;
             char min_value_text[256];
             text_size = sprintf(min_value_text, "%d", min_value);
-            octave_assert(text_size >= 0);
+            ensure(text_size >= 0);
             String min_label = {.str = min_value_text, .size = (u64)text_size};
             
             i32 max_value = parameter_descriptor->int_param.max;
             char max_value_text[256];
             text_size = sprintf(max_value_text, "%d", max_value);
-            octave_assert(text_size >= 0);
+            ensure(text_size >= 0);
             String max_label = {.str = max_value_text, .size = (u64)text_size};
             
             real32 new_normalized_value =
@@ -259,7 +258,7 @@ void parameter_slider(u32 parameter_idx, Plugin_Descriptor_Parameter *parameter_
             real32 current_value = current_parameter_value->float_value; 
             char current_value_text[256];
             int text_size = sprintf(current_value_text, "%.3f", current_value);
-            octave_assert(text_size >= 0);
+            ensure(text_size >= 0);
             String current_value_label = {.str = current_value_text, .size = (u64)text_size};
             
             real32 current_normalized_value = normalize_parameter_float_value(parameter_descriptor->float_param, current_value);
@@ -267,13 +266,13 @@ void parameter_slider(u32 parameter_idx, Plugin_Descriptor_Parameter *parameter_
             real32 min_value = parameter_descriptor->float_param.min;
             char min_value_text[256];
             text_size = sprintf(min_value_text, "%.3f", min_value);
-            octave_assert(text_size >= 0);
+            ensure(text_size >= 0);
             String min_label = {.str = min_value_text, .size = (u64)text_size};
             
             real32 max_value = parameter_descriptor->float_param.max;
             char max_value_text[256];
             text_size = sprintf(max_value_text, "%.3f", max_value);
-            octave_assert(text_size >= 0);
+            ensure(text_size >= 0);
             String max_label = {.str = max_value_text, .size = (u64)text_size};
             
             real32 new_normalized_value =
@@ -705,7 +704,7 @@ void frame(Plugin_Descriptor& descriptor,
         if(clicked_on_loop)
         {
             audio_ctx->audio_file_loop = audio_ctx->audio_file_loop == 0 ? 1 : 0;
-            octave_assert(audio_file_state == Asset_File_State_IN_USE);
+            ensure(audio_file_state == Asset_File_State_IN_USE);
         }
     }
 }

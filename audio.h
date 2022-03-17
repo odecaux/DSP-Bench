@@ -35,7 +35,7 @@ internal void copy_add(real32** in, real32** out, Audio_Parameters p)
 
 internal void convertInt32ToFloat (const void* source, real32* dest, i32 numSamples)
 {
-    octave_assert(source != (void*) dest);
+    ensure(source != (void*) dest);
     const u8* data = (const u8*)(source);
     
     for (i32 i = 0; i < numSamples; ++i)
@@ -48,7 +48,7 @@ internal void convertInt32ToFloat (const void* source, real32* dest, i32 numSamp
 
 internal void convertInt24ToFloat (const void* source, real32* dest, i32 numSamples)
 {
-    octave_assert(source != (void*) dest);
+    ensure(source != (void*) dest);
     const u8* data = (const u8*)(source);
     
     for (i32 i = 0; i < numSamples; ++i)
@@ -66,7 +66,7 @@ internal void convertInt24ToFloat (const void* source, real32* dest, i32 numSamp
 
 internal void convertInt16ToFloat (const void* source, real32* dest, i32 numSamples)
 {
-    octave_assert(source != (void*) dest);
+    ensure(source != (void*) dest);
     const u8* data = (const u8*)(source);
     
     for (i32 i = 0; i < numSamples; ++i)

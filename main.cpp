@@ -6,7 +6,6 @@
 #include "windows.h"
 #include "string.h"
 
-
 #include "base.h"
 #include "structs.h"
 #include "memory.h"
@@ -49,13 +48,13 @@ typedef struct {
 DWORD wav_loader_thread_proc(void *void_param)
 {
     Wav_Loader_Thread_Param *param = (Wav_Loader_Thread_Param*)void_param;
-    octave_assert(exchange_32(param->stage, Asset_File_State_BACKGROUND_LOADING)
-                  == Asset_File_State_STAGE_BACKGROUND_LOADING);
+    ensure(exchange_32(param->stage, Asset_File_State_BACKGROUND_LOADING)
+           == Asset_File_State_STAGE_BACKGROUND_LOADING);
     
     *param->file = windows_load_wav(param->filename);
     
-    octave_assert(exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION)
-                  == Asset_File_State_BACKGROUND_LOADING);
+    ensure(exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION)
+           == Asset_File_State_BACKGROUND_LOADING);
     return 1;
 }
 
@@ -182,7 +181,7 @@ i32 main(i32 argc, char** argv)
     //~ Compiler Init
 #ifdef DEBUG
     HMODULE compiler_dll = LoadLibraryA("compiler.dll");
-    octave_assert(compiler_dll != NULL && "couldn't find compiler.dll");
+    ensure(compiler_dll != NULL && "couldn't find compiler.dll");
     try_compile = (try_compile_t)GetProcAddress(compiler_dll, "try_compile");
     release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
     create_clang_context = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context");
@@ -215,11 +214,11 @@ i32 main(i32 argc, char** argv)
     
     //~ UI init
 #ifdef DEBUG
-    octave_assert(CopyFile("gui.dll", "gui_temp.dll", FALSE) != 0);
+    ensure(CopyFile("gui.dll", "gui_temp.dll", FALSE) != 0);
     HMODULE gui_dll = LoadLibraryA("gui_temp.dll");
-    octave_assert(gui_dll != NULL && "couldn't find gui.dll");
+    ensure(gui_dll != NULL && "couldn't find gui.dll");
     frame = (frame_t)GetProcAddress(gui_dll, "frame");
-    octave_assert(frame != 0);
+    ensure(frame != 0);
     u64 gui_dll_last_write_time = win32_get_last_write_time("gui.dll");
 #endif
     
@@ -251,13 +250,13 @@ i32 main(i32 argc, char** argv)
         {
             if(wav_file.error == Wav_Success)
             {
-                octave_assert(exchange_32(&wav_state, Asset_File_State_STAGE_USAGE)
-                              == Asset_File_State_VALIDATING);
+                ensure(exchange_32(&wav_state, Asset_File_State_STAGE_USAGE)
+                       == Asset_File_State_VALIDATING);
             }
             else
             {
-                octave_assert(exchange_32(&wav_state, Asset_File_State_FAILED)
-                              == Asset_File_State_VALIDATING);
+                ensure(exchange_32(&wav_state, Asset_File_State_FAILED)
+                       == Asset_File_State_VALIDATING);
                 //TODO y a pas à cleanup un buffer ici ?
             }
         }
@@ -274,9 +273,9 @@ i32 main(i32 argc, char** argv)
                 .file = &wav_file,
                 .stage = &wav_state
             };
-            octave_assert(exchange_32(&wav_state,
-                                      Asset_File_State_STAGE_BACKGROUND_LOADING)
-                          == Asset_File_State_COLD_RELOAD_UNLOADING);
+            ensure(exchange_32(&wav_state,
+                               Asset_File_State_STAGE_BACKGROUND_LOADING)
+                   == Asset_File_State_COLD_RELOAD_UNLOADING);
             
             wav_loader_thread_handle = CreateThread(0, 0,
                                                     &wav_loader_thread_proc,
@@ -334,9 +333,9 @@ i32 main(i32 argc, char** argv)
                 MemoryBarrier();
                 if(old_wave_state == Asset_File_State_IN_USE)
                 {
-                    octave_assert(compare_exchange_32(&wav_state, 
-                                                      Asset_File_State_COLD_RELOAD_STAGE_UNUSE,
-                                                      Asset_File_State_IN_USE));
+                    ensure(compare_exchange_32(&wav_state, 
+                                               Asset_File_State_COLD_RELOAD_STAGE_UNUSE,
+                                               Asset_File_State_IN_USE));
                 }
                 else if(old_wave_state == Asset_File_State_NONE)
                 {
@@ -345,9 +344,9 @@ i32 main(i32 argc, char** argv)
                         .file = &wav_file,
                         .stage = &wav_state
                     };
-                    octave_assert(compare_exchange_32(&wav_state,
-                                                      Asset_File_State_STAGE_BACKGROUND_LOADING, 
-                                                      Asset_File_State_NONE));
+                    ensure(compare_exchange_32(&wav_state,
+                                               Asset_File_State_STAGE_BACKGROUND_LOADING, 
+                                               Asset_File_State_NONE));
                     
                     wav_loader_thread_handle = CreateThread(0, 0,
                                                             &wav_loader_thread_proc,
@@ -402,9 +401,9 @@ i32 main(i32 argc, char** argv)
                 if(CopyFile("gui.dll", "gui_temp.dll", FALSE) == 0)
                     win32_exit_on_error_code();
                 HMODULE gui_dll = LoadLibraryA("gui_temp.dll");
-                octave_assert(gui_dll != NULL);
+                ensure(gui_dll != NULL);
                 frame = (frame_t)GetProcAddress(gui_dll, "frame");
-                octave_assert(frame != nullptr);
+                ensure(frame != nullptr);
                 gui_dll_last_write_time = temp_gui_write_time;
             }
         }

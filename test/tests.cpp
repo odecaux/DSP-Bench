@@ -1,5 +1,5 @@
 #include "stdlib.h"
-#include "octave_assert.h"
+#include "ensure.h"
 #include "stdio.h"
 
 #include "../compiler.h"
@@ -308,18 +308,18 @@ void test_normalization()
         int int_value = 6;
         
         float normalized_int = normalize_parameter_int_value(int_param, int_value);
-        octave_assert(normalized_int == 0.5f);
+        ensure(normalized_int == 0.5f);
         int denormalized_int = denormalize_int_value(int_param, normalized_int);
-        octave_assert(int_value == denormalized_int);
+        ensure(int_value == denormalized_int);
     }
     {
         Parameter_Float float_param = {4.0f,8.0f};
         float float_value = 6.0f;
         
         float normalized_float = normalize_parameter_float_value(float_param, float_value);
-        octave_assert(normalized_float == 0.5f);
+        ensure(normalized_float == 0.5f);
         float denormalized_float = denormalize_float_value(float_param, normalized_float);
-        octave_assert(float_value == denormalized_float);
+        ensure(float_value == denormalized_float);
     }
     
     {
@@ -336,9 +336,9 @@ void test_normalization()
         
         float normalized_index = normalize_parameter_enum_index(enum_param, index);
         float denormalized_index = denormalize_enum_index(enum_param, normalized_index);
-        octave_assert(denormalized_index == 2);
+        ensure(denormalized_index == 2);
         int denormalized_value = enum_index_to_value(enum_param, denormalized_index);
-        octave_assert(denormalized_value == 256);
+        ensure(denormalized_value == 256);
     }
     
     
@@ -359,7 +359,7 @@ void test_ring_buffer_single_threaded_single_value()
         plugin_parameters_buffer_push(ring, &pushed_value);
         
         auto* pulled_value = plugin_parameters_buffer_pull(ring);
-        octave_assert(pulled_value->int_value == pushed_value.int_value);
+        ensure(pulled_value->int_value == pushed_value.int_value);
     }
     
     
@@ -371,7 +371,7 @@ void test_ring_buffer_single_threaded_single_value()
         plugin_parameters_buffer_push(ring, &pushed_value);
         
         auto* pulled_value = plugin_parameters_buffer_pull(ring);
-        octave_assert(pulled_value->float_value == pushed_value.float_value);
+        ensure(pulled_value->float_value == pushed_value.float_value);
     }
     
     printf("pushing single value passed\n");
@@ -394,10 +394,10 @@ void test_ring_buffer_single_threaded_multiple_values(){
         
         auto* pulled_value = plugin_parameters_buffer_pull(ring);
         
-        octave_assert(pulled_value[0].int_value == i);
-        octave_assert(pulled_value[1].float_value == (float) i); 
-        octave_assert(pulled_value[2].enum_value == A);
-        octave_assert(pulled_value[3].enum_value == C);
+        ensure(pulled_value[0].int_value == i);
+        ensure(pulled_value[1].float_value == (float) i); 
+        ensure(pulled_value[2].enum_value == A);
+        ensure(pulled_value[3].enum_value == C);
     }
     
     
@@ -409,7 +409,7 @@ void test_ring_buffer_single_threaded_multiple_values(){
         plugin_parameters_buffer_push(ring, &pushed_value);
         
         auto* pulled_value = plugin_parameters_buffer_pull(ring);
-        octave_assert(pulled_value->float_value == pushed_value.float_value);
+        ensure(pulled_value->float_value == pushed_value.float_value);
     }
     
     printf("pushing multiple values passed\n");
@@ -419,13 +419,13 @@ int main()
 {
     
     //test_reuse_compiler()
-    octave_assert(test_init_compiler());
-    octave_assert(test_compiler_works());
-    octave_assert(test_compile_file());
-    octave_assert(test_parse_parameters());
-    octave_assert(test_initialization());
-    octave_assert(test_no_op_callback());
-    octave_assert(test_static_gain_callback());
+    ensure(test_init_compiler());
+    ensure(test_compiler_works());
+    ensure(test_compile_file());
+    ensure(test_parse_parameters());
+    ensure(test_initialization());
+    ensure(test_no_op_callback());
+    ensure(test_static_gain_callback());
     
     test_normalization();
     test_ring_buffer_single_threaded_single_value();

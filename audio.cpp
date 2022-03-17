@@ -167,7 +167,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                 }break;
                 case Asset_File_State_HOT_RELOAD_SWAPPING :
                 {
-                    octave_assert(false);
+                    ensure(false);
                 }break;
             }
         }

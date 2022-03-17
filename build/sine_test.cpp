@@ -13,7 +13,7 @@ enum random_enum{
 
 struct Parameters{
     //INT_ARAM(0, 4) test_int_param;
-    FLOAT_ARAM(0.0f, 1.0f) gain;
+    FLOAT_ARAM(0.0f, 0.5f) gain;
     FLOAT_ARAM(500.0f, 20000.0f) frequency;
     ENUM_ARAM(random_enum) test_enum_param;  
 };
@@ -25,7 +25,7 @@ struct State{
 
 Parameters default_parameters()
 {
-    Parameters initial_state = {0.01f, 500.0f};//, 2000.0f};
+    Parameters initial_state = {0.01f, 800.0f};//, 2000.0f};
     return initial_state;
 }
 
@@ -45,7 +45,6 @@ void audio_callback(const Parameters& param,
                     const u32  num_samples,
                     const real32 sample_rate)
 {
-    //nocheckin();
     float x = 1.0f;
     float gain = param.gain;
     double lfo_freq = param.frequency;
