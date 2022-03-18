@@ -397,14 +397,16 @@ typedef struct {
     Ipp_Order_Context *order_to_ctx;
 } Ipp_Context;
 
+typedef Ipp_Context Plugin_FFT_Context;
+
 typedef struct {
     u32 ir_sample_count;
     u32 ir_num_channels;
     Ipp_Context ipp_context;
-    real32** IR_buffer;
+    real32 **IR_buffer;
     real32** windowed_zero_padded_buffer;
     Vec2* fft_out;
     real32 *magnitudes;
-} FFT;
+} Analysis;
 
 #endif //STRUCTS_H

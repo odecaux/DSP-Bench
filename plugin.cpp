@@ -249,8 +249,8 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
                                    Asset_File_State *plugin_state)
 {
     *m = {
-        .allocator_a = allocator_init(100 * 1024),
-        .allocator_b = allocator_init(100 * 1204),
+        .allocator_a = allocator_init(10 * 1024),
+        .allocator_b = allocator_init(10 * 1204),
         
         .front_handle = &m->handle_a,
         .back_handle = &m->handle_b,
@@ -270,9 +270,9 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
             .message_count = 0,
             .message_capacity = 256,
             
-            .holder_base = m_allocate_array(char, 1024*16, "gui error log : holder"),
+            .holder_base = m_allocate_array(char, 1024*100, "gui error log : holder"),
             .holder_current = m->gui_log.holder_base,
-            .holder_capacity = 1024*16
+            .holder_capacity = 1024*100
         }
     };
 }
@@ -320,6 +320,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             ensure(compare_exchange_32(m->plugin_state,
                                        Asset_File_State_VALIDATING,
                                        Asset_File_State_STAGE_VALIDATION));
+            
             ATOMIC_HARNESS();
             if(m->front_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
             {
@@ -354,6 +355,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             ensure(compare_exchange_32(m->plugin_state,
                                        Asset_File_State_HOT_RELOAD_VALIDATING,
                                        Asset_File_State_HOT_RELOAD_STAGE_VALIDATION));
+            return;
             ATOMIC_HARNESS();
             printf("hot : validating\n");
             if(m->back_handle->failure_stage == Compiler_Failure_Stage_No_Failure)

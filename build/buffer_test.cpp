@@ -1,8 +1,5 @@
 #include "plugin_header.h"
 
-typedef float real32;
-typedef unsigned int u32;
-
 struct Parameters{
     FLOAT_PARAM(0.0f, 1.0f) dummy;
 };

@@ -12,7 +12,7 @@
 #include "base.h"
 #include "structs.h"
 #include "memory.h"
-#include "fft.h"
+#include "dsp.h"
 
 void ipp_ensure_impl(IppStatus status, const char* file, u32 line)
 {
@@ -24,7 +24,7 @@ void ipp_ensure_impl(IppStatus status, const char* file, u32 line)
 }
 
 //TODO cette API a aucun sens ?????
-FFT fft_initialize(u32 ir_sample_count, u32 num_channels)
+Analysis analysis_initialize(u32 ir_sample_count, u32 num_channels)
 {
     real32** IR_buffer = m_allocate_array(real32*, num_channels, "rename");
     real32** windowed_zero_padded_buffer = m_allocate_array(real32*, num_channels, "rename");
@@ -36,7 +36,7 @@ FFT fft_initialize(u32 ir_sample_count, u32 num_channels)
         memset(windowed_zero_padded_buffer[channel], 0, ir_sample_count * 4 * sizeof(real32));
     }
     
-    return FFT {
+    return {
         .ir_sample_count = ir_sample_count,
         .ir_num_channels = num_channels,
         .ipp_context = ipp_initialize(),
@@ -47,30 +47,24 @@ FFT fft_initialize(u32 ir_sample_count, u32 num_channels)
     };
 }
 
-void fft_perform(FFT *fft)
+void fft_perform_and_get_magnitude(Analysis *analysis)
 {
     
-    for(u32 channel = 0; channel < fft->ir_num_channels; channel++)
+    for(u32 channel = 0; channel < analysis->ir_num_channels; channel++)
     {
-        windowing_hamming(fft->IR_buffer[channel], fft->windowed_zero_padded_buffer[channel], IR_BUFFER_LENGTH);
+        windowing_hamming(analysis->IR_buffer[channel], analysis->windowed_zero_padded_buffer[channel], IR_BUFFER_LENGTH);
     }
     
-    fft_forward(fft->windowed_zero_padded_buffer[0], 
-                fft->fft_out, 
-                fft->ir_sample_count * 4, 
-                &fft->ipp_context);
+    fft_forward(analysis->windowed_zero_padded_buffer[0], 
+                analysis->fft_out, 
+                analysis->ir_sample_count * 4, 
+                &analysis->ipp_context);
     
     for(i32 i = 0; i < IR_BUFFER_LENGTH * 4; i++)
-        fft->magnitudes[i] = sqrt(fft->fft_out[i].a * fft->fft_out[i].a + 
-                                  fft->fft_out[i].b * fft->fft_out[i].b);
+        analysis->magnitudes[i] = sqrt(analysis->fft_out[i].a * analysis->fft_out[i].a + 
+                                       analysis->fft_out[i].b * analysis->fft_out[i].b);
 }
 #define ipp_ensure(status) ipp_ensure_impl(status, __FILE__, __LINE__); 
-
-void fft_test_generate_tone(real32 frequency, real32 magnitude, real32 *buffer, i32 sample_count)
-{
-    real32 phase = 0.0f;
-    ippsTone_32f(buffer, sample_count, magnitude, frequency, &phase, ippAlgHintFast);
-}
 
 void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count)
 {

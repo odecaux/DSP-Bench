@@ -14,7 +14,7 @@
 #include "win32_helpers.h"
 #include "wav_reader.h"
 #include "font.h"
-#include "fft.h"
+#include "dsp.h"
 #include "app.h"
 #include "draw.h"
 
@@ -226,7 +226,7 @@ i32 main(i32 argc, char** argv)
     
     Arena gui_IR_allocator = allocator_init(100 * 1204);
     
-    FFT fft = fft_initialize(IR_BUFFER_LENGTH, audio_parameters.num_channels);
+    Analysis analysis = analysis_initialize(IR_BUFFER_LENGTH, audio_parameters.num_channels);
     
     //~ UI init
 #ifdef DEBUG
@@ -307,11 +307,11 @@ i32 main(i32 argc, char** argv)
             
             gui_IR_allocator.current = gui_IR_allocator.base;
             
-            compute_IR(*plugin_to_pull_ir_from, fft.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, plugin_to_pull_ir_from->parameter_values_ui_side, &gui_IR_allocator);
-            fft_perform(&fft);
+            compute_IR(*plugin_to_pull_ir_from, analysis.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, plugin_to_pull_ir_from->parameter_values_ui_side, &gui_IR_allocator);
+            fft_perform_and_get_magnitude(&analysis);
             
-            memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
-            memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
+            memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
+            memcpy(graphics_ctx.fft.fft_buffer, analysis.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
         }
         
         bool parameters_were_tweaked = false;
@@ -334,14 +334,14 @@ i32 main(i32 argc, char** argv)
             plugin_parameters_push_to_ring(plugin_reloading_manager.front_handle->ring, plugin_reloading_manager.front_handle->parameter_values_ui_side);
             
             gui_IR_allocator.current = gui_IR_allocator.base;
-            compute_IR(*plugin_reloading_manager.front_handle, fft.IR_buffer, 
+            compute_IR(*plugin_reloading_manager.front_handle, analysis.IR_buffer, 
                        IR_BUFFER_LENGTH, 
                        audio_parameters, 
                        plugin_reloading_manager.front_handle->parameter_values_ui_side, &gui_IR_allocator);
-            fft_perform(&fft);
+            fft_perform_and_get_magnitude(&analysis);
             
-            memcpy(graphics_ctx.ir.IR_buffer, fft.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
-            memcpy(graphics_ctx.fft.fft_buffer, fft.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
+            memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
+            memcpy(graphics_ctx.fft.fft_buffer, analysis.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
         }
         
         if(load_wav_was_clicked)
@@ -429,6 +429,7 @@ i32 main(i32 argc, char** argv)
             }
         }
 #endif
+        
     }
     
     opengl_uninitialize(&opengl_ctx);

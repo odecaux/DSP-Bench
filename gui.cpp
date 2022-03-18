@@ -547,6 +547,8 @@ void draw_compiler_log(Compiler_Gui_Log *error_log,
     
     for(i32 i = 0; i < error_log->message_count; i++)
     {
+        if(message_bounds.origin.y > bounds.origin.y + bounds.dim.y)
+            return;
         draw_text(error_log->messages[i], message_bounds, Color_Front, ui.g);
         message_bounds = rect_move_by(message_bounds, {0.0f, TITLE_HEIGHT});
     }

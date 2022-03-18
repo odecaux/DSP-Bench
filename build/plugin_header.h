@@ -13,6 +13,22 @@
 #define ENUM_PARAM(enum_name)  __attribute__(( annotate( "Enum" ) )) enum_name
 
 
+typedef float real32;
+typedef unsigned int u32;
+typedef int i32;
+
+typedef struct {
+    union{
+        struct {
+            real32 x;
+            real32 y;
+        };
+        struct {
+            real32 a;
+            real32 b;
+        };
+    };
+} Vec2;
 
 const float inv_two_pi = 0.1591549f;
 const float two_pi = 6.283185f;
@@ -67,6 +83,26 @@ extern "C" {
     float sinh_32(float d1);
     float cosh_32(float d1);
     float tanh_32(float d1);
+    
+    void phasor_32_array(real32 *out, real32 freq, i32 sample_count, real32 *phase_in_out);
+    void sin_32_array(real32 *out, real32 freq, i32 sample_count, real32 *phase_in_out);
+    void cos_32_array(real32 *out, real32 freq, i32 sample_count, real32 *phase_in_out);
+    void tan_32_array(real32 *out, real32 freq, i32 sample_count, real32 *phase_in_out);
+    void cos_32_array(real32 *out, real32 freq, i32 sample_count, real32 *phase_in_out);
+    
+    void gain_32_array(real32 *in, real32 *out, real32 gain, i32 sample_count);
+    void sqrt_32_array(real32 *in, real32 *out, i32 sample_count);
+    void abs_32_array(real32 *in, real32 *out, i32 sample_count);
+    void to_db_32_array(real32 *in, real32 *out, i32 sample_count);
+    void from_db_32_array(real32 *in, real32 *out, i32 sample_count);
+    void pythagore_array(Vec2 *in, real32* out, i32 sample_count);
+    void log2_32_array(Vec2 *in, real32* out, i32 sample_count);
+    void log10_32_array(Vec2 *in, real32* out, i32 sample_count);
+    
+    
+    void* initialize_fft();
+    void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count);
+    void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, void *fft_context);
 }
 
 #endif //PLUGIN_HEADER_H
