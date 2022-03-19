@@ -128,6 +128,8 @@ i32 main(i32 argc, char** argv)
         return -1;
     }
     
+    Arena app_allocator = allocator_init(APPLICATION_ARENA_SIZE);
+    
     //~ Graphics Init
     Graphics_Context graphics_ctx = {};
     graphics_ctx.window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT}; 
@@ -224,9 +226,9 @@ i32 main(i32 argc, char** argv)
         .fft_sample_count = IR_BUFFER_LENGTH * 2
     };
     
-    Arena gui_IR_allocator = allocator_init(100 * 1204);
-    
-    Analysis analysis = analysis_initialize(IR_BUFFER_LENGTH, audio_parameters.num_channels);
+    Arena gui_IR_allocator = allocator_init(GUI_IR_ARENA_SIZE);
+    Analysis analysis = analysis_initialize(&gui_IR_allocator, IR_BUFFER_LENGTH, audio_parameters.num_channels);
+    Plugin_Initialization_Context gui_IR_initialization_context = {&gui_IR_allocator};
     
     //~ UI init
 #ifdef DEBUG
@@ -307,7 +309,7 @@ i32 main(i32 argc, char** argv)
             
             gui_IR_allocator.current = gui_IR_allocator.base;
             
-            compute_IR(*plugin_to_pull_ir_from, analysis.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, plugin_to_pull_ir_from->parameter_values_ui_side, &gui_IR_allocator);
+            compute_IR(*plugin_to_pull_ir_from, analysis.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, plugin_to_pull_ir_from->parameter_values_ui_side, &gui_IR_allocator, &gui_IR_initialization_context);
             fft_perform_and_get_magnitude(&analysis);
             
             memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
@@ -337,7 +339,8 @@ i32 main(i32 argc, char** argv)
             compute_IR(*plugin_reloading_manager.front_handle, analysis.IR_buffer, 
                        IR_BUFFER_LENGTH, 
                        audio_parameters, 
-                       plugin_reloading_manager.front_handle->parameter_values_ui_side, &gui_IR_allocator);
+                       plugin_reloading_manager.front_handle->parameter_values_ui_side, &gui_IR_allocator,
+                       &gui_IR_initialization_context);
             fft_perform_and_get_magnitude(&analysis);
             
             memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 

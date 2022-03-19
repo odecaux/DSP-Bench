@@ -5,24 +5,24 @@
 
 
 
-internal float *plugin_allocate_buffer(int num_sample, Arena* allocator)
+internal float *plugin_allocate_buffer(int num_sample, Plugin_Initialization_Context* initialization_context)
 {
-    return (real32*)arena_allocate(allocator, sizeof(real32) * num_sample);
+    return (real32*)arena_allocate(initialization_context->allocator, sizeof(real32) * num_sample);
 }
 
-internal float **plugin_allocate_buffers(int num_samples, int num_channels, Arena* allocator) 
+internal float **plugin_allocate_buffers(int num_samples, int num_channels,  Plugin_Initialization_Context* initialization_context) 
 {
-    real32** channels = (real32**) arena_allocate(allocator, sizeof(real32*) * num_channels);
+    real32** channels = (real32**) arena_allocate(initialization_context->allocator, sizeof(real32*) * num_channels);
     for(int i = 0; i < num_channels; i++)
     {
-        channels[i] = (real32*) arena_allocate(allocator, sizeof(real32) * num_samples);
+        channels[i] = (real32*) arena_allocate(initialization_context->allocator, sizeof(real32) * num_samples);
     }
     return channels;
 }
 
-internal void *plugin_allocate_bytes(int num_bytes, Arena* allocator)
+internal void *plugin_allocate_bytes(int num_bytes,  Plugin_Initialization_Context* initialization_context)
 {
-    return arena_allocate(allocator, num_bytes);
+    return arena_allocate(initialization_context->allocator, num_bytes);
 }
 
 
@@ -141,6 +141,12 @@ struct Plugin_Reloading_Manager
     
     Arena *front_allocator;
     Arena *back_allocator;
+    
+    Plugin_Initialization_Context initialization_context_a;
+    Plugin_Initialization_Context initialization_context_b;
+    
+    Plugin_Initialization_Context *initialization_context_front;
+    Plugin_Initialization_Context *initialization_context_back;
     
     Compiler_Thread_Param compiler_thread_param;
     HANDLE compiler_thread_handle;

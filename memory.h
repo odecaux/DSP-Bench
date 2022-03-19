@@ -61,13 +61,6 @@ static void instrumented_free(void* address, const char* file, int line)
 
 #define m_safe_free(pointer) if((pointer)) { m_free((pointer)); (pointer) = 0; }
 
-
-struct Arena{
-    char *base;
-    char *current; 
-    u64 capacity;
-}; 
-
 #define word_size (sizeof(void*))
 #define align(n) ((n + word_size - 1) & ~(word_size - 1))
 

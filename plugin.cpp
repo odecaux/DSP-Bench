@@ -261,6 +261,14 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
         .front_allocator = &m->allocator_a,
         .back_allocator = &m->allocator_b,
         
+        
+        .initialization_context_a = {&m->allocator_a}, 
+        .initialization_context_b = {&m->allocator_b},
+        
+        .initialization_context_front = &m->initialization_context_a,
+        .initialization_context_back = &m->initialization_context_b,
+        
+        
         .clang_ctx = clang_ctx,
         .plugin_state = plugin_state,
         .source_filename = source_filename,
@@ -277,9 +285,9 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
     };
 }
 
-
 void plugin_populate_from_descriptor(Plugin *handle, 
-                                     Arena *allocator, 
+                                     Arena *allocator,
+                                     Plugin_Initialization_Context *initialization_context,
                                      Audio_Parameters audio_parameters)
 {
     handle->parameter_values_audio_side = (Plugin_Parameter_Value*)arena_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
@@ -294,7 +302,7 @@ void plugin_populate_from_descriptor(Plugin *handle,
                                handle->state_holder, 
                                audio_parameters.num_channels,
                                audio_parameters.sample_rate, 
-                               allocator);
+                               initialization_context);
     
     plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_ui_side, handle->parameters_holder);
     plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_audio_side, handle->parameters_holder);
@@ -324,7 +332,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             ATOMIC_HARNESS();
             if(m->front_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
             {
-                plugin_populate_from_descriptor(m->front_handle, m->front_allocator, audio_parameters);
+                plugin_populate_from_descriptor(m->front_handle, m->front_allocator, m->initialization_context_front, audio_parameters);
                 m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
                 
                 ensure(compare_exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE, Asset_File_State_VALIDATING));
@@ -362,7 +370,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             {
                 printf("hot : compiler success\n");
                 
-                plugin_populate_from_descriptor(m->back_handle, m->back_allocator, audio_parameters);
+                plugin_populate_from_descriptor(m->back_handle, m->back_allocator, m->initialization_context_back, audio_parameters);
                 
                 m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
                 *handle_to_pull_ir_from = m->back_handle;
@@ -420,13 +428,19 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
                                        Asset_File_State_HOT_RELOAD_STAGE_DISPOSE));
             printf("hot reload disposing\n");
             
-            Plugin *temp = m->back_handle;
+            Plugin *temp_handle = m->back_handle;
             m->back_handle = m->front_handle;
-            m->front_handle = temp;
+            m->front_handle = temp_handle;
             
             Arena *temp_alloc = m->back_allocator;
             m->back_allocator = m->front_allocator;
             m->front_allocator = temp_alloc;
+            
+            
+            Plugin_Initialization_Context *temp_initialization_context = m->initialization_context_back;
+            m->initialization_context_back = m->initialization_context_front;
+            m->initialization_context_front = temp_initialization_context;
+            
             
             plugin_reset_handle(m->back_handle, m->back_allocator);
             

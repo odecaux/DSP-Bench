@@ -22,17 +22,18 @@
 #include "plugin.h"
 #include "compiler.h"
 
-
-float *allocate_buffer(int num_sample, void* allocator){
-    return plugin_allocate_buffer(num_sample, (Arena*)allocator);
-}
-float **allocate_buffers(int num_samples, int num_channels, void* allocator){
-    return plugin_allocate_buffers(num_samples, num_channels, (Arena*)allocator);;
-}
-void *allocate_bytes(int num_bytes, void* allocator){
-    return plugin_allocate_bytes(num_bytes, (Arena*) allocator);
-}
-
+//
+//float *allocate_buffer(int num_sample, void* initialization_context){
+//return plugin_allocate_buffer(num_sample,
+//(Plugin_Initialization_Context*)initialization_context);
+//}
+//float **allocate_buffers(int num_samples, int num_channels, void* initialization_context){
+//return plugin_allocate_buffers(num_samples, num_channels, (Plugin_Initialization_Context*)initialization_context);
+//}
+//void *allocate_bytes(int num_bytes, void* initialization_context){
+//return plugin_allocate_bytes(num_bytes, (Plugin_Initialization_Context*)initialization_context);
+//}
+//
 
 struct Clang_Context {
     llvm::LLVMContext llvm_context;
@@ -341,9 +342,9 @@ Clang_Context* create_clang_context_impl()
     llvm::sys::DynamicLibrary::AddSymbol("cosh_64", oct_cosh_64);
     llvm::sys::DynamicLibrary::AddSymbol("tanh_64", oct_tanh_64);
     
-    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffer", allocate_buffer);
-    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffers", allocate_buffers);
-    llvm::sys::DynamicLibrary::AddSymbol("allocate_bytes", allocate_bytes);
+    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffer", plugin_allocate_buffer);
+    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffers", plugin_allocate_buffers);
+    llvm::sys::DynamicLibrary::AddSymbol("allocate_bytes", plugin_allocate_bytes);
     
     auto& Registry = *llvm::PassRegistry::getPassRegistry();
     llvm::initializeCore(Registry);
