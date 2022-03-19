@@ -23,14 +23,14 @@
 #include "compiler.h"
 
 
-float *allocate_buffer(int num_sample, void* allocator){
-    return plugin_allocate_buffer(num_sample, (Arena*)allocator);
+float *allocate_buffer(int num_sample, void* initializer){
+    return plugin_allocate_buffer(num_sample, (Initializer*)initializer);
 }
-float **allocate_buffers(int num_samples, int num_channels, void* allocator){
-    return plugin_allocate_buffers(num_samples, num_channels, (Arena*)allocator);;
+float **allocate_buffers(int num_samples, int num_channels, void* initializer){
+    return plugin_allocate_buffers(num_samples, num_channels, (Initializer*)initializer);
 }
-void *allocate_bytes(int num_bytes, void* allocator){
-    return plugin_allocate_bytes(num_bytes, (Arena*) allocator);
+void *allocate_bytes(int num_bytes, void* initializer){
+    return plugin_allocate_bytes(num_bytes, (Initializer*)initializer);
 }
 
 

@@ -3,6 +3,12 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
 
+struct Arena{
+    char *base;
+    char *current; 
+    u64 capacity;
+}; 
+
 //~ Assets
 
 enum Asset_File_State : u32 {
@@ -36,7 +42,6 @@ enum Asset_File_State : u32 {
     
     Asset_File_State_FAILED,
 };
-
 
 
 //~ Compiler Error Handling
@@ -231,6 +236,9 @@ typedef struct Plugin {
     
 } Plugin;
 
+typedef struct {
+    Arena *allocator;
+} Initializer;
 
 //~ Audio
 
@@ -387,13 +395,13 @@ typedef struct {
     i32 buffer_size;
     u8* spec_holder;
     void* spec;
-    u8 *work_buffer;
-    real32 *temp_perm_buffer; //TODO rename, c'est pas clair si on connait pas IPP
 } Ipp_Order_Context;
 
 //TODO rename, c'est nul comme nom ORDER, en 
 typedef struct {
     i32 highest_order;
+    u8 *work_buffer;
+    real32 *temp_perm_buffer; //TODO rename, c'est pas clair si on connait pas IPP
     Ipp_Order_Context *order_to_ctx;
 } Ipp_Context;
 

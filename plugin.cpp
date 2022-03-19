@@ -252,6 +252,9 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
         .allocator_a = allocator_init(10 * 1024),
         .allocator_b = allocator_init(10 * 1204),
         
+        .initializer_a = {&m->allocator_a},
+        .initializer_b = {&m->allocator_b},
+        
         .front_handle = &m->handle_a,
         .back_handle = &m->handle_b,
         
@@ -260,6 +263,9 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
         
         .front_allocator = &m->allocator_a,
         .back_allocator = &m->allocator_b,
+        
+        .front_initializer = &m->initializer_a,
+        .back_initializer = &m->initializer_b,
         
         .clang_ctx = clang_ctx,
         .plugin_state = plugin_state,
@@ -280,6 +286,7 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
 
 void plugin_populate_from_descriptor(Plugin *handle, 
                                      Arena *allocator, 
+                                     Initializer *initializer,
                                      Audio_Parameters audio_parameters)
 {
     handle->parameter_values_audio_side = (Plugin_Parameter_Value*)arena_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
@@ -290,11 +297,12 @@ void plugin_populate_from_descriptor(Plugin *handle,
     handle->state_holder = (char*) arena_allocate(allocator, handle->descriptor.state_struct.size);
     
     handle->default_parameters_f(handle->parameters_holder);
+    
     handle->initialize_state_f(handle->parameters_holder, 
                                handle->state_holder, 
                                audio_parameters.num_channels,
                                audio_parameters.sample_rate, 
-                               allocator);
+                               initializer);
     
     plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_ui_side, handle->parameters_holder);
     plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_audio_side, handle->parameters_holder);
@@ -324,7 +332,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             ATOMIC_HARNESS();
             if(m->front_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
             {
-                plugin_populate_from_descriptor(m->front_handle, m->front_allocator, audio_parameters);
+                plugin_populate_from_descriptor(m->front_handle, m->front_allocator, m->front_initializer, audio_parameters);
                 m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
                 
                 ensure(compare_exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE, Asset_File_State_VALIDATING));
@@ -362,7 +370,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             {
                 printf("hot : compiler success\n");
                 
-                plugin_populate_from_descriptor(m->back_handle, m->back_allocator, audio_parameters);
+                plugin_populate_from_descriptor(m->back_handle, m->back_allocator, m->back_initializer, audio_parameters);
                 
                 m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
                 *handle_to_pull_ir_from = m->back_handle;
@@ -427,6 +435,10 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             Arena *temp_alloc = m->back_allocator;
             m->back_allocator = m->front_allocator;
             m->front_allocator = temp_alloc;
+            
+            Initializer *temp_init = m->back_initializer;
+            m->back_initializer = m->front_initializer;
+            m->front_initializer = temp_init;
             
             plugin_reset_handle(m->back_handle, m->back_allocator);
             
