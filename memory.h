@@ -62,12 +62,6 @@ static void instrumented_free(void* address, const char* file, int line)
 #define m_safe_free(pointer) if((pointer)) { m_free((pointer)); (pointer) = 0; }
 
 
-struct Arena{
-    char *base;
-    char *current; 
-    u64 capacity;
-}; 
-
 #define word_size (sizeof(void*))
 #define align(n) ((n + word_size - 1) & ~(word_size - 1))
 
@@ -98,6 +92,17 @@ internal void *arena_allocate(Arena *allocator, u64 size)
         ensure(false);
         return nullptr;
     } 
+}
+
+internal char *arena_current(Arena *allocator)
+{
+    return allocator->current;
+}
+
+
+internal void arena_reset(Arena *allocator, char *previous)
+{
+    allocator->current = previous; 
 }
 
 #endif //MEMORY_H

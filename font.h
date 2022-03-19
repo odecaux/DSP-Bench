@@ -11,8 +11,11 @@
 
 //TODO padding -> filtering ????
 //NOTE hardcoded : unicode range, font size, 
-internal Font load_fonts(const char* font_filename)
+internal Font load_fonts(const char* font_filename, 
+                         Arena *app_allocator, 
+                         Arena *scratch_allocator)
 {
+    char *current_allocator_position = arena_current(scratch_allocator);
     Font new_font = {};
     
     i64 font_file_size = file_get_size(font_filename);
@@ -21,7 +24,9 @@ internal Font load_fonts(const char* font_filename)
         exit(1);
     }
     
-    u8* font_file_buffer = (u8*) m_allocate(font_file_size, "font : file buffer");
+    //u8* font_file_buffer = (u8*) m_allocate(font_file_size, "font : file buffer");
+    
+    u8* font_file_buffer = (u8*) arena_allocate(scratch_allocator, font_file_size);
     if(load_file_to_memory(font_filename, font_file_buffer) == false)
     {
         exit(1);
@@ -47,10 +52,10 @@ internal Font load_fonts(const char* font_filename)
     u32 max_codepoint = 0x00FF;
     i32 glyph_count = 0;
     
-    i32 *codepoint_to_idx = m_allocate_array(i32, max_codepoint, "font : codepoint to idx");
+    i32 *codepoint_to_idx = (i32*)arena_allocate(app_allocator, sizeof(i32) * max_codepoint);
     memset(codepoint_to_idx, -1, max_codepoint * sizeof(i32));
     
-    i32 *codepoint_list = m_allocate_array(i32, max_codepoint, "font : codepoint flat list");
+    i32 *codepoint_list = (i32*) arena_allocate(scratch_allocator, sizeof(i32) * max_codepoint);
     
     for(u32 codepoint = min_codepoint; codepoint < max_codepoint; codepoint++)
     {
@@ -67,12 +72,8 @@ internal Font load_fonts(const char* font_filename)
         exit(0);
     }
     
-    //TODO osef, ça ira dans le scratch
-    codepoint_list = (i32*) realloc(codepoint_list, glyph_count * sizeof(i32));
-    
-    
     //3) on chope la taille de chaque glyph
-    stbrp_rect *glyph_rects = m_allocate_array(stbrp_rect, glyph_count, "font : glyph rects");
+    stbrp_rect *glyph_rects = (stbrp_rect*)arena_allocate(scratch_allocator, sizeof(stbrp_rect) * glyph_count);
     memset(glyph_rects, 0, glyph_count * sizeof(stbrp_rect));
     
     
@@ -130,14 +131,14 @@ internal Font load_fonts(const char* font_filename)
     //printf("texture size : %d, %d\n", texture_width, texture_height);
     //5) FINALLY RENDER TO A GRAYSCALE BITMAP
     
-    u8 *grayscale_pixels = (u8*)m_allocate(texture_width * texture_height, "font : grayscale pixels");
+    u8 *grayscale_pixels = (u8*)arena_allocate(scratch_allocator, texture_width * texture_height); 
     memset(grayscale_pixels, 0, sizeof(u8) * texture_width * texture_height);
     
     spc.pixels = grayscale_pixels;
     spc.height = texture_height;
     
     
-    stbtt_packedchar *packedchars = m_allocate_array(stbtt_packedchar, glyph_count, "font : packed chars");
+    stbtt_packedchar *packedchars = (stbtt_packedchar*)arena_allocate(scratch_allocator, sizeof(stbtt_packedchar) * glyph_count);
     memset(packedchars, 0, glyph_count * sizeof(stbtt_packedchar));
     
     stbtt_pack_range pack_range = {
@@ -165,7 +166,7 @@ internal Font load_fonts(const char* font_filename)
     const float font_off_x = 0;//= cfg.GlyphOffset.x;
     const float font_off_y = 0; //cfg.GlyphOffset.y + IM_ROUND(dst_font->Ascent);
     
-    Glyph* glyphs = m_allocate_array(Glyph, glyph_count, "font : glyphs");
+    Glyph* glyphs = (Glyph*)arena_allocate(app_allocator, sizeof(Glyph) * glyph_count);
     
     for (int glyph_i = 0; glyph_i < glyph_count; glyph_i++)
     {
@@ -235,7 +236,7 @@ internal Font load_fonts(const char* font_filename)
     
     
     
-    real32 *codepoint_to_advancex = m_allocate_array(real32, max_codepoint + 1, "font : codepoint to advancex");
+    real32 *codepoint_to_advancex = (real32*)arena_allocate(app_allocator, sizeof(real32) *( max_codepoint + 1 ));
     memset(codepoint_to_advancex, -1.0f, (max_codepoint + 1) * sizeof(real32));
     
     for (int i = 0; i < glyph_count; i++)
@@ -255,7 +256,7 @@ internal Font load_fonts(const char* font_filename)
     
     Vec2 white_rect_pos = Vec2{ (white_rect.x + 0.5f) * uv_scale.x, (white_rect.y + 0.5f) * uv_scale.y};
     
-    u32 *rgba_pixels = m_allocate_array(u32, texture_width * texture_height, "font : rgba pixels");
+    u32 *rgba_pixels = (u32*) arena_allocate(app_allocator, sizeof(u32) * texture_width * texture_height);
     
     
     for(u32 i = 0; i < texture_width * texture_height; i++)
@@ -265,13 +266,7 @@ internal Font load_fonts(const char* font_filename)
     }
     
     
-    
-    m_free(font_file_buffer, "font : file buffer");
-    m_free(codepoint_list, "font : codepoint flat list");
-    m_free(glyph_rects, "font flyph rects");
-    m_free(packedchars, "font : packed chars");
-    m_free(grayscale_pixels, "font : grascale pixels");
-    
+    arena_reset(scratch_allocator, current_allocator_position);
     return {
         .font_size = PIXEL_SIZE,
         .codepoint_to_idx = codepoint_to_idx,

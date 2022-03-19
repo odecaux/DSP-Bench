@@ -180,6 +180,8 @@ bool test_initialization()
         char* plugin_parameters_holder = (char*) malloc(handle.descriptor.parameters_struct.size);
         char* plugin_state_holder = (char*) malloc(handle.descriptor.state_struct.size);
         
+        
+        
         handle.default_parameters_f(plugin_parameters_holder);
         handle.initialize_state_f(plugin_parameters_holder, 
                                   plugin_state_holder, 
