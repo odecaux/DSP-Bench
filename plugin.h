@@ -116,24 +116,25 @@ typedef struct{
 } Plugin_Initialization_Context;
 
 
-internal float *plugin_allocate_buffer(int num_sample, Plugin_Initialization_Context* initialization_context)
+
+internal float *plugin_allocate_buffer(int num_sample, Initializer* initializer)
 {
-    return (real32*)arena_allocate(initialization_context->allocator, sizeof(real32) * num_sample);
+    return (real32*)arena_allocate(initializer->allocator, sizeof(real32) * num_sample);
 }
 
-internal float **plugin_allocate_buffers(int num_samples, int num_channels,  Plugin_Initialization_Context* initialization_context) 
+internal float **plugin_allocate_buffers(int num_samples, int num_channels, Initializer* initializer) 
 {
-    real32** channels = (real32**) arena_allocate(initialization_context->allocator, sizeof(real32*) * num_channels);
+    real32** channels = (real32**) arena_allocate(initializer->allocator, sizeof(real32*) * num_channels);
     for(int i = 0; i < num_channels; i++)
     {
-        channels[i] = (real32*) arena_allocate(initialization_context->allocator, sizeof(real32) * num_samples);
+        channels[i] = (real32*) arena_allocate(initializer->allocator, sizeof(real32) * num_samples);
     }
     return channels;
 }
 
-internal void *plugin_allocate_bytes(int num_bytes,  Plugin_Initialization_Context* initialization_context)
+internal void *plugin_allocate_bytes(int num_bytes, Initializer* initializer)
 {
-    return arena_allocate(initialization_context->allocator, num_bytes);
+    return arena_allocate(initializer->allocator, num_bytes);
 }
 
 
@@ -241,8 +242,12 @@ struct Plugin_Reloading_Manager
 {
     Plugin handle_a;
     Plugin handle_b;
+    
     Arena allocator_a;
     Arena allocator_b;
+    
+    Initializer initializer_a;
+    Initializer initializer_b;
     
     Plugin *front_handle;
     Plugin *back_handle;
@@ -252,12 +257,9 @@ struct Plugin_Reloading_Manager
     
     Arena *front_allocator;
     Arena *back_allocator;
-    
-    Plugin_Initialization_Context initialization_context_a;
-    Plugin_Initialization_Context initialization_context_b;
-    
-    Plugin_Initialization_Context *initialization_context_front;
-    Plugin_Initialization_Context *initialization_context_back;
+  
+    Initializer *front_initializer;
+    Initializer *back_initializer;
     
     Compiler_Thread_Param compiler_thread_param;
     HANDLE compiler_thread_handle;

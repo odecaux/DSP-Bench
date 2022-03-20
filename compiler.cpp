@@ -23,19 +23,6 @@
 #include "plugin.h"
 #include "compiler.h"
 
-//
-//float *allocate_buffer(int num_sample, void* initialization_context){
-//return plugin_allocate_buffer(num_sample,
-//(Plugin_Initialization_Context*)initialization_context);
-//}
-//float **allocate_buffers(int num_samples, int num_channels, void* initialization_context){
-//return plugin_allocate_buffers(num_samples, num_channels, (Plugin_Initialization_Context*)initialization_context);
-//}
-//void *allocate_bytes(int num_bytes, void* initialization_context){
-//return plugin_allocate_bytes(num_bytes, (Plugin_Initialization_Context*)initialization_context);
-//}
-//
-
 struct Clang_Context {
     llvm::LLVMContext llvm_context;
 };

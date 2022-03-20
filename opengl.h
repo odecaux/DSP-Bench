@@ -676,8 +676,8 @@ OpenGL_Context opengl_initialize(Window_Context *window, Font* font)
     OpenGL_Context_IR ctx_ir = opengl_initialize_ir();
     OpenGL_Context_FFT ctx_fft = opengl_initialize_fft();
     
-    
-    m_free(font->atlas_pixels, "opengl : atlas pixels");
+    //TODO comment on fait pour libérer cette mémoire ?
+    //m_free(font->atlas_pixels, "opengl : atlas pixels");
     font->atlas_pixels = nullptr;
     
     ReleaseDC(window->window, ctx_win32.window_dc);

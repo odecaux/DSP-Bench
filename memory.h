@@ -101,4 +101,15 @@ internal void *arena_allocate(Arena *allocator, u64 size)
     } 
 }
 
+internal char *arena_current(Arena *allocator)
+{
+    return allocator->current;
+}
+
+
+internal void arena_reset(Arena *allocator, char *previous)
+{
+    allocator->current = previous; 
+}
+
 #endif //MEMORY_H
