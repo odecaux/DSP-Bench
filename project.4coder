@@ -36,6 +36,11 @@ commands = {
         .win = "build_scripts\build_gui.bat", 
     },
     
+    
+    .build_release = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
+        .win = "build_scripts\build_release.bat", 
+    },
+    
     .build_and_run_tests = { .out = "*compilation*", .footer_panel = true, .save_dirty_files = true,
         .win = "test\\build_tests.bat", 
     },
@@ -59,6 +64,6 @@ fkey_command = {
     .F3 = "debug",
     .F4 = "build_compiler",
     .F5 = "build_gui",
+    .F6 = "build_release",
     //.F5 = "build_and_run_tests",
-    .F5 = "build_gui",
 };

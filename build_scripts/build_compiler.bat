@@ -14,9 +14,9 @@ set code=%cd%
 
 pushd build
 
-cl %debug_opts% /Fp"compiler.pch" /Yu"llvm_include.h" "%code%\compiler.cpp"   /D_USRDLL /c
+cl %debug_opts% /Fp"compiler.pch" /Yu"llvm_include.h" "%code%\compiler.cpp" /D_USRDLL /c
 cl %debug_opts% "%code%\dsp.cpp" /c
-link compiler.obj dsp.obj compiler_pch.obj   ippcoremt.lib ippsmt.lib ippvmmt.lib Comdlg32.lib /OUT:compiler.dll /LIBPATH:%my_lib% /DLL
+link compiler.obj dsp.obj compiler_pch.obj   ippcoremt.lib ippsmt.lib ippvmmt.lib Comdlg32.lib /DEBUG /OUT:compiler.dll /LIBPATH:%my_lib% /DLL
 
 popd
 

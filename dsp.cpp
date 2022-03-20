@@ -23,7 +23,6 @@ void ipp_ensure_impl(IppStatus status, const char* file, u32 line)
     }
 }
 
-//TODO cette API a aucun sens ?????
 Analysis analysis_initialize(u32 ir_sample_count, u32 num_channels, Arena *allocator)
 {
     real32** IR_buffer = (real32**)arena_allocate(allocator, sizeof(real32*) *num_channels);
@@ -78,8 +77,8 @@ void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp
     real32 l = log(2.0);
     i32 order = (i32)(log((real32)input_sample_count)/log(2.0));
     
-    Ipp_Order_Context *ctx = &ipp_ctx->order_to_ctx[order];
-    ipp_ensure(ippsFFTFwd_RToCCS_32f(in, ipp_ctx->temp_perm_buffer, (IppsFFTSpec_R_32f*)ctx->spec, ipp_ctx->work_buffer));
+    ipp_ensure(ippsFFTFwd_RToCCS_32f(in, ipp_ctx->temp_perm_buffer, (IppsFFTSpec_R_32f*)ipp_ctx->order_to_ctx[order].spec, ipp_ctx->work_buffer));
+    
     
     //NOTE il faut que Ipp32fc et Vec2 aient le même layout
     ipp_ensure(ippsConjCcs_32fc(ipp_ctx->temp_perm_buffer, (Ipp32fc*)out, input_sample_count));
@@ -99,7 +98,6 @@ Ipp_Order_Context ipp_create_spec_for_order(i32 fft_order, Arena *allocator)
     
     IppsFFTSpec_R_32f *spec; 
     ipp_ensure(ippsFFTInit_R_32f(&spec, fft_order, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast, spec_holder, spec_initialization_buffer));
-    
     
     allocator->current = (char*)spec_initialization_buffer;
     
@@ -121,7 +119,6 @@ Ipp_Context ipp_initialize(Arena *allocator)
     ipp_ensure(ippSetFlushToZero(1, 0));
     ipp_ensure(ippSetDenormAreZeros(1));
     ipp_ensure(ippGetCpuFeatures(&cpuFeatures, 0));/* Get CPU features and features enabled with selected library level */
-    
     
     i32 spec_size;
     i32 spec_buffer_size;

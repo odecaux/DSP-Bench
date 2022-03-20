@@ -19,20 +19,9 @@
 //#include "win32_helpers.h"
 #include "structs.h"
 #include "memory.h"
+#include "audio.h"
 #include "plugin.h"
 #include "compiler.h"
-
-
-float *allocate_buffer(int num_sample, void* initializer){
-    return plugin_allocate_buffer(num_sample, (Initializer*)initializer);
-}
-float **allocate_buffers(int num_samples, int num_channels, void* initializer){
-    return plugin_allocate_buffers(num_samples, num_channels, (Initializer*)initializer);
-}
-void *allocate_bytes(int num_bytes, void* initializer){
-    return plugin_allocate_bytes(num_bytes, (Initializer*)initializer);
-}
-
 
 struct Clang_Context {
     llvm::LLVMContext llvm_context;
@@ -341,9 +330,9 @@ Clang_Context* create_clang_context_impl()
     llvm::sys::DynamicLibrary::AddSymbol("cosh_64", oct_cosh_64);
     llvm::sys::DynamicLibrary::AddSymbol("tanh_64", oct_tanh_64);
     
-    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffer", allocate_buffer);
-    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffers", allocate_buffers);
-    llvm::sys::DynamicLibrary::AddSymbol("allocate_bytes", allocate_bytes);
+    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffer", plugin_allocate_buffer);
+    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffers", plugin_allocate_buffers);
+    llvm::sys::DynamicLibrary::AddSymbol("allocate_bytes", plugin_allocate_bytes);
     
     auto& Registry = *llvm::PassRegistry::getPassRegistry();
     llvm::initializeCore(Registry);

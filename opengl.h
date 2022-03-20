@@ -5,6 +5,8 @@
 
 #include <GL/GL.h>
 
+
+
 typedef struct{
     u32 atlas_shader_program;
     u32 atlas_vao;

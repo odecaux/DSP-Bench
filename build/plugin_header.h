@@ -39,9 +39,9 @@ const float quarter_pi = 0.7853982f;
 
 extern "C" { 
     
-    float *allocate_buffer(int num_sample, void* allocator);
-    float **allocate_buffers(int num_samples, int num_channels, void* allocator);
-    void *allocate_bytes(int num_bytes, void* allocator);
+    float *allocate_buffer(int num_sample, void* initialization_context);
+    float **allocate_buffers(int num_samples, int num_channels, void* initialization_context);
+    void *allocate_bytes(int num_bytes, void* initialization_context);
     
     double sin_64(double d1);
     double cos_64(double d1);
@@ -100,7 +100,7 @@ extern "C" {
     void log10_32_array(Vec2 *in, real32* out, i32 sample_count);
     
     
-    void* initialize_fft();
+    void* initialize_fft(void *plugin_context);
     void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count);
     void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, void *fft_context);
 }

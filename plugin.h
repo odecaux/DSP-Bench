@@ -4,6 +4,118 @@
 #define DESCRIPTOR_H
 
 
+//~ Plugin
+
+typedef void(*audio_callback_t)(void*, void*, float**, unsigned int, unsigned int, float);
+typedef void(*default_parameters_t)(void*);
+typedef void(*initialize_state_t)(void*, void*, unsigned int, float, void*);
+
+
+enum  Plugin_Parameter_Type{
+    Int,
+    Float,
+    Enum
+};
+
+
+typedef struct{
+    i32 min;
+    i32 max;
+} Parameter_Int;
+
+typedef struct {
+    real32 min;
+    real32 max;
+    bool log;
+} Parameter_Float;
+
+typedef struct{
+    i64 value;
+    String name;
+} Parameter_Enum_Entry;
+
+
+typedef struct {
+    Parameter_Enum_Entry *entries;
+    u32 num_entries;
+} Parameter_Enum;
+
+typedef struct {
+    Custom_Error error;
+    String name;
+    u32 offset;
+    
+    Plugin_Parameter_Type type;
+    union {
+        Parameter_Int int_param;
+        Parameter_Float float_param;
+        Parameter_Enum enum_param;
+    };
+    
+} Plugin_Descriptor_Parameter;
+
+typedef struct {
+    String name;
+    //le nom c'est le filename ?
+    Custom_Error error;
+    struct { 
+        i64 size;
+        i64 alignment;
+    } parameters_struct;
+    
+    struct { 
+        i64 size;
+        i64 alignment;
+    } state_struct;
+    
+    Plugin_Descriptor_Parameter *parameters;
+    u32 num_parameters;
+} Plugin_Descriptor;
+
+typedef struct {
+    union{
+        int int_value;
+        float float_value;
+        int enum_value;
+    };
+} Plugin_Parameter_Value;
+
+
+//TODO pour l'instant il y a un bug : si l'ui arrive à emettre 4096 blocs pendant que le thread audio fait 1 copie
+typedef struct  {
+    Plugin_Parameter_Value *buffer;
+    volatile Plugin_Parameter_Value **head;
+    u32 writer_idx;
+    u32 buffer_size;
+    u32 num_fields_by_plugin;
+} Plugin_Parameters_Ring_Buffer;
+
+
+typedef struct Plugin {
+    Compiler_Failure_Stage failure_stage;
+    Clang_Error_Log clang_error_log;
+    Decl_Search_Log decls_search_log;
+    
+    Plugin_Descriptor descriptor;
+    
+    void* llvm_jit_engine;
+    audio_callback_t audio_callback_f;
+    default_parameters_t default_parameters_f;
+    initialize_state_t initialize_state_f;
+    
+    char* parameters_holder;
+    char* state_holder;
+    
+    Plugin_Parameter_Value* parameter_values_audio_side;
+    Plugin_Parameter_Value* parameter_values_ui_side;
+    Plugin_Parameters_Ring_Buffer ring;
+} Plugin;
+
+typedef struct{
+    Arena *allocator;
+} Initializer;
+
+
 
 internal float *plugin_allocate_buffer(int num_sample, Initializer* initializer)
 {

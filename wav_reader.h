@@ -4,7 +4,6 @@
 #define WAV_READER_H
 
 
-
 typedef struct {                               
     unsigned short      format;    // Audio format 1=CM,6=mulaw,7=alaw, 257=IBM Mu-Law, 258=IBM A-Law, 259=ADCM 
     unsigned short      num_channels;      // Number of channels 1=Mono 2=Sterio                   

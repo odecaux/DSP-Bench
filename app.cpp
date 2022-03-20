@@ -13,6 +13,7 @@
 #include "win32_helpers.h"
 #include "structs.h"
 #include "memory.h"
+#include "audio.h"
 #include "plugin.h"
 #include "draw.h"
 #include "app.h"

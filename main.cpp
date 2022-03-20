@@ -9,14 +9,14 @@
 #include "base.h"
 #include "structs.h"
 #include "memory.h"
-#include "plugin.h"
 #include "audio.h"
+#include "plugin.h"
 #include "win32_helpers.h"
 #include "wav_reader.h"
+#include "draw.h"
 #include "font.h"
 #include "dsp.h"
 #include "app.h"
-#include "draw.h"
 
 #include "win32_platform.h"
 #include "opengl.h"
@@ -127,7 +127,6 @@ i32 main(i32 argc, char** argv)
     {
         return -1;
     }
-    
     
     Arena app_allocator = allocator_init(4 * 1024 * 1204);
     Arena scratch_allocator = allocator_init(1024 * 1204);
@@ -313,6 +312,7 @@ i32 main(i32 argc, char** argv)
             gui_IR_allocator.current = gui_IR_allocator.base;
             
             compute_IR(*plugin_to_pull_ir_from, analysis.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, plugin_to_pull_ir_from->parameter_values_ui_side, &gui_IR_allocator, &initializer);
+
             fft_perform_and_get_magnitude(&analysis);
             
             memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
@@ -344,6 +344,7 @@ i32 main(i32 argc, char** argv)
                        audio_parameters, 
                        plugin_reloading_manager.front_handle->parameter_values_ui_side, &gui_IR_allocator,
                        &initializer);
+
             fft_perform_and_get_magnitude(&analysis);
             
             memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 

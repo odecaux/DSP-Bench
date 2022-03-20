@@ -8,6 +8,7 @@
 #include "structs.h"
 #include "win32_helpers.h"
 #include "memory.h"
+#include "audio.h"
 #include "plugin.h"
 
 #include "hardcoded_values.h"
@@ -283,7 +284,6 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
     };
 }
 
-
 void plugin_populate_from_descriptor(Plugin *handle, 
                                      Arena *allocator, 
                                      Initializer *initializer,
@@ -333,6 +333,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             if(m->front_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
             {
                 plugin_populate_from_descriptor(m->front_handle, m->front_allocator, m->front_initializer, audio_parameters);
+
                 m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
                 
                 ensure(compare_exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE, Asset_File_State_VALIDATING));
@@ -369,8 +370,9 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             if(m->back_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
             {
                 printf("hot : compiler success\n");
-                
+               
                 plugin_populate_from_descriptor(m->back_handle, m->back_allocator, m->back_initializer, audio_parameters);
+
                 
                 m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
                 *handle_to_pull_ir_from = m->back_handle;
@@ -428,9 +430,9 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
                                        Asset_File_State_HOT_RELOAD_STAGE_DISPOSE));
             printf("hot reload disposing\n");
             
-            Plugin *temp = m->back_handle;
+            Plugin *temp_handle = m->back_handle;
             m->back_handle = m->front_handle;
-            m->front_handle = temp;
+            m->front_handle = temp_handle;
             
             Arena *temp_alloc = m->back_allocator;
             m->back_allocator = m->front_allocator;

@@ -3,6 +3,79 @@
 #ifndef DRAW_H
 #define DRAW_H
 
+//~ Fonts
+
+//TODO types 
+typedef struct {
+    real32 X0, Y0, X1, Y1;     // Glyph corners
+    real32 U0, V0, U1, V1;     // Texture coordinates
+    i32 advance_x;
+    
+    u32 codepoint; 
+} Glyph;
+
+typedef struct{
+    float font_size; 
+    
+    i32 *codepoint_to_idx;  
+    real32 *codepoint_to_advancex; 
+    u32 highest_codepoint;
+    
+    Glyph *glyphs;
+    u32 glyph_count;
+    
+    Vec2 white_rect_pos;
+    //TODO fallback
+    
+    real32 ascent;
+    real32 descent;
+    
+    u32* atlas_pixels;
+    Vec2 atlas_texture_dim;
+    u32 atlas_texture_id;
+} Font;
+
+
+
+typedef struct {
+    Vec2 pos;
+    Vec2 uv;
+    Color col;
+} Vertex;
+
+typedef struct{
+    Vec2 pos;
+    Vec2 quad_pos;
+} IR_Vertex;
+
+typedef struct {
+    Font font;
+    Vertex *draw_vertices;
+    u32 draw_vertices_count;
+    u32 *draw_indices;
+    u32 draw_indices_count;
+} Graphics_Context_Atlas;
+
+typedef struct {
+    Rect bounds;
+    real32 *IR_buffer;
+    u32 IR_sample_count;
+    real32 zoom_state;
+} Graphics_Context_IR;
+
+typedef struct {
+    Rect bounds;
+    real32 *fft_buffer;
+    u32 fft_sample_count;
+} Graphics_Context_FFT;
+
+typedef struct {
+    Vec2 window_dim;
+    Graphics_Context_Atlas atlas;
+    Graphics_Context_IR ir;
+    Graphics_Context_FFT fft;
+} Graphics_Context;
+
 function u32 push_vtx(Vec2 pos, Color col, Graphics_Context_Atlas *atlas)
 {
     Vertex* vtx_write = atlas->draw_vertices;

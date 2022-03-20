@@ -21,6 +21,14 @@
 //} Memory_Log;
 //
 
+
+struct Arena{
+    char *base;
+    char *current; 
+    u64 capacity;
+}; 
+
+
 #define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
 
 //#define LOG_ALLOCATIONS 1
@@ -61,7 +69,6 @@ static void instrumented_free(void* address, const char* file, int line)
 
 #define m_safe_free(pointer) if((pointer)) { m_free((pointer)); (pointer) = 0; }
 
-
 #define word_size (sizeof(void*))
 #define align(n) ((n + word_size - 1) & ~(word_size - 1))
 
@@ -85,10 +92,10 @@ internal void *arena_allocate(Arena *allocator, u64 size)
     {
         allocator->current += aligned;
         
-        printf("%f\n", float(allocator->current - allocator->base) / float(allocator->capacity));
         return begin;
     }
     else{
+        printf("%f\n", float(allocator->current - allocator->base) / float(allocator->capacity));
         ensure(false);
         return nullptr;
     } 

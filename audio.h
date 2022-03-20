@@ -3,6 +3,48 @@
 #ifndef AUDIO_H
 #define AUDIO_H
 
+
+enum Wav_Reading_Error{
+    Wav_Success,
+    Wav_Could_Not_Open_File,
+    Wav_Not_A_RIFF,
+    Wav_File_Reading_Error,
+    Wav_Invalid_Format
+};
+
+typedef struct {
+    Wav_Reading_Error error;
+    u32 num_channels;
+    u32 samples_by_channel;
+    real32** deinterleaved_buffer;
+    u32 read_cursor;
+} Audio_File;
+
+
+typedef struct 
+{
+    real32 sample_rate;
+    u32 num_channels;
+    u32 num_samples;
+    u32 bit_depth;
+} Audio_Parameters;
+
+struct Plugin_Reloading_Manager;
+
+typedef struct 
+{
+    i8 audio_file_play;
+    i8 audio_file_loop;
+    i8 plugin_play;
+    
+    Asset_File_State *plugin_state;
+    Asset_File_State *audio_file_state;
+    
+    Plugin_Reloading_Manager *m;
+    Audio_File *audio_file;
+} Audio_Thread_Context;
+
+
 //TODO what if in == 0
 internal u32 next_power_of_two(u32 in)
 {

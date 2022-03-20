@@ -5,6 +5,7 @@
 #include "base.h"
 #include "structs.h"
 #include "memory.h"
+#include "audio.h"
 #include "plugin.h"
 
 #include "hardcoded_values.h"

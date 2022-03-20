@@ -23,13 +23,13 @@ Parameters default_parameters()
 State initialize_state(const Parameters& param, 
                        const unsigned int num_channels, 
                        const float sample_rate,
-                       void *allocator)
+                       void *initialization_context)
 {
     State initial_state = {};
     float freq = 500.0f;
     u32 buffer_size = (u32)(sample_rate / freq);
     initial_state.buffer_size = buffer_size;
-    initial_state.buffer = allocate_buffers(buffer_size, num_channels, allocator);
+    initial_state.buffer = allocate_buffers(buffer_size, num_channels, initialization_context);
     initial_state.cursor = 0;
     
     double theta = 0.0;
