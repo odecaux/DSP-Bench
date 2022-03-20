@@ -13,6 +13,7 @@
 #include "win32_helpers.h"
 #include "structs.h"
 #include "memory.h"
+#include "audio.h"
 #include "plugin.h"
 #include "draw.h"
 #include "app.h"
@@ -153,7 +154,7 @@ void compute_IR(Plugin& handle,
                               IR_state_holder, 
                               audio_parameters.num_channels, 
                               audio_parameters.sample_rate, 
-                              allocator);
+                              initialization_context);
     
     handle.audio_callback_f(IR_parameters_holder, 
                             IR_state_holder, 

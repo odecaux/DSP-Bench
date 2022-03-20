@@ -8,6 +8,7 @@
 #include "structs.h"
 #include "win32_helpers.h"
 #include "memory.h"
+#include "audio.h"
 #include "plugin.h"
 
 #include "hardcoded_values.h"
