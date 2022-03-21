@@ -3,12 +3,12 @@
 #ifndef FFT_H
 #define FFT_H
 
-Ipp_Context ipp_initialize(Arena *allocator);
+IPP_FFT_Context ipp_initialize(Arena *allocator);
 Analysis analysis_initialize(u32 ir_sample_count, u32 num_channels, Arena *allocator);
 
 void fft_perform_and_get_magnitude(Analysis *analysis);
 void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count);
-void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp_ctx);
+void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, IPP_FFT_Context *ipp_context);
 void pythagore(Vec2 *in, real32* out, i32 sample_count);
 
 

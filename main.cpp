@@ -79,8 +79,11 @@ bool check_extension(const char* filename, const char* extension)
     return maybe_ext > filename && (strncmp(maybe_ext, extension, 3) == 0);
 }
 
-i32 main(i32 argc, char** argv)
+i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int nCmdShow)
 {
+    auto argc = __argc;
+    auto argv = __argv;
+    
     char source_filename[1024] = {0};
     char audio_filename[1024] = {0};
     

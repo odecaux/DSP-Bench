@@ -31,7 +31,7 @@ struct Arena{
 
 #define __FILENAME__ (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
 
-//#define LOG_ALLOCATIONS 1
+#define LOG_ALLOCATIONS 1
 
 #ifdef LOG_ALLOCATIONS
 
@@ -42,7 +42,10 @@ static void* instrumented_malloc(size_t size, const char* file, int line)
 }
 
 
-static void* instrumented_array_malloc(size_t count, size_t size, const char* type, const char* file, int line)
+static void* instrumented_array_malloc(size_t count, 
+                                       size_t size, 
+                                       const char* type, 
+                                       const char* file, int line)
 {
     printf("malloc : %llu * %s at %s:%d\n", count, type, file, line);
     return malloc(count * size);
@@ -56,7 +59,7 @@ static void instrumented_free(void* address, const char* file, int line)
 
 
 #define m_allocate(size, tag) instrumented_malloc((size), __FILENAME__, __LINE__)
-#define m_allocate_array(type, count, tag) ((type) *)instrumented_array_malloc(count, sizeof(type), #type,__FILENAME__, __LINE__)
+#define m_allocate_array(type, count, tag) (type *)instrumented_array_malloc(count, sizeof(type), #type,__FILENAME__, __LINE__)
 #define m_free(address, tag) instrumented_free(address, __FILENAME__, __LINE__)
 
 #else 
@@ -95,7 +98,8 @@ internal void *arena_allocate(Arena *allocator, u64 size)
         return begin;
     }
     else{
-        printf("%f\n", float(allocator->current - allocator->base) / float(allocator->capacity));
+        real32 filled = float(allocator->current - allocator->base) / float(allocator->capacity);
+        printf("%f\n", filled);
         ensure(false);
         return nullptr;
     } 

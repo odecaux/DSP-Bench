@@ -149,28 +149,20 @@ typedef struct{
 struct Window_Context;
 
 //~ DSP/IR/FFT
-
 typedef struct {
-    i32 fft_order;
-    i32 buffer_size;
-    u8* spec_holder;
-    void* spec;
-} Ipp_Order_Context;
-
-//TODO rename, c'est nul comme nom ORDER, en 
-typedef struct {
-    i32 highest_order;
+    i32 current_order;
     u8 *work_buffer;
     real32 *temp_perm_buffer; //TODO rename, c'est pas clair si on connait pas IPP
-    Ipp_Order_Context *order_to_ctx;
-} Ipp_Context;
+    u8* spec_holder;
+    u8* spec_initialization_buffer;
+    void *spec;
+} IPP_FFT_Context;
 
-typedef Ipp_Context Plugin_FFT_Context;
 
 typedef struct {
     u32 ir_sample_count;
     u32 ir_num_channels;
-    Ipp_Context ipp_context;
+    IPP_FFT_Context ipp_context;
     real32 **IR_buffer;
     real32** windowed_zero_padded_buffer;
     Vec2* fft_out;

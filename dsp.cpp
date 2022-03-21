@@ -70,46 +70,36 @@ void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count)
     ipp_ensure(ippsWinHamming_32f(in_buffer, out_buffer, sample_count));
 }
 
-void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, Ipp_Context *ipp_ctx)
+void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, IPP_FFT_Context *ipp_ctx)
 {
     ensure((input_sample_count & (input_sample_count - 1)) == 0);
     real32 r_s = log((real32)input_sample_count);
     real32 l = log(2.0);
     i32 order = (i32)(log((real32)input_sample_count)/log(2.0));
     
-    ipp_ensure(ippsFFTFwd_RToCCS_32f(in, ipp_ctx->temp_perm_buffer, (IppsFFTSpec_R_32f*)ipp_ctx->order_to_ctx[order].spec, ipp_ctx->work_buffer));
+    if(order != ipp_ctx->current_order)
+    {
+        ensure(order <= MAX_FFT_ORDER);
+        ipp_ensure(ippsFFTInit_R_32f((IppsFFTSpec_R_32f**)&ipp_ctx->spec, 
+                                     order, 
+                                     IPP_FFT_DIV_BY_SQRTN, 
+                                     ippAlgHintFast, 
+                                     ipp_ctx->spec_holder, 
+                                     ipp_ctx->spec_initialization_buffer));
+        
+        ipp_ctx->current_order = order;
+    }
+    
+    ipp_ensure(ippsFFTFwd_RToCCS_32f(in, ipp_ctx->temp_perm_buffer, 
+                                     (IppsFFTSpec_R_32f*)ipp_ctx->spec, 
+                                     ipp_ctx->work_buffer));
     
     
     //NOTE il faut que Ipp32fc et Vec2 aient le même layout
     ipp_ensure(ippsConjCcs_32fc(ipp_ctx->temp_perm_buffer, (Ipp32fc*)out, input_sample_count));
 }
 
-Ipp_Order_Context ipp_create_spec_for_order(i32 fft_order, Arena *allocator)
-{
-    i32 buffer_size = 2 << fft_order;
-    
-    i32 spec_size;
-    i32 spec_buffer_size;
-    i32 work_buffer_size;
-    ipp_ensure(ippsFFTGetSize_R_32f(fft_order, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast ,&spec_size, &spec_buffer_size, &work_buffer_size));
-    
-    u8 *spec_holder = (u8*) arena_allocate(allocator, spec_size);
-    u8 *spec_initialization_buffer = (u8*) arena_allocate(allocator, spec_buffer_size);
-    
-    IppsFFTSpec_R_32f *spec; 
-    ipp_ensure(ippsFFTInit_R_32f(&spec, fft_order, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast, spec_holder, spec_initialization_buffer));
-    
-    allocator->current = (char*)spec_initialization_buffer;
-    
-    return Ipp_Order_Context{
-        .fft_order = fft_order,
-        .buffer_size = buffer_size,
-        .spec_holder = spec_holder,
-        .spec = spec, 
-    };
-}
-
-Ipp_Context ipp_initialize(Arena *allocator)
+IPP_FFT_Context ipp_initialize(Arena *allocator)
 {
     IppLibraryVersion *libVersion;
     u64 cpuFeatures;
@@ -126,18 +116,16 @@ Ipp_Context ipp_initialize(Arena *allocator)
     ipp_ensure(ippsFFTGetSize_R_32f(MAX_FFT_ORDER, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast ,&spec_size, &spec_buffer_size, &work_buffer_size));
     
     u8 *work_buffer = (u8*) arena_allocate(allocator, work_buffer_size);
+    u8 *spec_holder = (u8*) arena_allocate(allocator, spec_size);
+    u8 *spec_initialization_buffer = (u8*) arena_allocate(allocator, spec_buffer_size);
+    real32 *temp_perm_buffer = (real32*) arena_allocate(allocator, sizeof(real32) * ((2 << MAX_FFT_ORDER) + 2));
     
-    Ipp_Order_Context *order_to_ctx = (Ipp_Order_Context*) arena_allocate(allocator, sizeof(Ipp_Order_Context) *  (MAX_FFT_ORDER + 1));
-    
-    for(i32 i = 0; i < MAX_FFT_ORDER + 1; i++)
-    {
-        order_to_ctx[i] = ipp_create_spec_for_order(i, allocator);
-    }
-    
-    return Ipp_Context{
-        .highest_order = MAX_FFT_ORDER,
+    return {
+        .current_order = -1,
         .work_buffer = work_buffer,
-        .temp_perm_buffer = (real32*) arena_allocate(allocator, sizeof(real32) * ((2 << MAX_FFT_ORDER) + 2)),
-        .order_to_ctx = order_to_ctx
+        .temp_perm_buffer = temp_perm_buffer,
+        .spec_holder = spec_holder,
+        .spec_initialization_buffer = spec_initialization_buffer,
+        .spec = nullptr
     };
 }

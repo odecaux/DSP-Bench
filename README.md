@@ -7,13 +7,7 @@ For now there are two heavy dependencies : clang/llvm and Intel Performance Prim
 
 ### TODO
 
-Core: \
-\
-Refactor UI function
 FFT processing available to the plugins \
-\
-Optional: \
-\
 Disable hot-reload button \
 Offline rendering \
 Bug : wrong field macro \

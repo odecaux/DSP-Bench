@@ -288,4 +288,13 @@ void plugin_load_button_was_clicked(Plugin_Reloading_Manager *m);
 void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m);
 
 
+void compute_IR(Plugin& handle, 
+                real32** IR_buffer, 
+                u32 IR_length, 
+                Audio_Parameters audio_parameters,
+                Plugin_Parameter_Value* current_parameters_values,
+                Arena *scratch_allocator,
+                Initializer *initializer);
+
+
 #endif //DESCRIPTOR_H
