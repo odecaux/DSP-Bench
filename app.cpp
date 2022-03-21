@@ -133,9 +133,11 @@ void compute_IR(Plugin& handle,
                 u32 IR_length, 
                 Audio_Parameters& audio_parameters,
                 Plugin_Parameter_Value* current_parameters_values,
-                Arena *allocator,
+                Arena *scratch_allocator,
                 Initializer *initializer)
 {
+    char *initial_allocator_position = arena_current(scratch_allocator);
+    
     for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
     {
         IR_buffer[channel][0] = 1.0f;
@@ -145,8 +147,8 @@ void compute_IR(Plugin& handle,
         }
     }
     
-    char* IR_parameters_holder = (char*) m_allocate(handle.descriptor.parameters_struct.size, "ir parameter blob");
-    char* IR_state_holder = (char*) m_allocate(handle.descriptor.state_struct.size, "ir state blob");
+    char* IR_parameters_holder = (char*) arena_allocate(scratch_allocator, handle.descriptor.parameters_struct.size);
+    char* IR_state_holder = (char*) arena_allocate(scratch_allocator, handle.descriptor.state_struct.size);
     
     plugin_set_parameter_holder_from_values(&handle.descriptor, current_parameters_values, IR_parameters_holder);
     
@@ -163,6 +165,5 @@ void compute_IR(Plugin& handle,
                             IR_length, 
                             audio_parameters.sample_rate);
     
-    m_free(IR_parameters_holder, "ir parameter blob");
-    m_free(IR_state_holder, "ir state blob");
+    arena_reset(scratch_allocator, initial_allocator_position);
 }

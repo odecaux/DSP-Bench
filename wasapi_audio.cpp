@@ -216,9 +216,10 @@ DWORD audio_thread_fn(LPVOID Context)
 
 bool audio_initialize(void **out_ctx, 
                       Audio_Parameters *out_parameters, 
-                      Audio_Thread_Context* audio_context)
+                      Audio_Thread_Context* audio_context,
+                      Arena *app_allocator)
 {
-    auto *ctx = (WasapiContext*) m_allocate(sizeof(WasapiContext), "Wasapi Context");
+    auto *ctx = (WasapiContext*) arena_allocate(app_allocator, sizeof(WasapiContext));
     
     CoInitializeEx(NULL, COINIT_MULTITHREADED); 
     
@@ -396,12 +397,12 @@ bool audio_initialize(void **out_ctx,
     
     u64 reservoir_byte_size = (user_buffer_num_samples * wave_format_given.Format.nBlockAlign * param.num_channels);
     
-    void* reservoir_buffer_base = malloc(reservoir_byte_size);
+    void* reservoir_buffer_base = arena_allocate(app_allocator, reservoir_byte_size);
     
     //printf("reservoir num samples : %lu\n", user_buffer_num_samples);
     
     
-    real32** channel_indexer = (real32**) malloc(sizeof(real32*) * param.num_channels);
+    real32** channel_indexer = (real32**) arena_allocate(app_allocator, sizeof(real32*) * param.num_channels);
     for(u64 i = 0; i < param.num_channels; ++i)
     {
         channel_indexer[i] = (real32*)((u64)reservoir_buffer_base + user_buffer_num_samples * wave_format_given.Format.nBlockAlign * i); 

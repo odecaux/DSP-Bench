@@ -333,7 +333,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             if(m->front_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
             {
                 plugin_populate_from_descriptor(m->front_handle, m->front_allocator, m->front_initializer, audio_parameters);
-
+                
                 m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
                 
                 ensure(compare_exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE, Asset_File_State_VALIDATING));
@@ -370,9 +370,9 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             if(m->back_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
             {
                 printf("hot : compiler success\n");
-               
+                
                 plugin_populate_from_descriptor(m->back_handle, m->back_allocator, m->back_initializer, audio_parameters);
-
+                
                 
                 m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
                 *handle_to_pull_ir_from = m->back_handle;

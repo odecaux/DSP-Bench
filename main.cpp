@@ -163,7 +163,7 @@ i32 main(i32 argc, char** argv)
     Audio_Parameters audio_parameters = {};
     MemoryBarrier();
     
-    if(!audio_initialize(&platform_audio_context, &audio_parameters, &audio_context))
+    if(!audio_initialize(&platform_audio_context, &audio_parameters, &audio_context, &app_allocator))
     {
         printf("failed to initialize audio\n");
         return -1;
@@ -218,18 +218,17 @@ i32 main(i32 argc, char** argv)
     //~ IR/FFT
     
     graphics_ctx.ir = {
-        .IR_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH, "graphics : ir buffer"),
+        .IR_buffer = (real32* )arena_allocate(&app_allocator, sizeof(real32) * IR_BUFFER_LENGTH),
         .IR_sample_count = IR_BUFFER_LENGTH,
         .zoom_state = 1.0f
     };
     graphics_ctx.fft = {
-        .fft_buffer = m_allocate_array(real32, IR_BUFFER_LENGTH * 2, "graphics : fft buffer"),
+        .fft_buffer = (real32* )arena_allocate(&app_allocator, sizeof(real32) * IR_BUFFER_LENGTH * 2),
         .fft_sample_count = IR_BUFFER_LENGTH * 2
     };
     
     Arena gui_IR_allocator = allocator_init(100 * 1204);
     Initializer initializer = {&gui_IR_allocator};
-    
     Analysis analysis = analysis_initialize(IR_BUFFER_LENGTH, audio_parameters.num_channels, &app_allocator);
     
     //~ UI init
@@ -311,8 +310,14 @@ i32 main(i32 argc, char** argv)
             
             gui_IR_allocator.current = gui_IR_allocator.base;
             
-            compute_IR(*plugin_to_pull_ir_from, analysis.IR_buffer, IR_BUFFER_LENGTH, audio_parameters, plugin_to_pull_ir_from->parameter_values_ui_side, &gui_IR_allocator, &initializer);
-
+            compute_IR(*plugin_to_pull_ir_from, 
+                       analysis.IR_buffer, 
+                       IR_BUFFER_LENGTH, 
+                       audio_parameters, 
+                       plugin_to_pull_ir_from->parameter_values_ui_side, 
+                       &scratch_allocator, 
+                       &initializer);
+            
             fft_perform_and_get_magnitude(&analysis);
             
             memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
@@ -342,9 +347,10 @@ i32 main(i32 argc, char** argv)
             compute_IR(*plugin_reloading_manager.front_handle, analysis.IR_buffer, 
                        IR_BUFFER_LENGTH, 
                        audio_parameters, 
-                       plugin_reloading_manager.front_handle->parameter_values_ui_side, &gui_IR_allocator,
+                       plugin_reloading_manager.front_handle->parameter_values_ui_side, 
+                       &scratch_allocator,
                        &initializer);
-
+            
             fft_perform_and_get_magnitude(&analysis);
             
             memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 

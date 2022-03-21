@@ -58,8 +58,6 @@ internal Audio_File windows_load_wav(const char* filename)
 {
     i64 file_size = file_get_size(filename);
     
-    
-    
     char* data = (char*)malloc(file_size); //TODO temporary, might be too much
     if(data == nullptr) exit(-1);
     

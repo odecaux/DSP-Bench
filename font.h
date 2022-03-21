@@ -24,8 +24,6 @@ internal Font load_fonts(const char* font_filename,
         exit(1);
     }
     
-    //u8* font_file_buffer = (u8*) m_allocate(font_file_size, "font : file buffer");
-    
     u8* font_file_buffer = (u8*) arena_allocate(scratch_allocator, font_file_size);
     if(load_file_to_memory(font_filename, font_file_buffer) == false)
     {
