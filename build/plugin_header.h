@@ -17,19 +17,6 @@ typedef float real32;
 typedef unsigned int u32;
 typedef int i32;
 
-typedef struct {
-    union{
-        struct {
-            real32 x;
-            real32 y;
-        };
-        struct {
-            real32 a;
-            real32 b;
-        };
-    };
-} Vec2;
-
 const float inv_two_pi = 0.1591549f;
 const float two_pi = 6.283185f;
 const float three_half_pi = 4.7123889f;
@@ -95,14 +82,15 @@ extern "C" {
     void abs_32_array(real32 *in, real32 *out, i32 sample_count);
     void to_db_32_array(real32 *in, real32 *out, i32 sample_count);
     void from_db_32_array(real32 *in, real32 *out, i32 sample_count);
-    void pythagore_array(Vec2 *in, real32* out, i32 sample_count);
-    void log2_32_array(Vec2 *in, real32* out, i32 sample_count);
-    void log10_32_array(Vec2 *in, real32* out, i32 sample_count);
+    void pythagore_array(real32 *in_x, real32 *in_y, real32* out, i32 sample_count);
+    void log2_32_array(real32 *in, real32* out, i32 sample_count);
+    void log10_32_array(real32 *in, real32* out, i32 sample_count);
     
     
     void* fft_initialize(void *initialization_context);
-    void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count);
-    void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, void *fft_context);
+    void windowing_hamming(real32 *in, real32 *out, i32 sample_count);
+    void fft_forward(real32 *in, real32 *out_real, real32 *out_im, i32 input_sample_count, void *fft_context);
+    void fft_reverse(real32 *in_real, real32 *in_im, real32 *out, i32 input_sample_count, void *fft_context);
 }
 
 #endif //PLUGIN_HEADER_H

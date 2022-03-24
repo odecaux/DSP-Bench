@@ -152,7 +152,8 @@ struct Window_Context;
 typedef struct {
     i32 current_order;
     u8 *work_buffer;
-    real32 *temp_perm_buffer; //TODO rename, c'est pas clair si on connait pas IPP
+    real32 *temp_real_buffer; 
+    real32 *temp_im_buffer; 
     u8* spec_holder;
     u8* spec_initialization_buffer;
     void *spec;
@@ -165,7 +166,8 @@ typedef struct {
     IPP_FFT_Context *ipp_context;
     real32 **IR_buffer;
     real32** windowed_zero_padded_buffer;
-    Vec2* fft_out;
+    real32* fft_out_real;
+    real32* fft_out_im;
     real32 *magnitudes;
 } Analysis;
 

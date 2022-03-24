@@ -341,6 +341,9 @@ Clang_Context* create_clang_context_impl()
     
     llvm::sys::DynamicLibrary::AddSymbol("fft_initialize", plugin_fft_initialize);
     llvm::sys::DynamicLibrary::AddSymbol("fft_forward", fft_forward);
+    llvm::sys::DynamicLibrary::AddSymbol("fft_reverse", fft_reverse);
+    llvm::sys::DynamicLibrary::AddSymbol("pythagore_array", pythagore_array);
+    llvm::sys::DynamicLibrary::AddSymbol("windowing_hamming", windowing_hamming);
     
     auto& Registry = *llvm::PassRegistry::getPassRegistry();
     llvm::initializeCore(Registry);

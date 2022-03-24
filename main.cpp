@@ -81,6 +81,16 @@ bool check_extension(const char* filename, const char* extension)
 
 i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int nCmdShow)
 {
+    {
+        real32 test[] = {
+            1.0f, 1.0f, 1.0f, 1.0f,
+            1.0f, 1.0f, 1.0f, 1.0f};
+        windowing_hamming(&test[0], &test[0], 8);
+        printf("\n");
+        for(i32 i = 0; i < 8; i++)
+            printf("%f, ", test[i]);
+        printf("\n----------------------\n");
+    }
     auto argc = __argc;
     auto argv = __argv;
     

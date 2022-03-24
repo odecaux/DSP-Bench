@@ -43,7 +43,8 @@ Analysis analysis_initialize(u32 ir_sample_count, u32 num_channels, Arena *alloc
         .ipp_context = ipp_context,
         .IR_buffer = IR_buffer,
         .windowed_zero_padded_buffer = windowed_zero_padded_buffer,
-        .fft_out = (Vec2*)arena_allocate(allocator, sizeof(Vec2) * ir_sample_count * 4),
+        .fft_out_real = (real32*)arena_allocate(allocator, sizeof(real32) * ir_sample_count * 4),
+        .fft_out_im = (real32*)arena_allocate(allocator, sizeof(real32) * ir_sample_count * 4),
         .magnitudes  = (real32*)arena_allocate(allocator, sizeof(real32) * ir_sample_count * 4)
     };
     return analysis;
@@ -58,13 +59,10 @@ void fft_perform_and_get_magnitude(Analysis *analysis)
     }
     
     fft_forward(analysis->windowed_zero_padded_buffer[0], 
-                analysis->fft_out, 
+                analysis->fft_out_real, analysis->fft_out_im, 
                 analysis->ir_sample_count * 4, 
                 analysis->ipp_context);
-    
-    for(i32 i = 0; i < IR_BUFFER_LENGTH * 4; i++)
-        analysis->magnitudes[i] = sqrt(analysis->fft_out[i].a * analysis->fft_out[i].a + 
-                                       analysis->fft_out[i].b * analysis->fft_out[i].b);
+    pythagore_array(analysis->fft_out_real, analysis->fft_out_im, analysis->magnitudes, IR_BUFFER_LENGTH * 4);
 }
 #define ipp_ensure(status) ipp_ensure_impl(status, __FILE__, __LINE__); 
 
@@ -73,7 +71,10 @@ void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count)
     ipp_ensure(ippsWinHamming_32f(in_buffer, out_buffer, sample_count));
 }
 
-void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, IPP_FFT_Context *ipp_ctx)
+void fft_forward(real32 *in, 
+                 real32 *out_real, real32 *out_im, 
+                 i32 input_sample_count, 
+                 IPP_FFT_Context *ipp_ctx)
 {
     ensure((input_sample_count & (input_sample_count - 1)) == 0);
     real32 r_s = log((real32)input_sample_count);
@@ -83,7 +84,7 @@ void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, IPP_FFT_Context 
     if(order != ipp_ctx->current_order)
     {
         ensure(order <= MAX_FFT_ORDER);
-        ipp_ensure(ippsFFTInit_R_32f((IppsFFTSpec_R_32f**)&ipp_ctx->spec, 
+        ipp_ensure(ippsFFTInit_C_32f((IppsFFTSpec_C_32f**)&ipp_ctx->spec, 
                                      order, 
                                      IPP_FFT_DIV_BY_SQRTN, 
                                      ippAlgHintFast, 
@@ -93,13 +94,41 @@ void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, IPP_FFT_Context 
         ipp_ctx->current_order = order;
     }
     
-    ipp_ensure(ippsFFTFwd_RToCCS_32f(in, ipp_ctx->temp_perm_buffer, 
-                                     (IppsFFTSpec_R_32f*)ipp_ctx->spec, 
-                                     ipp_ctx->work_buffer));
+    memset(ipp_ctx->temp_im_buffer, 0, sizeof(real32) * input_sample_count); 
     
+    ipp_ensure(ippsFFTFwd_CToC_32f(in, ipp_ctx->temp_im_buffer,
+                                   out_real, out_im,
+                                   (IppsFFTSpec_C_32f*)ipp_ctx->spec, 
+                                   ipp_ctx->work_buffer));
+}
+
+
+void fft_reverse(real32 *in_real, real32 *in_im, real32 *out, i32 input_sample_count, IPP_FFT_Context *ipp_ctx)
+{
+    ensure((input_sample_count & (input_sample_count - 1)) == 0);
+    real32 r_s = log((real32)input_sample_count);
+    real32 l = log(2.0);
+    i32 order = (i32)(log((real32)input_sample_count)/log(2.0));
     
-    //NOTE il faut que Ipp32fc et Vec2 aient le même layout
-    ipp_ensure(ippsConjCcs_32fc(ipp_ctx->temp_perm_buffer, (Ipp32fc*)out, input_sample_count));
+    if(order != ipp_ctx->current_order)
+    {
+        ensure(order <= MAX_FFT_ORDER);
+        ipp_ensure(ippsFFTInit_C_32f((IppsFFTSpec_C_32f**)&ipp_ctx->spec, 
+                                     order, 
+                                     IPP_FFT_DIV_BY_SQRTN, 
+                                     ippAlgHintFast, 
+                                     ipp_ctx->spec_holder, 
+                                     ipp_ctx->spec_initialization_buffer));
+        
+        ipp_ctx->current_order = order;
+    }
+    
+    ipp_ensure(ippsFFTInv_CToC_32f(in_real, in_im,
+                                   out, ipp_ctx->temp_im_buffer,
+                                   (IppsFFTSpec_C_32f*)ipp_ctx->spec, 
+                                   ipp_ctx->work_buffer));
+    
+    //pythagore_array(ipp_ctx->temp_real_buffer, ipp_ctx->temp_im_buffer, out, input_sample_count);
 }
 
 IPP_FFT_Context ipp_initialize(Arena *allocator)
@@ -116,19 +145,29 @@ IPP_FFT_Context ipp_initialize(Arena *allocator)
     i32 spec_size;
     i32 spec_buffer_size;
     i32 work_buffer_size;
-    ipp_ensure(ippsFFTGetSize_R_32f(MAX_FFT_ORDER, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast ,&spec_size, &spec_buffer_size, &work_buffer_size));
+    ipp_ensure(ippsFFTGetSize_C_32f(MAX_FFT_ORDER, IPP_FFT_DIV_BY_SQRTN, ippAlgHintFast ,&spec_size, &spec_buffer_size, &work_buffer_size));
     
     u8 *work_buffer = (u8*) arena_allocate(allocator, work_buffer_size);
     u8 *spec_holder = (u8*) arena_allocate(allocator, spec_size);
     u8 *spec_initialization_buffer = (u8*) arena_allocate(allocator, spec_buffer_size);
-    real32 *temp_perm_buffer = (real32*) arena_allocate(allocator, sizeof(real32) * ((2 << MAX_FFT_ORDER) + 2));
+    real32 *temp_im_buffer = (real32*) arena_allocate(allocator, sizeof(real32) * ((2 << MAX_FFT_ORDER)));
+    real32 *temp_real_buffer = (real32*) arena_allocate(allocator, sizeof(real32) * ((2 << MAX_FFT_ORDER)));
     
     return {
         .current_order = -1,
         .work_buffer = work_buffer,
-        .temp_perm_buffer = temp_perm_buffer,
+        .temp_real_buffer = temp_real_buffer,
+        .temp_im_buffer = temp_im_buffer,
         .spec_holder = spec_holder,
         .spec_initialization_buffer = spec_initialization_buffer,
         .spec = nullptr
     };
+}
+void pythagore_array(real32 *in_x, real32 *in_y, real32* out, i32 sample_count)
+{
+    
+    for(i32 i = 0; i < sample_count; i++)
+        out[i] = sqrt(in_x[i] * in_x[i] + 
+                      in_y[i] * in_y[i]);
+    
 }
