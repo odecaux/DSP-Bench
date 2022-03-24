@@ -27,7 +27,8 @@ typedef double real64;
 
 #define COMMIT_BLOCK_SIZE (Kilobytes(4))
 
-#define M_2I (3.1415926535897932384626433 * 2.0)
+#define M_PI (3.1415926535897932384626433)
+#define M_2PI (3.1415926535897932384626433 * 2.0)
 
 #define internal static
 #define function static

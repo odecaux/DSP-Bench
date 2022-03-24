@@ -36,22 +36,18 @@ State initialize_state(const Parameters& param,
     initial_state.buffer_size = BUFFER_SIZE;
     initial_state.buffer = allocate_buffers(BUFFER_SIZE, num_channels, initialization_context);
     initial_state.cursor = 0;
+    /*
+    real32 phase = 0.0f;
+    phasor_32_array(initial_state.buffer[0], 1.0f, 0.02f, BUFFER_SIZE, &phase);
+    */
     
-    double theta = 0.0;
-    double sine_step = two_pi / (double(buffer_size));
+    set_array(2.0, initial_state.buffer[0], BUFFER_SIZE);
+    real32 *db = (real32*)allocate_bytes(sizeof(real32) * BUFFER_SIZE, initialization_context);
     
-    for(int sample =  0; sample < BUFFER_SIZE; sample++)
-    {
-        double val = cos_64(theta);
-        for(int channel = 0; channel < num_channels; channel++)
-        {
-            initial_state.buffer[channel][sample] = 1.0f * (float)val;
-        }
-        
-        theta += sine_step;
-        if(theta > two_pi)
-            theta -= two_pi;
-    }
+    //to_db_32_array(initial_state.buffer[0], initial_state.buffer[0], BUFFER_SIZE);
+    gain_32_array(initial_state.buffer[0], initial_state.buffer[0], 0.45f, BUFFER_SIZE);
+    //from_db_32_array(db, initial_state.buffer[0], BUFFER_SIZE);
+    
     initial_state.fft_out_real = (real32*)allocate_bytes(sizeof(real32) * BUFFER_SIZE, initialization_context);
     initial_state.fft_out_im = (real32*)allocate_bytes(sizeof(real32) * BUFFER_SIZE, initialization_context);
     

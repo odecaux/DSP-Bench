@@ -345,6 +345,35 @@ Clang_Context* create_clang_context_impl()
     llvm::sys::DynamicLibrary::AddSymbol("pythagore_array", pythagore_array);
     llvm::sys::DynamicLibrary::AddSymbol("windowing_hamming", windowing_hamming);
     
+    llvm::sys::DynamicLibrary::AddSymbol("phasor_32_array", phasor_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("sin_32_array", sin_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("triangle_32_array", triangle_32_array);
+    
+    llvm::sys::DynamicLibrary::AddSymbol("gain_32_array", gain_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("dc_offset_32_array", dc_offset_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("sqrt_32_array", sqrt_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("abs_32_array", abs_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("to_db_32_array", to_db_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("from_db_32_array", from_db_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("ln_32_array", ln_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("log2_32_array", log2_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("log10_32_array", log10_32_array);
+    
+    
+    llvm::sys::DynamicLibrary::AddSymbol("gain_ip_32_array", gain_ip_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("dc_offset_ip_32_array", dc_offset_ip_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("sqrt_ip_32_array", sqrt_ip_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("abs_ip_32_array", abs_ip_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("ln_ip_32_array", ln_ip_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("log2_ip_32_array", log2_ip_32_array);
+    llvm::sys::DynamicLibrary::AddSymbol("log10_ip_32_array", log10_ip_32_array);
+    
+    llvm::sys::DynamicLibrary::AddSymbol("set_array", set_array);
+    llvm::sys::DynamicLibrary::AddSymbol("copy_array", copy_array);
+    llvm::sys::DynamicLibrary::AddSymbol("zero_array", zero_array);
+    
+    
+    
     auto& Registry = *llvm::PassRegistry::getPassRegistry();
     llvm::initializeCore(Registry);
     llvm::initializeScalarOpts(Registry);

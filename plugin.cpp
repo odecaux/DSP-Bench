@@ -406,7 +406,6 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             ensure(compare_exchange_32(m->plugin_state,
                                        Asset_File_State_HOT_RELOAD_VALIDATING,
                                        Asset_File_State_HOT_RELOAD_STAGE_VALIDATION));
-            return;
             ATOMIC_HARNESS();
             printf("hot : validating\n");
             if(m->back_handle->failure_stage == Compiler_Failure_Stage_No_Failure)

@@ -163,11 +163,112 @@ IPP_FFT_Context ipp_initialize(Arena *allocator)
         .spec = nullptr
     };
 }
-void pythagore_array(real32 *in_x, real32 *in_y, real32* out, i32 sample_count)
-{
-    
-    for(i32 i = 0; i < sample_count; i++)
-        out[i] = sqrt(in_x[i] * in_x[i] + 
-                      in_y[i] * in_y[i]);
-    
+void pythagore_array(real32 *in_x, real32 *in_y, real32* out, i32 sample_count){
+    ippsMagnitude_32f(in_x, in_y, out, sample_count);
+}
+
+
+void copy_array(real32 *in, real32 *out, i32 sample_count){
+    ipp_ensure(ippsCopy_32f(in, out, sample_count));
+}
+
+void set_array(real32 val, real32 *out, i32 sample_count){
+    ipp_ensure(ippsSet_32f(val, out, sample_count));
+}
+
+void zero_array(real32 *out, i32 sample_count){
+    ipp_ensure(ippsZero_32f(out, sample_count));
+}
+
+
+
+void phasor_32_array(real32 *out, real32 ampl, real32 freq, i32 sample_count, real32 *phase_in_out){
+    if(*phase_in_out == 0.0f)
+    {
+        //NOTE est-ce que ça va faire un click qq part ?
+        *phase_in_out += 0.000005f;
+    }
+    ipp_ensure(ippsTriangle_32f(out, sample_count, ampl, freq, - M_PI + 0.00000004f, phase_in_out));
+}
+
+void sin_32_array(real32 *out, real32 ampl, real32 freq, i32 sample_count, real32 *phase_in_out){
+    ipp_ensure(ippsTone_32f(out, sample_count, ampl, freq, phase_in_out, ippAlgHintFast));
+}
+
+void triangle_32_array(real32 *out, real32 ampl, real32 freq, i32 sample_count, real32 *phase_in_out){
+    ipp_ensure(ippsTriangle_32f(out, sample_count, ampl, freq, 0.0f, phase_in_out));
+}
+
+
+void random_uniform_32_array(real32 *out, i32 sample_count, void *rng){
+    //ipp_ensure(ippsRandUniform_32f(out, sample_count, ampl, freq, phase_in_out, ippAlgHintFast));
+}
+
+
+void gain_32_array(real32 *in, real32 *out, real32 gain, i32 sample_count){
+    ippsMulC_32f(in, gain, out, sample_count);
+}
+void dc_offset_32_array(real32 *in, real32 *out, real32 offset, i32 sample_count){
+    ippsAddC_32f(in, offset, out, sample_count);
+}
+void sqrt_32_array(real32 *in, real32 *out, i32 sample_count){
+    ippsSqrt_32f(in, out, sample_count);
+}
+
+void abs_32_array(real32 *in, real32 *out, i32 sample_count){
+    ippsAbs_32f(in, out, sample_count);
+}
+
+void ln_32_array(real32 *in, real32 *out, i32 sample_count){
+    ippsLn_32f(in, out,sample_count);
+}
+
+void log2_32_array(real32 *in, real32 *out, i32 sample_count){
+    ippsLn_32f(in, out, sample_count);
+    ippsMulC_32f_I(1.0f / (real32)log(2.0), out, sample_count);
+}
+
+void log10_32_array(real32 *in, real32 *out, i32 sample_count){
+    ippsLn_32f(in, out, sample_count);
+    ippsMulC_32f_I(1.0f / (real32)log(10.0), out, sample_count);
+}
+
+void to_db_32_array(real32 *in, real32 *out, i32 sample_count){
+    ippsLn_32f(in, out, sample_count);
+    ippsMulC_32f_I(20.0f / (real32)log(10.0), out, sample_count);
+}
+
+void from_db_32_array(real32 *in, real32 *out, i32 sample_count){
+    ippsMulC_32f(in, (real32)log(10.0) / 20.0f, out, sample_count);
+    ippsExp_32f_I(out, sample_count);
+}
+
+
+
+void gain_ip_32_array(real32 *in_out, real32 gain, i32 sample_count){
+    ippsMulC_32f_I(gain, in_out, sample_count);
+}
+void dc_offset_ip_32_array(real32 *in_out, real32 offset, i32 sample_count){
+    ippsAddC_32f_I(offset, in_out, sample_count);
+}
+void sqrt_ip_32_array(real32 *in_out, i32 sample_count){
+    ippsSqrt_32f_I(in_out, sample_count);
+}
+
+void abs_ip_32_array(real32 *in_out, i32 sample_count){
+    ippsAbs_32f_I(in_out, sample_count);
+}
+
+void ln_ip_32_array(real32 *in_out, i32 sample_count){
+    ippsLn_32f_I(in_out,sample_count);
+}
+
+void log2_ip_32_array(real32 *in_out, i32 sample_count){
+    ippsLn_32f_I(in_out, sample_count);
+    ippsMulC_32f_I(1.0f / (real32)log(2.0), in_out, sample_count);
+}
+
+void log10_ip_32_array(real32 *in_out, i32 sample_count){
+    ippsLn_32f_I(in_out, sample_count);
+    ippsMulC_32f_I(1.0f / (real32)log(10.0), in_out, sample_count);
 }
