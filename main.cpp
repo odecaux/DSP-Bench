@@ -10,12 +10,12 @@
 #include "structs.h"
 #include "memory.h"
 #include "audio.h"
+#include "dsp.h"
 #include "plugin.h"
 #include "win32_helpers.h"
 #include "wav_reader.h"
 #include "draw.h"
 #include "font.h"
-#include "dsp.h"
 #include "app.h"
 
 #include "win32_platform.h"
@@ -211,8 +211,9 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     
     void* clang_ctx = create_clang_context();
     
+    IPP_FFT_Context audio_side_ipp_context = ipp_initialize(&app_allocator);
     Plugin_Reloading_Manager plugin_reloading_manager;
-    plugin_reloading_manager_init(&plugin_reloading_manager, clang_ctx, source_filename, &plugin_state);
+    plugin_reloading_manager_init(&plugin_reloading_manager, clang_ctx, source_filename, &plugin_state, &audio_side_ipp_context);
     
     audio_context.m = &plugin_reloading_manager;
     
@@ -231,8 +232,9 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     };
     
     Arena gui_IR_allocator = allocator_init(100 * 1204);
-    Initializer initializer = {&gui_IR_allocator};
-    Analysis analysis = analysis_initialize(IR_BUFFER_LENGTH, audio_parameters.num_channels, &app_allocator);
+    IPP_FFT_Context gui_ipp_context = ipp_initialize(&app_allocator);
+    Initializer gui_initializer = { &gui_IR_allocator, &gui_ipp_context};
+    Analysis analysis = analysis_initialize(IR_BUFFER_LENGTH, audio_parameters.num_channels, &app_allocator, &gui_ipp_context);
     
     //~ UI init
 #ifdef DEBUG
@@ -319,7 +321,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
                        audio_parameters, 
                        plugin_to_pull_ir_from->parameter_values_ui_side, 
                        &scratch_allocator, 
-                       &initializer);
+                       &gui_initializer);
             
             fft_perform_and_get_magnitude(&analysis);
             
@@ -352,7 +354,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
                        audio_parameters, 
                        plugin_reloading_manager.front_handle->parameter_values_ui_side, 
                        &scratch_allocator,
-                       &initializer);
+                       &gui_initializer);
             
             fft_perform_and_get_magnitude(&analysis);
             

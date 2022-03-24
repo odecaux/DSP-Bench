@@ -42,6 +42,8 @@ typedef struct
     
     Plugin_Reloading_Manager *m;
     Audio_File *audio_file;
+    
+    
 } Audio_Thread_Context;
 
 

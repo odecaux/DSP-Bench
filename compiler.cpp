@@ -16,10 +16,10 @@
 #include "windows.h"
 
 #include "base.h"
-//#include "win32_helpers.h"
 #include "structs.h"
 #include "memory.h"
 #include "audio.h"
+#include "dsp.h"
 #include "plugin.h"
 #include "compiler.h"
 
@@ -281,6 +281,11 @@ float oct_sinh_32(float d1) { return sinh(d1); }
 float oct_cosh_32(float d1) { return cosh(d1); }
 float oct_tanh_32(float d1) { return tanh(d1); }
 
+IPP_FFT_Context *plugin_fft_initialize(Initializer *initializer)
+{
+    return initializer->ipp_context;
+}
+
 Clang_Context* create_clang_context_impl()
 {
     //magic stuff
@@ -333,6 +338,9 @@ Clang_Context* create_clang_context_impl()
     llvm::sys::DynamicLibrary::AddSymbol("allocate_buffer", plugin_allocate_buffer);
     llvm::sys::DynamicLibrary::AddSymbol("allocate_buffers", plugin_allocate_buffers);
     llvm::sys::DynamicLibrary::AddSymbol("allocate_bytes", plugin_allocate_bytes);
+    
+    llvm::sys::DynamicLibrary::AddSymbol("fft_initialize", plugin_fft_initialize);
+    llvm::sys::DynamicLibrary::AddSymbol("fft_forward", fft_forward);
     
     auto& Registry = *llvm::PassRegistry::getPassRegistry();
     llvm::initializeCore(Registry);

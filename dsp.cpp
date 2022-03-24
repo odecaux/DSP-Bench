@@ -14,6 +14,8 @@
 #include "memory.h"
 #include "dsp.h"
 
+
+
 void ipp_ensure_impl(IppStatus status, const char* file, u32 line)
 {
     if(status != ippStsNoErr) {
@@ -23,7 +25,8 @@ void ipp_ensure_impl(IppStatus status, const char* file, u32 line)
     }
 }
 
-Analysis analysis_initialize(u32 ir_sample_count, u32 num_channels, Arena *allocator)
+
+Analysis analysis_initialize(u32 ir_sample_count, u32 num_channels, Arena *allocator, IPP_FFT_Context *ipp_context)
 {
     real32** IR_buffer = (real32**)arena_allocate(allocator, sizeof(real32*) *num_channels);
     real32** windowed_zero_padded_buffer = (real32**)arena_allocate(allocator, sizeof(real32*) * num_channels);
@@ -34,16 +37,16 @@ Analysis analysis_initialize(u32 ir_sample_count, u32 num_channels, Arena *alloc
         windowed_zero_padded_buffer[channel] = (real32*)arena_allocate(allocator, sizeof(real32) * ir_sample_count * 4);
         memset(windowed_zero_padded_buffer[channel], 0, ir_sample_count * 4 * sizeof(real32));
     }
-    
-    return {
+    Analysis analysis {
         .ir_sample_count = ir_sample_count,
         .ir_num_channels = num_channels,
-        .ipp_context = ipp_initialize(allocator),
+        .ipp_context = ipp_context,
         .IR_buffer = IR_buffer,
         .windowed_zero_padded_buffer = windowed_zero_padded_buffer,
         .fft_out = (Vec2*)arena_allocate(allocator, sizeof(Vec2) * ir_sample_count * 4),
         .magnitudes  = (real32*)arena_allocate(allocator, sizeof(real32) * ir_sample_count * 4)
     };
+    return analysis;
 }
 
 void fft_perform_and_get_magnitude(Analysis *analysis)
@@ -57,7 +60,7 @@ void fft_perform_and_get_magnitude(Analysis *analysis)
     fft_forward(analysis->windowed_zero_padded_buffer[0], 
                 analysis->fft_out, 
                 analysis->ir_sample_count * 4, 
-                &analysis->ipp_context);
+                analysis->ipp_context);
     
     for(i32 i = 0; i < IR_BUFFER_LENGTH * 4; i++)
         analysis->magnitudes[i] = sqrt(analysis->fft_out[i].a * analysis->fft_out[i].a + 

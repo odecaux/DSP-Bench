@@ -288,14 +288,15 @@ void plugin_reloader_stage_hot_compilation(Plugin_Reloading_Manager *m)
 void plugin_reloading_manager_init(Plugin_Reloading_Manager *m, 
                                    void *clang_ctx, 
                                    char *source_filename, 
-                                   Asset_File_State *plugin_state)
+                                   Asset_File_State *plugin_state,
+                                   IPP_FFT_Context *ipp_context)
 {
     *m = {
         .allocator_a = allocator_init(10 * 1024),
         .allocator_b = allocator_init(10 * 1204),
         
-        .initializer_a = {&m->allocator_a},
-        .initializer_b = {&m->allocator_b},
+        .initializer_a = {&m->allocator_a, ipp_context},
+        .initializer_b = {&m->allocator_b, ipp_context},
         
         .front_handle = &m->handle_a,
         .back_handle = &m->handle_b,

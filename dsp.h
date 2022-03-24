@@ -3,8 +3,9 @@
 #ifndef FFT_H
 #define FFT_H
 
+
 IPP_FFT_Context ipp_initialize(Arena *allocator);
-Analysis analysis_initialize(u32 ir_sample_count, u32 num_channels, Arena *allocator);
+Analysis analysis_initialize(u32 ir_sample_count, u32 num_channels, Arena *allocator, IPP_FFT_Context *ipp_context);
 
 void fft_perform_and_get_magnitude(Analysis *analysis);
 void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count);

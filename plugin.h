@@ -111,8 +111,10 @@ typedef struct Plugin {
     Plugin_Parameters_Ring_Buffer ring;
 } Plugin;
 
+//TODO c'est pas le bon endroit pour mettre ça
 typedef struct{
     Arena *allocator;
+    IPP_FFT_Context *ipp_context;
 } Initializer;
 
 
@@ -272,7 +274,7 @@ struct Plugin_Reloading_Manager
 };
 
 
-void plugin_reloading_manager_init(Plugin_Reloading_Manager *m, void *clang_ctx, char *source_filename, Asset_File_State *plugin_state);
+void plugin_reloading_manager_init(Plugin_Reloading_Manager *m, void *clang_ctx, char *source_filename, Asset_File_State *plugin_state, IPP_FFT_Context *ipp_context);
 
 void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m);
 

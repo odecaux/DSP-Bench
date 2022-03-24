@@ -162,11 +162,14 @@ typedef struct {
 typedef struct {
     u32 ir_sample_count;
     u32 ir_num_channels;
-    IPP_FFT_Context ipp_context;
+    IPP_FFT_Context *ipp_context;
     real32 **IR_buffer;
     real32** windowed_zero_padded_buffer;
     Vec2* fft_out;
     real32 *magnitudes;
 } Analysis;
+
+
+
 
 #endif //STRUCTS_H

@@ -100,7 +100,7 @@ extern "C" {
     void log10_32_array(Vec2 *in, real32* out, i32 sample_count);
     
     
-    void* initialize_fft(void *plugin_context);
+    void* fft_initialize(void *initialization_context);
     void windowing_hamming(real32 *in_buffer, real32 *out_buffer, i32 sample_count);
     void fft_forward(real32 *in, Vec2 *out, i32 input_sample_count, void *fft_context);
 }
