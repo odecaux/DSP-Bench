@@ -7,7 +7,6 @@ For now there are two heavy dependencies : clang/llvm and Intel Performance Prim
 
 ### TODO
 
-FFT processing available to the plugins \
 Disable hot-reload button \
 Offline rendering \
 Bug : wrong field macro \
@@ -23,6 +22,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+FFT processing available to the plugins \
 Plugin can allocate memory \
 Panel toggle : compiler log and IR \
 Rewrote the error reporting system \
