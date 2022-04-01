@@ -143,10 +143,12 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     
     graphics_ctx.atlas = {
         .font = load_fonts(DEFAULT_FONT_FILENAME, &app_allocator, &scratch_allocator),
-        .draw_vertices = (Vertex*) arena_allocate(&app_allocator, sizeof(Vertex) * ATLAS_MAX_VERTEX_COUNT),
-        .draw_vertices_count = 0,
-        .draw_indices = (u32*) arena_allocate(&app_allocator, sizeof(u32) * ATLAS_MAX_VERTEX_COUNT), 
-        .draw_indices_count = 0
+        .command_list = {
+            .draw_vertices = (Vertex*) arena_allocate(&app_allocator, sizeof(Vertex) * ATLAS_MAX_VERTEX_COUNT),
+            .draw_vertices_count = 0,
+            .draw_indices = (u32*) arena_allocate(&app_allocator, sizeof(u32) * ATLAS_MAX_VERTEX_COUNT), 
+            .draw_indices_count = 0
+        }
     };
     
     OpenGL_Context opengl_ctx = opengl_initialize(&window, &graphics_ctx.atlas.font);
@@ -262,8 +264,8 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
         win32_message_dispatch(&window, &frame_io, &done);
         if(done) break;
         
-        graphics_ctx.atlas.draw_vertices_count = 0;
-        graphics_ctx.atlas.draw_indices_count = 0;
+        graphics_ctx.atlas.command_list.draw_vertices_count = 0;
+        graphics_ctx.atlas.command_list.draw_indices_count = 0;
         
         frame_io = io_state_advance(frame_io);
         frame_io.mouse_position = win32_get_mouse_position(&window);

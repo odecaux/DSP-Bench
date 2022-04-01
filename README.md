@@ -7,6 +7,9 @@ For now there are two heavy dependencies : clang/llvm and Intel Performance Prim
 
 ### TODO
 
+Important : \
+Audio device unplug/change \
+Input audio device as source \
 Disable hot-reload button \
 Offline rendering \
 Bug : wrong field macro \

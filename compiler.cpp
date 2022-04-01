@@ -455,6 +455,13 @@ Plugin try_compile_impl(const char* filename, Clang_Context* clang_ctx, Arena *a
         auto& header_opts = compiler_instance.getHeaderSearchOpts();
         //header_opts.Verbose = true;
         header_opts.AddPath(".", clang::frontend::Quoted , false, false);
+        header_opts.AddPath("setjmp.h", clang::frontend::Quoted , false, false);
+        
+        for(auto &entry : header_opts.UserEntries)
+        {
+            std::cout << "prefix : " << entry.Path << "\n";
+        }
+        
         
         compiler_instance.getFrontendOpts().Inputs.clear();
         auto kind = clang::InputKind(clang::Language::CXX);
@@ -1081,67 +1088,50 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
                       clang::FileID plugin_source_file_id)
 {
     
-    auto audio_callback_source_range = decls.audio_callback.fun->getSourceRange();
-    auto default_parameters_source_range = decls.default_parameters.fun->getSourceRange();
-    auto initialize_state_source_range = decls.initialize_state.fun->getSourceRange();
+    auto audio_callback_range = decls.audio_callback.fun->getSourceRange();
+    auto default_parameters_range = decls.default_parameters.fun->getSourceRange();
+    auto initialize_state_range = decls.initialize_state.fun->getSourceRange();
     
-    auto parameters_struct_name = decls.parameters_struct.record->getNameAsString();
-    auto state_struct_name = decls.state_struct.record->getNameAsString();
+    auto parameters_name = decls.parameters_struct.record->getNameAsString();
+    auto state_name = decls.state_struct.record->getNameAsString();
     
-    std::string audio_callback_wrapper_declaration = ""
-        "\nextern \"C\" void audio_callback_wrapper(void* param_ptr, void* state_ptr,float** out_buffer, unsigned int num_channels, unsigned int num_samples, float sample_rate);\n"
-        "\n";
-    
-    std::string audio_callback_wrapper_definition = "\n"
-        "void audio_callback_wrapper(void* param_ptr, void* state_ptr,float** out_buffer, unsigned int num_channels, unsigned int num_samples, float sample_rate)\n"
+    std::string audio_callback_type_wrapper = "\n"
+        "extern \"C\" void audio_callback_type_wrapper(void* param_ptr, void* state_ptr,float** out_buffer, unsigned int num_channels, unsigned int num_samples, float sample_rate)\n"
         "{\n"
-        + parameters_struct_name  +"* param  = (" + parameters_struct_name + "*)param_ptr;\n"
-        + state_struct_name  +"* state  = (" + state_struct_name + "*)state_ptr;\n"
+        + parameters_name  +"* param  = (" + parameters_name + "*)param_ptr;\n"
+        + state_name  +"* state  = (" + state_name + "*)state_ptr;\n"
         "audio_callback(*param, *state, out_buffer, num_channels, num_samples, sample_rate);\n"
         "}\n";
     
-    std::string default_parameters_wrapper_declaration = "\nextern \"C\" void default_parameters_wrapper(void* out_parameters);\n"
-        "";
-    
-    std::string default_parameters_wrapper_definition = "\n"
-        "void default_parameters_wrapper(void* out_parameters_ptr)\n"
+    std::string default_parameters_type_wrapper = "\n"
+        "extern \"C\" void default_parameters_type_wrapper(void* out_parameters_ptr)\n"
         "{\n"
-        + parameters_struct_name + "* out_parameters = (" + parameters_struct_name + "*)out_parameters_ptr;\n"
+        + parameters_name + "* out_parameters = (" + parameters_name + "*)out_parameters_ptr;\n"
         "*out_parameters = default_parameters();\n"
         "}\n";
     
-    std::string initialize_state_wrapper_declaration = "\nextern \"C\" void initialize_state_wrapper(void* parameters, void* out_initial_state, unsigned int num_channels, float sample_rate, void *allocator);\n"
-        "";
-    
-    std::string initialize_state_wrapper_definition = "\n"
-        "void initialize_state_wrapper(void* parameters_ptr, void* out_initial_state_ptr, unsigned int num_channels, float sample_rate, void *allocator)\n"
+    std::string initialize_state_type_wrapper = "\n"
+        "extern \"C\" int initialize_state_type_wrapper(void* parameters_ptr, void* out_initial_state_ptr, unsigned int num_channels, float sample_rate, void *allocator)\n"
         "{\n"
-        + parameters_struct_name + "* parameters = (" + parameters_struct_name + "*)parameters_ptr;\n"
+        + parameters_name + "* parameters = (" + parameters_name + "*)parameters_ptr;\n"
         
-        + state_struct_name + "* out_initial_state = (" + state_struct_name + "*)out_initial_state_ptr;\n"
+        + state_name + "* out_initial_state = (" + state_name + "*)out_initial_state_ptr;\n"
         "*out_initial_state = initialize_state(*parameters, num_channels, sample_rate, allocator);\n"
+        "return 0;\n"
         "}\n";
-    
     
     clang::Rewriter rewriter{source_manager, language_options};
     
-    
-    rewriter.InsertTextBefore(audio_callback_source_range.getBegin(), audio_callback_wrapper_declaration);
-    rewriter.InsertTextAfter(audio_callback_source_range.getEnd().getLocWithOffset(1), audio_callback_wrapper_definition);
-    
-    
-    rewriter.InsertTextBefore(default_parameters_source_range.getBegin(), default_parameters_wrapper_declaration);
-    rewriter.InsertTextAfter(default_parameters_source_range.getEnd().getLocWithOffset(1), default_parameters_wrapper_definition);
-    
-    rewriter.InsertTextBefore(initialize_state_source_range.getBegin(), initialize_state_wrapper_declaration);
-    rewriter.InsertTextAfter(initialize_state_source_range.getEnd().getLocWithOffset(1),  initialize_state_wrapper_definition);
+    rewriter.InsertTextAfter(audio_callback_range.getEnd().getLocWithOffset(1), audio_callback_type_wrapper);
+    rewriter.InsertTextAfter(default_parameters_range.getEnd().getLocWithOffset(1), default_parameters_type_wrapper);
+    rewriter.InsertTextAfter(initialize_state_range.getEnd().getLocWithOffset(1),  initialize_state_type_wrapper);
     
     auto start_loc = source_manager.getLocForStartOfFile(plugin_source_file_id);
     auto end_loc = source_manager.getLocForEndOfFile(plugin_source_file_id);
     auto range = clang::SourceRange(start_loc, end_loc);
     
     auto new_text = rewriter.getRewrittenText(range);
-    return llvm::MemoryBuffer::getMemBufferCopy(new_text);
+    return llvm::MemoryBuffer::getMemBufferCopy(new_text); //TODO unnecessary copy ?
 }
 
 
@@ -1211,14 +1201,15 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     
     llvm::ExecutionEngine *engine = builder.create();
     ensure(engine); 
+    
     //return { Compiler_Cant_Launch_Jit };
     
     //on en a pas vraiment besoin de faire ça. C'est dans le cas où on chargerait plusieur modules sur le même executionEngine
     engine->finalizeObject();
     
-    auto audio_callback_f = (audio_callback_t)engine->getFunctionAddress("audio_callback_wrapper");
-    auto default_parameters_f = (default_parameters_t)engine->getFunctionAddress("default_parameters_wrapper");
-    auto initialize_state_f = (initialize_state_t)engine->getFunctionAddress("initialize_state_wrapper");
+    auto audio_callback_f = (audio_callback_t)engine->getFunctionAddress("audio_callback_type_wrapper");
+    auto default_parameters_f = (default_parameters_t)engine->getFunctionAddress("default_parameters_type_wrapper");
+    auto initialize_state_f = (initialize_state_t)engine->getFunctionAddress("initialize_state_type_wrapper");
     
     
     ensure(audio_callback_f && default_parameters_f && initialize_state_f);

@@ -42,12 +42,8 @@ typedef struct
     
     Plugin_Reloading_Manager *m;
     Audio_File *audio_file;
-    
-    
 } Audio_Thread_Context;
 
-
-//TODO what if in == 0
 internal u32 next_power_of_two(u32 in)
 {
     if(in == 0) return 0;
@@ -62,20 +58,10 @@ internal u32 next_power_of_two(u32 in)
     return in;
 }
 
-
 internal void copy(real32* source, real32* destination, u32 sample_count)
 {
     memcpy(destination, source, sample_count * sizeof(real32));
 }
-
-
-internal void copy_add(real32** in, real32** out, Audio_Parameters p)
-{
-    for(u64 channel = 0; channel < p.num_channels; channel++)
-        for(u64 sample = 0; sample < p.num_samples; sample++)
-        out[channel][sample] += in[channel][sample];
-}
-
 
 internal void convertInt32ToFloat (const void* source, real32* dest, i32 numSamples)
 {

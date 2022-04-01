@@ -693,6 +693,8 @@ OpenGL_Context opengl_initialize(Window_Context *window, Font* font)
 void opengl_render_atlas(OpenGL_Context_Atlas* opengl_ctx,
                          Graphics_Context_Atlas* graphics_ctx, real32 *projection_matrix)
 {
+    Draw_Command_List *cmd_list = &graphics_ctx->command_list; 
+    
     glUseProgram(opengl_ctx->atlas_shader_program);
     glBindVertexArray(opengl_ctx->atlas_vao);
     glBindBuffer(GL_ARRAY_BUFFER, opengl_ctx->atlas_vertex_buffer);
@@ -707,13 +709,13 @@ void opengl_render_atlas(OpenGL_Context_Atlas* opengl_ctx,
                        projection_matrix);
     
     glBufferSubData(GL_ARRAY_BUFFER, 0, 
-                    graphics_ctx->draw_vertices_count * sizeof(Vertex), 
-                    graphics_ctx->draw_vertices);
+                    cmd_list->draw_vertices_count * sizeof(Vertex), 
+                    cmd_list->draw_vertices);
     glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, 
-                    graphics_ctx->draw_indices_count * sizeof(u32), 
-                    graphics_ctx->draw_indices);
+                    cmd_list->draw_indices_count * sizeof(u32), 
+                    cmd_list->draw_indices);
     
-    glDrawElements(GL_TRIANGLES, (GLsizei)graphics_ctx->draw_indices_count, GL_UNSIGNED_INT, 0);
+    glDrawElements(GL_TRIANGLES, (GLsizei)cmd_list->draw_indices_count, GL_UNSIGNED_INT, 0);
 }
 
 

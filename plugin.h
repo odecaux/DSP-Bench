@@ -8,7 +8,7 @@
 
 typedef void(*audio_callback_t)(void*, void*, float**, unsigned int, unsigned int, float);
 typedef void(*default_parameters_t)(void*);
-typedef void(*initialize_state_t)(void*, void*, unsigned int, float, void*);
+typedef int(*initialize_state_t)(void*, void*, unsigned int, float, void*);
 
 
 enum  Plugin_Parameter_Type{

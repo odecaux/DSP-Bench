@@ -39,21 +39,24 @@ IO io_state_advance(IO io)
     io.frame_count++;
     io.time += io.delta_time;
     
-    if(io.mouse_position.x < 0.0f && io.mouse_position.y < 0.0f)
-        io.mouse_position = Vec2(-99999.0f, -99999.0f);
-    
-    if((io.mouse_position.x < 0.0f && io.mouse_position.y < 0.0f) ||
-       (io.mouse_pos_prev.x < 0.0f && io.mouse_pos_prev.y < 0.0f))
-        io.mouse_delta = Vec2{0.0f, 0.0f};
-    else{
-        io.mouse_delta.x = io.mouse_position.x - io.mouse_pos_prev.x;
-        io.mouse_delta.y = io.mouse_position.y - io.mouse_pos_prev.y;
-        
-    }
-    io.mouse_pos_prev = io.mouse_position;
-    
+	if (io.mouse_position.x < 0.0f && io.mouse_position.y < 0.0f)
+	{
+		io.mouse_position = Vec2(-99999.0f, -99999.0f);
+	}
+
+	if ((io.mouse_position.x < 0.0f && io.mouse_position.y < 0.0f) ||
+		(io.mouse_pos_prev.x < 0.0f && io.mouse_pos_prev.y < 0.0f))
+	{
+		io.mouse_delta = Vec2 { 0.0f, 0.0f };
+	}
+	else  
+	{
+		io.mouse_delta.x = io.mouse_position.x - io.mouse_pos_prev.x;
+		io.mouse_delta.y = io.mouse_position.y - io.mouse_pos_prev.y;
+	}
+
+	io.mouse_pos_prev = io.mouse_position;
     io.mouse_released = !io.mouse_down && io.mouse_down_time >= 0.0f;
-    
     
     if(io.mouse_down)
     {
@@ -61,11 +64,10 @@ IO io_state_advance(IO io)
         {
             io.mouse_down_time = 0.1f;
             io.mouse_clicked = true;
-            
         }
         else
         {
-            io.mouse_down_time += 0.2f;// io.delta_time;
+            io.mouse_down_time += io.delta_time;
             io.mouse_clicked = false;
         }
     }
@@ -74,7 +76,6 @@ IO io_state_advance(IO io)
         io.mouse_down_time = -1.0f;
         io.mouse_clicked = false;
     }
-    
     
     io.mouse_double_clicked = false;
     if(io.mouse_clicked)
