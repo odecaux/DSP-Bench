@@ -14,7 +14,9 @@
 struct UI_Context{
     IO io;
     UI_State *state;
-    Graphics_Context *g;
+    Draw_Command_List *cmd_list;
+    Font *font;
+    real32 *FIXME_zoom_state;
 };
 
 //~ Widgets
@@ -23,8 +25,8 @@ real32 simple_slider(real32 normalized_value, i32 id,
                      Rect bounds, UI_Context ui)
 {
     
-    draw_rectangle(bounds, 1.0f, Color_Front, ui.g);
-    draw_slider(bounds, normalized_value, ui.g);
+    draw_rectangle(bounds, 1.0f, Color_Front, ui.cmd_list);
+    draw_slider(bounds, normalized_value, ui.cmd_list);
     
     if(ui.io.mouse_clicked && rect_contains(bounds, ui.io.mouse_position))
     {
@@ -69,21 +71,21 @@ real32 slider(real32 normalized_value,
     Rect current_value_bounds = rect_shrinked(rect_drop_top(bounds, FIELD_TITLE_HEIGHT), 2.5f, 2.5f);
     Rect slider_and_minmax_bounds = rect_move_by(current_value_bounds, {0.0f, FIELD_TITLE_HEIGHT});
     
-    draw_text(title, title_bounds, Color_Front, ui.g);
+    draw_text(title, title_bounds, Color_Front, ui.font, ui.cmd_list);
     
     Rect slider_bounds = rect_shrinked(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH, 0.0f);
     Rect min_label_bounds = rect_take_left(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
     Rect max_label_bounds = rect_take_right(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
     
-    draw_rectangle(slider_bounds, 1.0f, Color_Front, ui.g);
-    draw_rectangle(min_label_bounds, 1.0f, Color_Front, ui.g);
-    draw_rectangle(max_label_bounds, 1.0f, Color_Front, ui.g);
+    draw_rectangle(slider_bounds, 1.0f, Color_Front, ui.cmd_list);
+    draw_rectangle(min_label_bounds, 1.0f, Color_Front, ui.cmd_list);
+    draw_rectangle(max_label_bounds, 1.0f, Color_Front, ui.cmd_list);
     
-    draw_text(min_label, min_label_bounds, Color_Front, ui.g);
-    draw_text(max_label, max_label_bounds, Color_Front, ui.g);
-    draw_text(current_value_label, current_value_bounds, Color_Front, ui.g);
+    draw_text(min_label, min_label_bounds, Color_Front, ui.font, ui.cmd_list);
+    draw_text(max_label, max_label_bounds, Color_Front, ui.font, ui.cmd_list);
+    draw_text(current_value_label, current_value_bounds, Color_Front, ui.font, ui.cmd_list);
     
-    draw_slider(slider_bounds, normalized_value, ui.g);
+    draw_slider(slider_bounds, normalized_value, ui.cmd_list);
     
     if(ui.io.mouse_clicked && rect_contains(slider_bounds, ui.io.mouse_position))
     {
@@ -144,23 +146,23 @@ bool button(Rect bounds,
     Rect text_bounds = rect_shrinked(bounds, 10.0f, 10.0f);
     if(down)
     {
-        fill_rectangle(bounds, Color_Front, ui.g); 
-        draw_rectangle(outline_bounds, 3.0f, 0xff000000, ui.g);
-        draw_text(text, text_bounds, 0xff000000, ui.g);
+        fill_rectangle(bounds, Color_Front, ui.cmd_list); 
+        draw_rectangle(outline_bounds, 3.0f, 0xff000000, ui.cmd_list);
+        draw_text(text, text_bounds, 0xff000000, ui.font, ui.cmd_list);
     }
     else if(hovered)
     {
-        fill_rectangle(bounds, 0xff000000, ui.g); 
-        draw_rectangle(outline_bounds, 3.0f, Color_Front, ui.g);
-        draw_text(text, text_bounds, Color_Front, ui.g);
+        fill_rectangle(bounds, 0xff000000, ui.cmd_list); 
+        draw_rectangle(outline_bounds, 3.0f, Color_Front, ui.cmd_list);
+        draw_text(text, text_bounds, Color_Front, ui.font, ui.cmd_list);
     }
     else
     {
-        fill_rectangle(bounds, 0xff000000, ui.g); 
-        draw_text(text, text_bounds, Color_Front, ui.g);
+        fill_rectangle(bounds, 0xff000000, ui.cmd_list); 
+        draw_text(text, text_bounds, Color_Front, ui.font, ui.cmd_list);
     }
     
-    draw_rectangle(bounds, 2.0f, Color_Front, ui.g);
+    draw_rectangle(bounds, 2.0f, Color_Front, ui.cmd_list);
     return clicked;
 }
 
@@ -191,23 +193,23 @@ bool toggle(Rect bounds,
     
     if(*v)
     {
-        fill_rectangle(bounds, Color_Front, ui.g); 
-        draw_rectangle(outline_bounds, 3.0f, 0xff000000, ui.g);
-        draw_text(text, text_bounds, 0xff000000, ui.g);
+        fill_rectangle(bounds, Color_Front, ui.cmd_list); 
+        draw_rectangle(outline_bounds, 3.0f, 0xff000000, ui.cmd_list);
+        draw_text(text, text_bounds, 0xff000000, ui.font, ui.cmd_list);
     }
     else if(hovered)
     {
-        fill_rectangle(bounds, 0xff000000, ui.g); 
-        draw_rectangle(outline_bounds, 3.0f, Color_Front, ui.g);
-        draw_text(text, text_bounds, Color_Front, ui.g);
+        fill_rectangle(bounds, 0xff000000, ui.cmd_list); 
+        draw_rectangle(outline_bounds, 3.0f, Color_Front, ui.cmd_list);
+        draw_text(text, text_bounds, Color_Front, ui.font, ui.cmd_list);
     }
     else
     {
-        fill_rectangle(bounds, 0xff000000, ui.g); 
-        draw_text(text, text_bounds, Color_Front, ui.g);
+        fill_rectangle(bounds, 0xff000000, ui.cmd_list); 
+        draw_text(text, text_bounds, Color_Front, ui.font, ui.cmd_list);
     }
     
-    draw_rectangle(bounds, 2.0f, Color_Front, ui.g);
+    draw_rectangle(bounds, 2.0f, Color_Front, ui.cmd_list);
     
     return clicked;
 }
@@ -350,10 +352,10 @@ void header(Asset_File_State plugin_state,
                 }
             }
             
-            draw_rectangle(title_bounds, 1.0f, Color_Front, ui.g);
+            draw_rectangle(title_bounds, 1.0f, Color_Front, ui.cmd_list);
             
             
-            draw_text(plugin_name, title_bounds, Color_Front, ui.g);
+            draw_text(plugin_name, title_bounds, Color_Front, ui.font, ui.cmd_list);
             Rect plugin_play_stop_bounds = rect_take_right(header_bounds, TITLE_HEIGHT);
             
             
@@ -369,15 +371,15 @@ void header(Asset_File_State plugin_state,
         case Asset_File_State_VALIDATING :
         case Asset_File_State_STAGE_USAGE :
         {
-            draw_rectangle(header_bounds, 1.0f, Color_Front, ui.g);
-            draw_text(StringLit("Loading"), header_bounds, Color_Front, ui.g);
+            draw_rectangle(header_bounds, 1.0f, Color_Front, ui.cmd_list);
+            draw_text(StringLit("Loading"), header_bounds, Color_Front, ui.font, ui.cmd_list);
         }break;
         case Asset_File_State_STAGE_UNLOADING :
         case Asset_File_State_OK_TO_UNLOAD :
         case Asset_File_State_UNLOADING :
         {
-            draw_rectangle(header_bounds, 1.0f, Color_Front, ui.g);
-            draw_text(StringLit("Unloading"), header_bounds, Color_Front, ui.g);
+            draw_rectangle(header_bounds, 1.0f, Color_Front, ui.cmd_list);
+            draw_text(StringLit("Unloading"), header_bounds, Color_Front, ui.font, ui.cmd_list);
         }break;
         case Asset_File_State_NONE :
         {
@@ -387,8 +389,8 @@ void header(Asset_File_State plugin_state,
             {
                 *load_plugin_was_clicked = true;
             }
-            draw_rectangle(header_bounds, 1.0f, Color_Front, ui.g);
-            draw_text(StringLit("No plugin file"), header_bounds, Color_Front, ui.g);
+            draw_rectangle(header_bounds, 1.0f, Color_Front, ui.cmd_list);
+            draw_text(StringLit("No plugin file"), header_bounds, Color_Front, ui.font, ui.cmd_list);
         }break;
         
         case Asset_File_State_FAILED :
@@ -402,8 +404,8 @@ void header(Asset_File_State plugin_state,
                 *load_plugin_was_clicked = true;
             }
             
-            draw_rectangle(header_bounds, 1.0f, Color_Front, ui.g);
-            draw_text(StringLit("Compilation Error"), header_bounds, Color_Front, ui.g);
+            draw_rectangle(header_bounds, 1.0f, Color_Front, ui.cmd_list);
+            draw_text(StringLit("Compilation Error"), header_bounds, Color_Front, ui.font, ui.cmd_list);
         }break;
     }
     
@@ -486,7 +488,7 @@ void plugin_parameter_panel(Plugin_Descriptor *descriptor,
                             UI_Context ui,
                             bool *parameters_were_tweaked)
 {
-    draw_rectangle(bounds, 1.0f, Color_Front, ui.g);
+    draw_rectangle(bounds, 1.0f, Color_Front, ui.cmd_list);
     
     Rect parameter_bounds = bounds;
     parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
@@ -504,7 +506,7 @@ void plugin_parameter_panel(Plugin_Descriptor *descriptor,
 
 void draw_visualization_panel(Rect bounds, Analysis *analysis, UI_Context ui) 
 {
-    draw_rectangle(bounds, 1.0f, Color_Front, ui.g);
+    draw_rectangle(bounds, 1.0f, Color_Front, ui.cmd_list);
     
     Rect ir_panel_bounds;
     Rect fft_panel_bounds;
@@ -512,36 +514,36 @@ void draw_visualization_panel(Rect bounds, Analysis *analysis, UI_Context ui)
     
     //~IR
     {
-        draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, ui.g);
+        draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, ui.cmd_list);
         Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
-        draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, ui.g); 
+        draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, ui.font, ui.cmd_list); 
         
         Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
         Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
         ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
         
-        real32 normalized = (ui.g->FIXME_zoom_state - 0.01f) / 0.99f;
+        real32 normalized = (*ui.FIXME_zoom_state - 0.01f) / 0.99f;
         real32 new_normalized = simple_slider(normalized, 600, zoom_slider_bounds, ui);
-        ui.g->FIXME_zoom_state = new_normalized  * 0.99f + 0.01f;;
+        *ui.FIXME_zoom_state = new_normalized  * 0.99f + 0.01f;
         
-        draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, ui.g);
+        draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, ui.cmd_list);
         
-        Rect last_clip = draw_pull_last_clip(ui.g);
-        draw_ir(ir_graph_bounds, ui.g->FIXME_zoom_state, analysis, ui.g);
-        draw_push_atlas_command(last_clip, ui.g);
+        Rect last_clip = draw_pull_last_clip(ui.cmd_list);
+        draw_ir(ir_graph_bounds, *ui.FIXME_zoom_state, analysis, ui.cmd_list);
+        draw_push_atlas_command(last_clip, ui.cmd_list);
     }
     //~fft
     {
-        draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, ui.g);
+        draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, ui.cmd_list);
         Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
         Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
         
-        draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, ui.g); 
-        draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, ui.g);
+        draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, ui.font, ui.cmd_list); 
+        draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, ui.cmd_list);
         
-        Rect last_clip = draw_pull_last_clip(ui.g);
-        draw_fft(fft_graph_bounds, analysis, ui.g);
-        draw_push_atlas_command(last_clip, ui.g);
+        Rect last_clip = draw_pull_last_clip(ui.cmd_list);
+        draw_fft(fft_graph_bounds, analysis, ui.cmd_list);
+        draw_push_atlas_command(last_clip, ui.cmd_list);
     }
 }
 void draw_compiler_log(Compiler_Gui_Log *error_log, 
@@ -549,7 +551,7 @@ void draw_compiler_log(Compiler_Gui_Log *error_log,
                        UI_Context ui)
 {
     
-    draw_rectangle(bounds, 1.0f, Color_Front, ui.g);
+    draw_rectangle(bounds, 1.0f, Color_Front, ui.cmd_list);
     
     Rect message_bounds = rect_take_top(bounds, TITLE_HEIGHT);
     
@@ -557,7 +559,7 @@ void draw_compiler_log(Compiler_Gui_Log *error_log,
     {
         if(message_bounds.origin.y > bounds.origin.y + bounds.dim.y)
             return;
-        draw_text(error_log->messages[i], message_bounds, Color_Front, ui.g);
+        draw_text(error_log->messages[i], message_bounds, Color_Front, ui.font, ui.cmd_list);
         message_bounds = rect_move_by(message_bounds, {0.0f, TITLE_HEIGHT});
     }
 }
@@ -576,7 +578,7 @@ void audio_file_footer(Asset_File_State audio_file_state,
             Rect play_loop_bounds = rect_take_right(footer_bounds, TITLE_HEIGHT * 2);
             footer_bounds = rect_drop_right(footer_bounds, TITLE_HEIGHT * 2);
             
-            draw_rectangle(play_loop_bounds, 1.0f, Color_Front, ui.g);
+            draw_rectangle(play_loop_bounds, 1.0f, Color_Front, ui.cmd_list);
             
             Rect play_stop_bounds = rect_take_left(play_loop_bounds, TITLE_HEIGHT);
             Rect loop_bounds = rect_move_by(play_stop_bounds, {TITLE_HEIGHT, 0.0f});
@@ -588,7 +590,7 @@ void audio_file_footer(Asset_File_State audio_file_state,
                 *clicked_on_loop = true;
             
             
-            draw_text(StringLit("todo : draw filename, waveform idk"), footer_bounds, Color_Front, ui.g);
+            draw_text(StringLit("todo : draw filename, waveform idk"), footer_bounds, Color_Front, ui.font, ui.cmd_list);
             
         }break;
         case Asset_File_State_STAGE_BACKGROUND_LOADING :
@@ -597,22 +599,22 @@ void audio_file_footer(Asset_File_State audio_file_state,
         case Asset_File_State_VALIDATING :
         case Asset_File_State_STAGE_USAGE :
         {
-            draw_text(StringLit("Loading"), footer_bounds, Color_Front, ui.g);
+            draw_text(StringLit("Loading"), footer_bounds, Color_Front, ui.font, ui.cmd_list);
         }break;
         case Asset_File_State_STAGE_UNLOADING :
         case Asset_File_State_OK_TO_UNLOAD :
         case Asset_File_State_UNLOADING :
         {
-            draw_text(StringLit("Unloading"), footer_bounds, Color_Front, ui.g);
+            draw_text(StringLit("Unloading"), footer_bounds, Color_Front, ui.font, ui.cmd_list);
             
         }break;
         case Asset_File_State_NONE :
         {
-            draw_text(StringLit("No audio file"), footer_bounds, Color_Front, ui.g);
+            draw_text(StringLit("No audio file"), footer_bounds, Color_Front, ui.font, ui.cmd_list);
         }break;
         case Asset_File_State_FAILED :
         {
-            draw_text(StringLit("Bad audio file"), footer_bounds, Color_Front, ui.g);
+            draw_text(StringLit("Bad audio file"), footer_bounds, Color_Front, ui.font, ui.cmd_list);
         }break;
     }
     Rect load_button_bounds = rect_take_left(footer_bounds, TITLE_HEIGHT * 3);
@@ -621,7 +623,7 @@ void audio_file_footer(Asset_File_State audio_file_state,
     if(button(load_button_bounds, StringLit("Load"), 1024, ui))
         *clicked_on_load = true;
     
-    draw_rectangle(footer_bounds, 1.0f, Color_Front, ui.g);
+    draw_rectangle(footer_bounds, 1.0f, Color_Front, ui.cmd_list);
 }
 
 
@@ -642,11 +644,12 @@ void frame(Plugin_Descriptor& descriptor,
            bool *load_wav_was_clicked,
            bool *load_plugin_was_clicked)
 {
-    draw_reset(graphics_ctx);
+    draw_reset(&graphics_ctx->command_list);
     Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };
-    draw_push_atlas_command(window_bounds, graphics_ctx);
+    draw_push_atlas_command(window_bounds, &graphics_ctx->command_list);
     
-    UI_Context ui{ frame_io, &ui_state, graphics_ctx };
+    UI_Context ui{ frame_io, &ui_state, &graphics_ctx->command_list, &graphics_ctx->font, &graphics_ctx->FIXME_zoom_state};
+    
     if(frame_io.mouse_released)
     {
         ui_state.previous_selected_parameter_id = ui_state.selected_parameter_id;
@@ -659,7 +662,7 @@ void frame(Plugin_Descriptor& descriptor,
     Rect main_panel_bounds = rect_drop_bottom(window_bounds, TITLE_HEIGHT);
     
     Rect footer_bounds = rect_shrinked(rect_take_bottom(window_bounds, TITLE_HEIGHT + 10.0f), 5.0f, 10.0f);
-    draw_rectangle(footer_bounds, 1.0f, Color_Front, ui.g);
+    draw_rectangle(footer_bounds, 1.0f, Color_Front, ui.cmd_list);
     
     MemoryBarrier();
     auto plugin_state = *audio_ctx->m->plugin_state; 

@@ -108,16 +108,15 @@ typedef struct {
     real32 FIXME_zoom_state;
 } Graphics_Context;
 
-function void draw_reset(Graphics_Context *graphics_ctx)
+function void draw_reset(Draw_Command_List *command_list)
 {
-    graphics_ctx->command_list.draw_vertices_count = 0;
-    graphics_ctx->command_list.draw_indices_count = 0;
-    graphics_ctx->command_list.draw_command_count = 0;
+    command_list->draw_vertices_count = 0;
+    command_list->draw_indices_count = 0;
+    command_list->draw_command_count = 0;
 }
 
-function Rect draw_pull_last_clip(Graphics_Context *graphics_ctx)
+function Rect draw_pull_last_clip(Draw_Command_List *cmd_list)
 {
-    Draw_Command_List *cmd_list = &graphics_ctx->command_list;
     ensure(cmd_list->draw_command_count > 0);
     Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
     ensure(current_cmd->type == Draw_Command_Type_ATLAS);
@@ -125,9 +124,8 @@ function Rect draw_pull_last_clip(Graphics_Context *graphics_ctx)
 }
 
 //TODO rename
-function void draw_push_atlas_command(Rect clip_rect, Graphics_Context *graphics_ctx)
+function void draw_push_atlas_command(Rect clip_rect, Draw_Command_List *cmd_list)
 {
-    Draw_Command_List *cmd_list = &graphics_ctx->command_list;
     Draw_Command *new_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count++];
     *new_cmd = {
         .type = Draw_Command_Type_ATLAS,
@@ -141,9 +139,8 @@ function void draw_push_atlas_command(Rect clip_rect, Graphics_Context *graphics
 }
 
 
-function void draw_fft(Rect bounds, Analysis *analysis, Graphics_Context *graphics_ctx)
+function void draw_fft(Rect bounds, Analysis *analysis, Draw_Command_List *cmd_list)
 {
-    Draw_Command_List *cmd_list = &graphics_ctx->command_list;
     Draw_Command *new_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count++];
     *new_cmd = Draw_Command {
         .type = Draw_Command_Type_FFT,
@@ -158,10 +155,9 @@ function void draw_fft(Rect bounds, Analysis *analysis, Graphics_Context *graphi
 function void draw_ir(Rect bounds, 
                       real32 zoom, 
                       Analysis *analysis, 
-                      Graphics_Context *graphics_ctx)
+                      Draw_Command_List *cmd_list)
 {
     ensure(zoom > 0.0f && zoom <= 1.0f);
-    Draw_Command_List *cmd_list = &graphics_ctx->command_list;
     Draw_Command *new_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count++];
     *new_cmd = Draw_Command {
         .type = Draw_Command_Type_IR,
@@ -173,11 +169,9 @@ function void draw_ir(Rect bounds,
     };
 }
 
-function void draw_character(i32 codepoint, Color col, Rect bounds, Graphics_Context *graphics_ctx)
+function void draw_character(i32 codepoint, Color col, Rect bounds, Font *font, Draw_Command_List *cmd_list)
 {
-    Font* font = &graphics_ctx->font;
     Glyph *glyph = &font->glyphs[font->codepoint_to_idx[codepoint]];
-    Draw_Command_List *cmd_list = &graphics_ctx->command_list; 
     Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
     ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
@@ -222,9 +216,8 @@ function void draw_character(i32 codepoint, Color col, Rect bounds, Graphics_Con
 
 //TODO c'est de la merde cette api mdr
 
-function void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_Context *graphics_ctx)
+function void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Draw_Command_List *cmd_list)
 {
-    Draw_Command_List *cmd_list = &graphics_ctx->command_list; 
     Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
     ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
@@ -271,7 +264,7 @@ function void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_
     current_cmd->atlas.idx_count += 6;
 }
 
-function void draw_rectangle(Rect bounds, real32 width, Color color, Graphics_Context *graphics_ctx)
+function void draw_rectangle(Rect bounds, real32 width, Color color, Draw_Command_List *cmd_list)
 {
     bounds = rect_shrinked(bounds, width / 2, width / 2);
     auto top_left = bounds.origin;
@@ -279,14 +272,13 @@ function void draw_rectangle(Rect bounds, real32 width, Color color, Graphics_Co
     auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
     auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
     
-    draw_line(top_left, top_right, color, width, graphics_ctx);
-    draw_line(top_left, bottom_left, color, width, graphics_ctx);
-    draw_line(top_right, bottom_right, color, width, graphics_ctx);
-    draw_line(bottom_right, bottom_left, color, width, graphics_ctx);
+    draw_line(top_left, top_right, color, width, cmd_list);
+    draw_line(top_left, bottom_left, color, width, cmd_list);
+    draw_line(top_right, bottom_right, color, width, cmd_list);
+    draw_line(bottom_right, bottom_left, color, width, cmd_list);
 }
-function void fill_rectangle(Rect bounds, Color col, Graphics_Context *graphics_ctx)
+function void fill_rectangle(Rect bounds, Color col, Draw_Command_List *cmd_list)
 {
-    Draw_Command_List *cmd_list = &graphics_ctx->command_list; 
     Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
     ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
@@ -339,10 +331,8 @@ function real32 measure_text_width(String text, Font *font)
     return width;
 }
 
-function void draw_text(const String& text, Rect bounds, Color col, Graphics_Context *graphics_ctx)
+function void draw_text(const String& text, Rect bounds, Color col, Font *font, Draw_Command_List *cmd_list)
 {
-    Font *font = &graphics_ctx->font;
-    Draw_Command_List *cmd_list = &graphics_ctx->command_list; 
     Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
     ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
@@ -432,14 +422,14 @@ function void draw_text(const String& text, Rect bounds, Color col, Graphics_Con
 
 function void draw_slider(Rect slider_bounds, 
                           real32 normalized_value, 
-                          Graphics_Context *graphics_ctx)
+                          Draw_Command_List *cmd_list)
 {
     real32 slider_x = slider_bounds.origin.x + normalized_value * (slider_bounds.dim.x - SLIDER_WIDTH); 
     Rect slider_rect = {
         Vec2{slider_x, slider_bounds.origin.y},
         Vec2{SLIDER_WIDTH, slider_bounds.dim.y}
     };
-    fill_rectangle(slider_rect, Color_Front, graphics_ctx);
+    fill_rectangle(slider_rect, Color_Front, cmd_list);
 }
 
 
