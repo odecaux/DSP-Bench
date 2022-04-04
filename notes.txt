@@ -18,9 +18,33 @@ ui_stage
 
 
 
-TODO : 
-ir_context -> waveform_ctx
-cleaner les constantes verticales des paramètres
 
-formaliser app_stage
-utiliser clang comme compilateur
+
+
+
+
+
+
+
+
+
+
+
+
+
+///////////////////////////
+popup plan
+
+dessiner plusieurs trucs qui se chevauchent :
+plusieurs draw_command_list séparée, une par "fenêtre"
+on doit avoir un moyen de sort pour : draw/hovered
+
+on va devoir ajouter un test pour savoir si c'est la bonne fenêtre qui est hovered à chaque fois
+
+
+plusieurs commandes différentes : normal(atlas), viz
+	command doit être un union,
+	
+	Command_Atlas {   un offset dans idx et dans vtx, un vtx_count, etc, ClipRect }
+	Command_IR { Rect, buffer, buffer size, temp buffer}
+	Command_FFT

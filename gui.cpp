@@ -419,12 +419,13 @@ void plugin_parameter_panel(Plugin_Descriptor *descriptor,
                             UI_Context ui,
                             bool *parameters_were_tweaked);
 
-void draw_visualization_panel(Rect bounds, UI_Context ui);
+void draw_visualization_panel(Rect bounds, Analysis * analysis, UI_Context ui);
 
 void main_panel_pluin_and_viz(Asset_File_State plugin_state, 
                               Plugin_Descriptor *descriptor, 
                               Plugin_Parameter_Value* current_parameter_values,
                               Compiler_Gui_Log *error_log,
+                              Analysis *analysis,
                               Rect main_panel_bounds, 
                               UI_Context ui,
                               bool *parameters_were_tweaked)
@@ -460,7 +461,7 @@ void main_panel_pluin_and_viz(Asset_File_State plugin_state,
                 
                 plugin_parameter_panel(descriptor, current_parameter_values, left_panel_bounds, ui, parameters_were_tweaked);
                 
-                draw_visualization_panel(right_panel_bounds, ui);
+                draw_visualization_panel(right_panel_bounds, analysis, ui);
             }
             else
             {
@@ -501,17 +502,15 @@ void plugin_parameter_panel(Plugin_Descriptor *descriptor,
     }
 }
 
-void draw_visualization_panel(Rect bounds, UI_Context ui) 
+void draw_visualization_panel(Rect bounds, Analysis *analysis, UI_Context ui) 
 {
     draw_rectangle(bounds, 1.0f, Color_Front, ui.g);
-    
     
     Rect ir_panel_bounds;
     Rect fft_panel_bounds;
     rect_split_vert_middle(bounds, &ir_panel_bounds, &fft_panel_bounds);
     
     //~IR
-    
     draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, ui.g);
     Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
     draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, ui.g); 
@@ -533,8 +532,10 @@ void draw_visualization_panel(Rect bounds, UI_Context ui)
     
     draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, ui.g); 
     draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, ui.g);
-    ui.g->fft.bounds = fft_graph_bounds;
     
+    Rect last_clip = draw_pull_last_clip(ui.g);
+    draw_fft(fft_graph_bounds, analysis, ui.g);
+    draw_push_atlas_command(last_clip, ui.g);
 }
 
 void draw_compiler_log(Compiler_Gui_Log *error_log, 
@@ -630,20 +631,22 @@ void frame(Plugin_Descriptor& descriptor,
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Thread_Context *audio_ctx,
            Compiler_Gui_Log *error_log,
+           Analysis *analysis,
            bool *parameters_were_tweaked,
            bool *load_wav_was_clicked,
            bool *load_plugin_was_clicked)
 {
+    draw_reset(graphics_ctx);
+    Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };
+    draw_push_atlas_command(window_bounds, graphics_ctx);
     
     UI_Context ui{ frame_io, &ui_state, graphics_ctx };
-    
     if(frame_io.mouse_released)
     {
         ui_state.previous_selected_parameter_id = ui_state.selected_parameter_id;
         ui_state.selected_parameter_id = -1;
     }
     
-    Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };
     Rect header_bounds = rect_shrinked(rect_take_top(window_bounds, TITLE_HEIGHT + 10.0f), 5.0f, 10.0f);
     
     window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT); 
@@ -671,7 +674,7 @@ void frame(Plugin_Descriptor& descriptor,
     }
     
     
-    main_panel_pluin_and_viz(plugin_state, &descriptor, current_parameter_values, error_log,
+    main_panel_pluin_and_viz(plugin_state, &descriptor, current_parameter_values, error_log, analysis, 
                              main_panel_bounds, ui, parameters_were_tweaked);
     
     

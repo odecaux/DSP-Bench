@@ -23,15 +23,15 @@
 
 
 #ifdef DEBUG
-typedef Plugin(*try_compile_t)(const char*, const void*, Arena *allocator);
+typedef Plugin(*try_compile_t)(const char*, const void*, Arena *allocator, void *previous_clang_ctx);
 typedef void(*release_jit_t)(Plugin*);
-typedef void*(*create_clang_context_t)();
-typedef void(*release_clang_context_t)(void* clang_context_void);
+typedef void*(*create_llvm_context_t)();
+typedef void(*release_llvm_context_t)(void* llvm_context_void);
 
 try_compile_t try_compile = nullptr;
 release_jit_t release_jit = nullptr;
-create_clang_context_t create_clang_context = nullptr;
-release_clang_context_t release_clang_context = nullptr; 
+create_llvm_context_t create_llvm_context = nullptr;
+release_llvm_context_t release_llvm_context = nullptr; 
 
 typedef void(*frame_t)(
                        Plugin_Descriptor&,
@@ -40,7 +40,8 @@ typedef void(*frame_t)(
                        IO frame_io, 
                        Plugin_Parameter_Value* current_parameter_values, 
                        Audio_Thread_Context *audio_ctx, 
-                       Compiler_Gui_Log *error_log, 
+                       Compiler_Gui_Log *error_log,
+                       Analysis *analysis, 
                        bool *parameters_were_tweaked, 
                        bool *load_was_clicked, 
                        bool *load_plugin_was_clicked);
@@ -136,22 +137,21 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     Arena scratch_allocator = allocator_init(1024 * 1204);
     
     //~ Graphics Init
-    Graphics_Context graphics_ctx = {};
-    graphics_ctx.window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT}; 
-    
-    Window_Context window = win32_init_window(&graphics_ctx.window_dim);
-    
-    graphics_ctx.atlas = {
+    Graphics_Context graphics_ctx = {
+        .window_dim = { INITIAL_WINDOW_WIDTH, INITIAL_WINDOW_HEIGHT},
         .font = load_fonts(DEFAULT_FONT_FILENAME, &app_allocator, &scratch_allocator),
         .command_list = {
             .draw_vertices = (Vertex*) arena_allocate(&app_allocator, sizeof(Vertex) * ATLAS_MAX_VERTEX_COUNT),
             .draw_vertices_count = 0,
             .draw_indices = (u32*) arena_allocate(&app_allocator, sizeof(u32) * ATLAS_MAX_VERTEX_COUNT), 
-            .draw_indices_count = 0
+            .draw_indices_count = 0,
+            .draw_commands = (Draw_Command*) arena_allocate(&app_allocator, sizeof(Draw_Command) * 1000), 
+            .draw_command_count = 0
         }
     };
     
-    OpenGL_Context opengl_ctx = opengl_initialize(&window, &graphics_ctx.atlas.font);
+    Window_Context window = win32_init_window(&graphics_ctx.window_dim);
+    OpenGL_Context opengl_ctx = opengl_initialize(&window, &graphics_ctx.font);
     
     win32_print_elapsed(time_program_begin, "time to graphics");
     
@@ -207,16 +207,16 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     ensure(compiler_dll != NULL && "couldn't find compiler.dll");
     try_compile = (try_compile_t)GetProcAddress(compiler_dll, "try_compile");
     release_jit = (release_jit_t)GetProcAddress(compiler_dll, "release_jit");
-    create_clang_context = (create_clang_context_t)GetProcAddress(compiler_dll, "create_clang_context");
-    release_clang_context = (release_clang_context_t)GetProcAddress(compiler_dll, "release_clang_context");
+    create_llvm_context = (create_llvm_context_t)GetProcAddress(compiler_dll, "create_llvm_context");
+    release_llvm_context = (release_llvm_context_t)GetProcAddress(compiler_dll, "release_llvm_context");
     
 #endif
     
-    void* clang_ctx = create_clang_context();
+    void* llvm_ctx = create_llvm_context();
     
     IPP_FFT_Context audio_side_ipp_context = ipp_initialize(&app_allocator);
     Plugin_Reloading_Manager plugin_reloading_manager;
-    plugin_reloading_manager_init(&plugin_reloading_manager, clang_ctx, source_filename, &plugin_state, &audio_side_ipp_context);
+    plugin_reloading_manager_init(&plugin_reloading_manager, llvm_ctx, source_filename, &plugin_state, &audio_side_ipp_context);
     
     audio_context.m = &plugin_reloading_manager;
     
@@ -228,10 +228,6 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
         .IR_buffer = (real32* )arena_allocate(&app_allocator, sizeof(real32) * IR_BUFFER_LENGTH),
         .IR_sample_count = IR_BUFFER_LENGTH,
         .zoom_state = 1.0f
-    };
-    graphics_ctx.fft = {
-        .fft_buffer = (real32* )arena_allocate(&app_allocator, sizeof(real32) * IR_BUFFER_LENGTH * 2),
-        .fft_sample_count = IR_BUFFER_LENGTH * 2
     };
     
     Arena gui_IR_allocator = allocator_init(100 * 1204);
@@ -263,9 +259,6 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     {
         win32_message_dispatch(&window, &frame_io, &done);
         if(done) break;
-        
-        graphics_ctx.atlas.command_list.draw_vertices_count = 0;
-        graphics_ctx.atlas.command_list.draw_indices_count = 0;
         
         frame_io = io_state_advance(frame_io);
         frame_io.mouse_position = win32_get_mouse_position(&window);
@@ -315,7 +308,6 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
         
         if(plugin_to_pull_ir_from)
         {
-            
             gui_IR_allocator.current = gui_IR_allocator.base;
             
             compute_IR(*plugin_to_pull_ir_from, 
@@ -327,9 +319,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
                        &gui_initializer);
             
             fft_perform_and_get_magnitude(&analysis);
-            
             memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
-            memcpy(graphics_ctx.fft.fft_buffer, analysis.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
         }
         
         bool parameters_were_tweaked = false;
@@ -342,6 +332,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
               plugin_reloading_manager.front_handle->parameter_values_ui_side, 
               &audio_context, 
               &plugin_reloading_manager.gui_log,
+              &analysis,
               &parameters_were_tweaked,
               &load_wav_was_clicked,
               &load_plugin_was_clicked
@@ -360,9 +351,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
                        &gui_initializer);
             
             fft_perform_and_get_magnitude(&analysis);
-            
             memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
-            memcpy(graphics_ctx.fft.fft_buffer, analysis.magnitudes, sizeof(real32) * IR_BUFFER_LENGTH * 2); 
         }
         
         if(load_wav_was_clicked)
@@ -424,10 +413,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
             ShowCursor(TRUE);
         
         
-        if(plugin_state == Asset_File_State_IN_USE && !ui_state.show_error_log)
-            opengl_render_ui(&opengl_ctx, &graphics_ctx);
-        else
-            opengl_render_generic(&opengl_ctx, &graphics_ctx);
+        opengl_render(&opengl_ctx, &graphics_ctx);
         
         i64 current_time;
         win32_get_elapsed_ms_since(last_time, &current_time, &frame_io.delta_time);

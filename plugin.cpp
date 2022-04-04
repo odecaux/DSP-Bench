@@ -192,14 +192,14 @@ Plugin_Parameter_Value* plugin_parameters_pull_from_ring(Plugin_Parameters_Ring_
 
 
 #ifdef DEBUG
-typedef Plugin(*try_compile_t)(const char*, const void*, Arena *allocator);
+typedef Plugin(*try_compile_t)(const char*, const void*, Arena *allocator, void *previous_clang_ctx);
 typedef void(*release_jit_t)(Plugin*);
 extern release_jit_t release_jit;
 extern try_compile_t try_compile;
 #endif
 #ifdef RELEASE
 void release_jit(Plugin *plugin);
-Plugin try_compile(const char* filename, void* clang_ctx_ptr, Arena *allocator);
+Plugin try_compile(const char* filename, void* llvm_ctx_ptr, Arena *allocator, void *previous_clang_ctx);
 #endif
 
 void plugin_reset_handle(Plugin *handle, Arena *allocator)
@@ -218,8 +218,8 @@ DWORD compiler_thread_proc(void *void_param)
     Compiler_Thread_Param *param = (Compiler_Thread_Param*)void_param;
     if(compare_exchange_32(param->stage, Asset_File_State_BACKGROUND_LOADING, Asset_File_State_STAGE_BACKGROUND_LOADING) )
     {
-        
-        *param->handle = try_compile(param->source_filename, param->clang_ctx, param->allocator);
+        ensure(param->previous_clang_ctx == nullptr);
+        *param->handle = try_compile(param->source_filename, param->llvm_ctx, param->allocator, nullptr);
         ensure(compare_exchange_32(param->stage, Asset_File_State_STAGE_VALIDATION, Asset_File_State_BACKGROUND_LOADING));
     }
     else if(compare_exchange_32(param->stage, 
@@ -227,7 +227,8 @@ DWORD compiler_thread_proc(void *void_param)
                                 Asset_File_State_HOT_RELOAD_STAGE_BACKGROUND_LOADING) )
     {
         
-        *param->handle = try_compile(param->source_filename, param->clang_ctx, param->allocator);
+        ensure(param->previous_clang_ctx != nullptr);
+        *param->handle = try_compile(param->source_filename, param->llvm_ctx, param->allocator, param->previous_clang_ctx);
         ensure(compare_exchange_32(param->stage, Asset_File_State_HOT_RELOAD_STAGE_VALIDATION, Asset_File_State_HOT_RELOAD_BACKGROUND_LOADING));
     }
     else
@@ -256,7 +257,8 @@ void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m)
         .source_filename = m->source_filename,
         .handle = m->front_handle,
         .allocator = m->front_allocator,
-        .clang_ctx = m->clang_ctx,
+        .llvm_ctx = m->llvm_ctx,
+        .previous_clang_ctx = nullptr,
         .stage = m->plugin_state
     };
     ATOMIC_HARNESS();
@@ -275,7 +277,8 @@ void plugin_reloader_stage_hot_compilation(Plugin_Reloading_Manager *m)
         .source_filename = m->source_filename,
         .handle = m->back_handle,
         .allocator = m->back_allocator,
-        .clang_ctx = m->clang_ctx,
+        .llvm_ctx = m->llvm_ctx,
+        .previous_clang_ctx = m->front_handle->clang_ctx,
         .stage = m->plugin_state
     };
     ATOMIC_HARNESS();
@@ -286,7 +289,7 @@ void plugin_reloader_stage_hot_compilation(Plugin_Reloading_Manager *m)
 }
 
 void plugin_reloading_manager_init(Plugin_Reloading_Manager *m, 
-                                   void *clang_ctx, 
+                                   void *llvm_ctx, 
                                    char *source_filename, 
                                    Asset_File_State *plugin_state,
                                    IPP_FFT_Context *ipp_context)
@@ -310,7 +313,7 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
         .front_initializer = &m->initializer_a,
         .back_initializer = &m->initializer_b,
         
-        .clang_ctx = clang_ctx,
+        .llvm_ctx = llvm_ctx,
         .plugin_state = plugin_state,
         .source_filename = source_filename,
         
@@ -386,7 +389,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             {
                 printf("compilation failed, cleaning up\n");
                 
-                ensure(!m->front_handle->llvm_jit_engine);
+                ensure(!m->front_handle->clang_ctx);
                 ensure(!m->front_handle->parameter_values_audio_side);
                 ensure(!m->front_handle->parameter_values_ui_side);
                 ensure(!m->front_handle->ring.buffer);
@@ -429,7 +432,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             {
                 
                 printf("hot : compilation failed\n");
-                ensure(!m->back_handle->llvm_jit_engine);
+                ensure(!m->back_handle->clang_ctx);
                 ensure(!m->back_handle->parameter_values_audio_side);
                 ensure(!m->back_handle->parameter_values_ui_side);
                 ensure(!m->back_handle->ring.buffer);
@@ -611,7 +614,7 @@ void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m)
             ensure(!m->back_handle->parameter_values_audio_side);
             ensure(!m->back_handle->parameter_values_ui_side);
             ensure(!m->back_handle->ring.buffer);
-            ensure(!m->back_handle->llvm_jit_engine);
+            ensure(!m->back_handle->clang_ctx);
             
             plugin_reset_handle(m->back_handle, m->back_allocator);
             plugin_reloader_stage_hot_compilation(m);

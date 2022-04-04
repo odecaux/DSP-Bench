@@ -10,27 +10,25 @@ struct Parameters{
 struct State{
     real32 **buffer;
     u32 buffer_size;
-    u32 cursor;
-    void *fft_context;
-    real32 *fft_out_real;
-    real32 *fft_out_im;
+    u32 cursor;   
+    void *fft_context;  
+    real32 *fft_out_real; 
+    real32 *fft_out_im; 
 };
 
 
-
-
-Parameters default_parameters()
+Parameters default_parameters()      
 {
     Parameters param = {0.0f};
     return param;
-}
+}  
 
 State initialize_state(const Parameters& param, 
                        const unsigned int num_channels, 
                        const float sample_rate,
                        void *initialization_context)
 {
-    State initial_state = {};
+    State initial_state  = {};
     float freq = 1000.0f;
     u32 buffer_size = (u32)(sample_rate / freq);
     initial_state.buffer_size = BUFFER_SIZE;
@@ -94,10 +92,10 @@ void audio_callback(const Parameters& param,
     for(int sample = BUFFER_SIZE; sample < num_samples; sample++)
     {
         for(int channel = 0; channel < num_channels; channel++)
-        {
+        { 
             out_buffer[channel][sample] = 0.0f;//state.buffer[channel][state.cursor]; 
         }
-        state.cursor = (state.cursor + 1) % state.buffer_size;
+        state.cursor = (state.cursor + 1) % state.bu ffer_size;
     }*/
 }
 

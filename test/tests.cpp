@@ -16,9 +16,9 @@ enum TEST_ENUM{
 
 bool test_init_compiler()
 {
-    auto* clang_ctx = create_clang_context_impl();
+    auto* llvm_ctx = create_llvm_context_impl();
     
-    delete clang_ctx;
+    delete llvm_ctx;
     printf("compiler creation passed\n");
     
     return true;
@@ -28,7 +28,7 @@ bool test_init_compiler()
 bool test_compiler_works()
 {
     bool worked = false;
-    auto* clang_ctx = create_clang_context_impl();
+    auto* llvm_ctx = create_llvm_context_impl();
     
     
     char source[] = 
@@ -42,7 +42,7 @@ bool test_compiler_works()
         clang::InputKind{clang::Language::CXX}
     };
     
-    auto& compiler_instance = clang_ctx->compiler_instance;
+    auto& compiler_instance = llvm_ctx->compiler_instance;
     
     compiler_instance.getFrontendOpts().Inputs.clear();
     compiler_instance.getFrontendOpts().Inputs.push_back(new_file);
@@ -60,14 +60,14 @@ bool test_compiler_works()
         }
     }
     
-    delete clang_ctx;
+    delete llvm_ctx;
     return worked;
 }
 
 bool test_compile_file()
 {
     bool worked = false;
-    auto* clang_ctx = create_clang_context_impl();
+    auto* llvm_ctx = create_llvm_context_impl();
     
     
     
@@ -76,7 +76,7 @@ bool test_compile_file()
         clang::InputKind{clang::Language::CXX}
     };
     
-    auto& compiler_instance = clang_ctx->compiler_instance;
+    auto& compiler_instance = llvm_ctx->compiler_instance;
     
     compiler_instance.getFrontendOpts().Inputs.clear();
     compiler_instance.getFrontendOpts().Inputs.push_back(new_file);
@@ -94,7 +94,7 @@ bool test_compile_file()
         }
     }
     
-    delete clang_ctx;
+    delete llvm_ctx;
     return worked;
 }
 
@@ -102,7 +102,7 @@ bool test_compile_file()
 bool test_parse_parameters()
 {
     bool worked = false;
-    auto* clang_ctx = create_clang_context_impl();
+    auto* llvm_ctx = create_llvm_context_impl();
     
     
     auto new_file = clang::FrontendInputFile{
@@ -110,7 +110,7 @@ bool test_parse_parameters()
         clang::InputKind{clang::Language::CXX}
     };
     
-    auto& compiler_instance = clang_ctx->compiler_instance;
+    auto& compiler_instance = llvm_ctx->compiler_instance;
     
     compiler_instance.getFrontendOpts().Inputs.clear();
     compiler_instance.getFrontendOpts().Inputs.push_back(new_file);
@@ -164,16 +164,16 @@ bool test_parse_parameters()
     compiler_instance.ExecuteAction(action);
     
     
-    delete clang_ctx;
+    delete llvm_ctx;
     return worked;
 }
 
 bool test_initialization()
 {
     bool worked = false;
-    auto* clang_ctx = create_clang_context_impl();
+    auto* llvm_ctx = create_llvm_context_impl();
     
-    auto handle = try_compile_impl("../test/plugin_with_parameters.cpp", clang_ctx);
+    auto handle = try_compile_impl("../test/plugin_with_parameters.cpp", llvm_ctx);
     
     if(handle.worked)
     {
@@ -207,7 +207,7 @@ bool test_initialization()
         delete plugin_parameters_holder;
     }
     
-    delete clang_ctx;
+    delete llvm_ctx;
     return worked;
 }
 
@@ -215,9 +215,9 @@ bool test_initialization()
 bool test_no_op_callback()
 {
     bool worked = false;
-    auto* clang_ctx = create_clang_context_impl();
+    auto* llvm_ctx = create_llvm_context_impl();
     
-    auto handle = try_compile_impl("../test/no_op.cpp", clang_ctx);
+    auto handle = try_compile_impl("../test/no_op.cpp", llvm_ctx);
     
     if(handle.worked)
     {
@@ -247,7 +247,7 @@ bool test_no_op_callback()
         
     }
     
-    delete clang_ctx;
+    delete llvm_ctx;
     return worked;
 }
 
@@ -255,9 +255,9 @@ bool test_no_op_callback()
 bool test_static_gain_callback()
 {
     bool worked = false;
-    auto* clang_ctx = create_clang_context_impl();
+    auto* llvm_ctx = create_llvm_context_impl();
     
-    auto handle = try_compile_impl("../test/static_gain_plugin.cpp", clang_ctx);
+    auto handle = try_compile_impl("../test/static_gain_plugin.cpp", llvm_ctx);
     
     if(handle.worked)
     {
@@ -298,7 +298,7 @@ bool test_static_gain_callback()
         
     }
     
-    delete clang_ctx;
+    delete llvm_ctx;
     return worked;
 }
 

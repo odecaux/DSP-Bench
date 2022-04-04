@@ -113,8 +113,18 @@ internal inline Vec2 vec2_minus(Vec2 a, Vec2 b)
 }
 
 typedef struct {
-    Vec2 origin;
-    Vec2 dim;
+    union{
+        struct {
+            Vec2 origin;
+            Vec2 dim;
+        };
+        struct {
+            real32 x;
+            real32 y;
+            real32 w;
+            real32 h;
+        };
+    };
 } Rect;
 
 internal bool rect_contains(Rect bounds, Vec2 position)
@@ -201,12 +211,13 @@ internal void rect_split_vert_middle(Rect in, Rect *out_top, Rect *out_bottom)
 
 internal Rect rect_shrinked(Rect rect, real32 padding_x, real32 padding_y)
 {
-    return Rect{
-        {
+    
+    return {
+        .origin = {
             rect.origin.x + padding_x,
             rect.origin.y + padding_y
         },
-        {
+        .dim = {
             octave_max(rect.dim.x - padding_x * 2, 0.0f),
             octave_max(rect.dim.y - padding_y * 2, 0.0f)
         }

@@ -5,6 +5,8 @@
 
 //~ Fonts
 
+#define WHITE_RECT_POS Vec2{ 0.0f, 0.0f }
+
 //TODO types 
 typedef struct {
     real32 X0, Y0, X1, Y1;     // Glyph corners
@@ -24,7 +26,6 @@ typedef struct{
     Glyph *glyphs;
     u32 glyph_count;
     
-    Vec2 white_rect_pos;
     //TODO fallback
     
     real32 ascent;
@@ -44,19 +45,48 @@ typedef struct {
 } Vertex;
 
 typedef struct {
-    Vertex *draw_vertices;
-    u32 draw_vertices_count;
-    u32 *draw_indices;
-    u32 draw_indices_count;
-    
-} Draw_Command_List;
+    Rect clip_rect;
+    u32 idx_offset;
+    u32 idx_count;
+    u32 vertex_offset;
+} Draw_Command_Atlas;
 
 
 typedef struct {
-    Font font;
-    Draw_Command_List command_list;
-} Graphics_Context_Atlas;
+    Rect bounds;
+    u32 sample_count;
+    real32 *buffer;
+} Draw_Command_FFT;
 
+enum Draw_Command_Type{
+    Draw_Command_Type_ATLAS,
+    Draw_Command_Type_FFT
+};
+
+typedef struct {
+    Draw_Command_Type type;
+    union{
+        Draw_Command_Atlas atlas;
+        Draw_Command_FFT fft;
+    };
+} Draw_Command;
+
+
+typedef struct {
+    Vertex *draw_vertices;
+    u32 draw_vertices_count;
+    //TODO on a size mais pas capacity
+    
+    u32 *draw_indices;
+    u32 draw_indices_count;
+    
+    Draw_Command *draw_commands;
+    u32 draw_command_count;
+} Draw_Command_List;
+
+
+/*j'ai besoin d'une stack pour push/pop les clip rects. comme ça je 
+*/
 
 typedef struct{
     Vec2 pos;
@@ -71,51 +101,72 @@ typedef struct {
 } Graphics_Context_IR;
 
 typedef struct {
-    Rect bounds;
-    real32 *fft_buffer;
-    u32 fft_sample_count;
-} Graphics_Context_FFT;
-
-typedef struct {
     Vec2 window_dim;
-    Graphics_Context_Atlas atlas;
+    Font font;
+    Draw_Command_List command_list;
     Graphics_Context_IR ir;
-    Graphics_Context_FFT fft;
 } Graphics_Context;
 
-function u32 push_vtx(Vec2 pos, Color col, Graphics_Context_Atlas *atlas)
+function void draw_reset(Graphics_Context *graphics_ctx)
 {
-    Draw_Command_List *cmd_list = &atlas->command_list; 
-    
-    Vertex* vtx_write = cmd_list->draw_vertices;
-    u32 vtx_idx = cmd_list->draw_vertices_count++;
-    
-	vtx_write[vtx_idx].pos = pos;
-    vtx_write[vtx_idx].col = col;
-	vtx_write[vtx_idx].uv = atlas->font.white_rect_pos;
-    return vtx_idx;
+    graphics_ctx->command_list.draw_vertices_count = 0;
+    graphics_ctx->command_list.draw_indices_count = 0;
+    graphics_ctx->command_list.draw_command_count = 0;
 }
 
-function void push_idx(u32 vtx_idx, Graphics_Context_Atlas *atlas)
+function Rect draw_pull_last_clip(Graphics_Context *graphics_ctx)
 {
-    Draw_Command_List *cmd_list = &atlas->command_list; 
-    
-    cmd_list->draw_indices[cmd_list->draw_indices_count++] = vtx_idx;
+    Draw_Command_List *cmd_list = &graphics_ctx->command_list;
+    ensure(cmd_list->draw_command_count > 0);
+    Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
+    ensure(current_cmd->type == Draw_Command_Type_ATLAS);
+    return current_cmd->atlas.clip_rect;
 }
+
+//TODO rename
+function void draw_push_atlas_command(Rect clip_rect, Graphics_Context *graphics_ctx)
+{
+    Draw_Command_List *cmd_list = &graphics_ctx->command_list;
+    Draw_Command *new_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count++];
+    *new_cmd = {
+        .type = Draw_Command_Type_ATLAS,
+        .atlas {
+            .clip_rect = clip_rect,
+            .idx_offset = cmd_list->draw_indices_count,
+            .idx_count = 0,
+            .vertex_offset = cmd_list->draw_vertices_count
+        }
+    };
+}
+
+
+function void draw_fft(Rect bounds, Analysis *analysis, Graphics_Context *graphics_ctx)
+{
+    Draw_Command_List *cmd_list = &graphics_ctx->command_list;
+    Draw_Command *new_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count++];
+    *new_cmd = Draw_Command {
+        .type = Draw_Command_Type_FFT,
+        .fft = {
+            .bounds = bounds,
+            .sample_count = analysis->ir_sample_count * 2,
+            .buffer = analysis->magnitudes
+        }
+    };
+}
+
 
 function void draw_character(i32 codepoint, Color col, Rect bounds, Graphics_Context *graphics_ctx)
 {
-    Graphics_Context_Atlas *atlas = &graphics_ctx->atlas;
-    Font* font = &atlas->font;
+    Font* font = &graphics_ctx->font;
     Glyph *glyph = &font->glyphs[font->codepoint_to_idx[codepoint]];
-    Draw_Command_List *cmd_list = &atlas->command_list; 
+    Draw_Command_List *cmd_list = &graphics_ctx->command_list; 
+    Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
+    ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
     auto top_left = bounds.origin;
     auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
     auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
     auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
-    
-    Vec2 white_rect_pos = font->white_rect_pos;
     
     u32 vtx_idx = cmd_list->draw_vertices_count;
     Vertex *vtx_write = cmd_list->draw_vertices + cmd_list->draw_vertices_count;
@@ -148,14 +199,16 @@ function void draw_character(i32 codepoint, Color col, Rect bounds, Graphics_Con
     idx_write[5] = vtx_idx + 1;
     
     cmd_list->draw_indices_count += 6;
+    current_cmd->atlas.idx_count += 6;
 }
 
 //TODO c'est de la merde cette api mdr
 
 function void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_Context *graphics_ctx)
 {
-    Graphics_Context_Atlas *atlas = &graphics_ctx->atlas;
-    Draw_Command_List *cmd_list = &atlas->command_list; 
+    Draw_Command_List *cmd_list = &graphics_ctx->command_list; 
+    Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
+    ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
     const Vec2 normal = vec2_normalize(start, end);
 	const Vec2 perpendicular = Vec2(normal.y, -normal.x) ;
@@ -166,26 +219,24 @@ function void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_
     auto c = vec2_add(start, hn);
     auto d = vec2_add(end, hn);
     
-    Vec2 white_rect_pos = atlas->font.white_rect_pos;
-    
     u32 vtx_idx = cmd_list->draw_vertices_count;
     Vertex *vtx_write = cmd_list->draw_vertices + cmd_list->draw_vertices_count;
     
     vtx_write[0].pos = a;
     vtx_write[0].col = col;
-	vtx_write[0].uv = white_rect_pos;
+	vtx_write[0].uv = WHITE_RECT_POS;
     
 	vtx_write[1].pos = b;
     vtx_write[1].col = col;
-	vtx_write[1].uv = white_rect_pos;
+	vtx_write[1].uv = WHITE_RECT_POS;
     
 	vtx_write[2].pos = c;
     vtx_write[2].col = col;
-	vtx_write[2].uv = white_rect_pos;
+	vtx_write[2].uv = WHITE_RECT_POS;
     
 	vtx_write[3].pos = d;
     vtx_write[3].col = col;
-	vtx_write[3].uv = white_rect_pos;
+	vtx_write[3].uv = WHITE_RECT_POS;
     
     cmd_list->draw_vertices_count += 4;
     
@@ -199,6 +250,7 @@ function void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Graphics_
     idx_write[5] = vtx_idx + 3;
     
     cmd_list->draw_indices_count += 6;
+    current_cmd->atlas.idx_count += 6;
 }
 
 function void draw_rectangle(Rect bounds, real32 width, Color color, Graphics_Context *graphics_ctx)
@@ -216,34 +268,33 @@ function void draw_rectangle(Rect bounds, real32 width, Color color, Graphics_Co
 }
 function void fill_rectangle(Rect bounds, Color col, Graphics_Context *graphics_ctx)
 {
-    Graphics_Context_Atlas *atlas = &graphics_ctx->atlas;
-    Draw_Command_List *cmd_list = &atlas->command_list; 
+    Draw_Command_List *cmd_list = &graphics_ctx->command_list; 
+    Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
+    ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
     auto top_left = bounds.origin;
     auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
     auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
     auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
     
-    Vec2 white_rect_pos = atlas->font.white_rect_pos;
-    
     u32 vtx_idx = cmd_list->draw_vertices_count;
     Vertex *vtx_write = cmd_list->draw_vertices + cmd_list->draw_vertices_count;
     
     vtx_write[0].pos = bottom_left;
     vtx_write[0].col = col;
-	vtx_write[0].uv = white_rect_pos;
+	vtx_write[0].uv = WHITE_RECT_POS;
     
 	vtx_write[1].pos = top_right;
     vtx_write[1].col = col;
-	vtx_write[1].uv = white_rect_pos;
+	vtx_write[1].uv = WHITE_RECT_POS;
     
 	vtx_write[2].pos = top_left;
     vtx_write[2].col = col;
-	vtx_write[2].uv = white_rect_pos;
+	vtx_write[2].uv = WHITE_RECT_POS;
     
 	vtx_write[3].pos = bottom_right;
     vtx_write[3].col = col;
-	vtx_write[3].uv = white_rect_pos;
+	vtx_write[3].uv = WHITE_RECT_POS;
     
     cmd_list->draw_vertices_count += 4;
     
@@ -257,7 +308,7 @@ function void fill_rectangle(Rect bounds, Color col, Graphics_Context *graphics_
     idx_write[5] = vtx_idx + 1;
     
     cmd_list->draw_indices_count += 6;
-    
+    current_cmd->atlas.idx_count += 6;
 }
 
 function real32 measure_text_width(String text, Font *font)
@@ -272,9 +323,10 @@ function real32 measure_text_width(String text, Font *font)
 
 function void draw_text(const String& text, Rect bounds, Color col, Graphics_Context *graphics_ctx)
 {
-    Graphics_Context_Atlas *atlas = &graphics_ctx->atlas;
-    Font *font = &atlas->font;
-    Draw_Command_List *cmd_list = &atlas->command_list; 
+    Font *font = &graphics_ctx->font;
+    Draw_Command_List *cmd_list = &graphics_ctx->command_list; 
+    Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
+    ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
     real32 text_width = measure_text_width(text, font);
     real32 width_remaining = bounds.dim.x - text_width;
@@ -321,7 +373,6 @@ function void draw_text(const String& text, Rect bounds, Color col, Graphics_Con
         auto bottom_right = Vec2{x + glyph->X1, y + glyph->Y1};
         auto bottom_left = Vec2{x + glyph->X0, y + glyph->Y1};
         
-        Vec2 white_rect_pos = atlas->font.white_rect_pos;
         
         u32 vtx_idx = cmd_list->draw_vertices_count;
         Vertex *vtx_write = cmd_list->draw_vertices + cmd_list->draw_vertices_count;
@@ -354,6 +405,7 @@ function void draw_text(const String& text, Rect bounds, Color col, Graphics_Con
         idx_write[5] = vtx_idx + 1;
         
         cmd_list->draw_indices_count += 6;
+        current_cmd->atlas.idx_count += 6;
         
         x += glyph->advance_x;
     }

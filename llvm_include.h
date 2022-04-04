@@ -33,6 +33,8 @@
 #include <clang/Tooling/Tooling.h>
 #include <clang/Rewrite/Frontend/FrontendActions.h>
 
+#include "clang/Tooling/ASTDiff/ASTDiff.h"
+
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/ExecutionEngine/MCJIT.h>
 #include <llvm/ExecutionEngine/SectionMemoryManager.h>
@@ -43,5 +45,9 @@
 #include <llvm/Support/Host.h>
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Analysis/AliasAnalysis.h>
+
+
+
+#include <clang/Frontend/CompilerInstance.h>
 
 #endif //COMPILER_PCH_H

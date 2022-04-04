@@ -6,12 +6,12 @@
 #ifdef DEBUG 
 extern "C" __declspec(dllexport)
 #endif
-void* create_clang_context();
+void* create_llvm_context();
 
 #ifdef DEBUG 
 extern "C" __declspec(dllexport)
 #endif
-Plugin try_compile(const char* filename, void* clang_ctx_ptr, Arena *allocator);
+Plugin try_compile(const char* filename, void* llvm_ctx_ptr, Arena *allocator, void* previous_clang_ctx);
 
 #ifdef DEBUG
 extern "C" __declspec(dllexport) 
@@ -22,7 +22,7 @@ void release_jit(Plugin *plugin);
 #ifdef DEBUG 
 extern "C" __declspec(dllexport)
 #endif
-void release_clang_ctx(void* clang_ctx_void);
+void release_llvm_ctx(void* llvm_ctx_void);
 
 
 #endif //COMILER_H

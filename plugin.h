@@ -98,7 +98,7 @@ typedef struct Plugin {
     
     Plugin_Descriptor descriptor;
     
-    void* llvm_jit_engine;
+    void* clang_ctx;
     audio_callback_t audio_callback_f;
     default_parameters_t default_parameters_f;
     initialize_state_t initialize_state_f;
@@ -110,6 +110,7 @@ typedef struct Plugin {
     Plugin_Parameter_Value* parameter_values_ui_side;
     Plugin_Parameters_Ring_Buffer ring;
 } Plugin;
+
 
 //TODO c'est pas le bon endroit pour mettre ça
 typedef struct{
@@ -234,8 +235,8 @@ typedef struct {
     const char* source_filename;
     Plugin *handle;
     Arena *allocator;
-    void *clang_ctx;
-    
+    void *llvm_ctx;
+    void *previous_clang_ctx;
     Asset_File_State *stage;
 } Compiler_Thread_Param;
 
@@ -266,7 +267,7 @@ struct Plugin_Reloading_Manager
     Compiler_Thread_Param compiler_thread_param;
     HANDLE compiler_thread_handle;
     u64 plugin_last_write_time;
-    void *clang_ctx;
+    void *llvm_ctx;
     Asset_File_State *plugin_state;
     char *source_filename;
     
@@ -274,7 +275,7 @@ struct Plugin_Reloading_Manager
 };
 
 
-void plugin_reloading_manager_init(Plugin_Reloading_Manager *m, void *clang_ctx, char *source_filename, Asset_File_State *plugin_state, IPP_FFT_Context *ipp_context);
+void plugin_reloading_manager_init(Plugin_Reloading_Manager *m, void *llvm_ctx, char *source_filename, Asset_File_State *plugin_state, IPP_FFT_Context *ipp_context);
 
 void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m);
 
