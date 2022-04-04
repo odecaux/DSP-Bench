@@ -58,9 +58,16 @@ typedef struct {
     real32 *buffer;
 } Draw_Command_FFT;
 
+typedef struct {
+    Rect bounds;
+    u32 sample_count;
+    real32 *buffer;
+} Draw_Command_IR;
+
 enum Draw_Command_Type{
     Draw_Command_Type_ATLAS,
-    Draw_Command_Type_FFT
+    Draw_Command_Type_FFT,
+    Draw_Command_Type_IR
 };
 
 typedef struct {
@@ -68,6 +75,7 @@ typedef struct {
     union{
         Draw_Command_Atlas atlas;
         Draw_Command_FFT fft;
+        Draw_Command_IR ir;
     };
 } Draw_Command;
 
@@ -94,17 +102,10 @@ typedef struct{
 } IR_Vertex;
 
 typedef struct {
-    Rect bounds;
-    real32 *IR_buffer;
-    u32 IR_sample_count;
-    real32 zoom_state;
-} Graphics_Context_IR;
-
-typedef struct {
     Vec2 window_dim;
     Font font;
     Draw_Command_List command_list;
-    Graphics_Context_IR ir;
+    real32 FIXME_zoom_state;
 } Graphics_Context;
 
 function void draw_reset(Graphics_Context *graphics_ctx)
@@ -154,6 +155,23 @@ function void draw_fft(Rect bounds, Analysis *analysis, Graphics_Context *graphi
     };
 }
 
+function void draw_ir(Rect bounds, 
+                      real32 zoom, 
+                      Analysis *analysis, 
+                      Graphics_Context *graphics_ctx)
+{
+    ensure(zoom > 0.0f && zoom <= 1.0f);
+    Draw_Command_List *cmd_list = &graphics_ctx->command_list;
+    Draw_Command *new_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count++];
+    *new_cmd = Draw_Command {
+        .type = Draw_Command_Type_IR,
+        .ir = {
+            .bounds = bounds,
+            .sample_count = u32((real32)analysis->ir_sample_count * zoom),
+            .buffer = analysis->IR_buffer[0]
+        }
+    };
+}
 
 function void draw_character(i32 codepoint, Color col, Rect bounds, Graphics_Context *graphics_ctx)
 {

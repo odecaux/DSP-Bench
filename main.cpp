@@ -147,7 +147,8 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
             .draw_indices_count = 0,
             .draw_commands = (Draw_Command*) arena_allocate(&app_allocator, sizeof(Draw_Command) * 1000), 
             .draw_command_count = 0
-        }
+        },
+        .FIXME_zoom_state = 1.0f
     };
     
     Window_Context window = win32_init_window(&graphics_ctx.window_dim);
@@ -223,12 +224,6 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     if(source_filename[0] != 0)
         plugin_reloader_stage_cold_compilation(&plugin_reloading_manager);
     //~ IR/FFT
-    
-    graphics_ctx.ir = {
-        .IR_buffer = (real32* )arena_allocate(&app_allocator, sizeof(real32) * IR_BUFFER_LENGTH),
-        .IR_sample_count = IR_BUFFER_LENGTH,
-        .zoom_state = 1.0f
-    };
     
     Arena gui_IR_allocator = allocator_init(100 * 1204);
     IPP_FFT_Context gui_ipp_context = ipp_initialize(&app_allocator);
@@ -319,7 +314,6 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
                        &gui_initializer);
             
             fft_perform_and_get_magnitude(&analysis);
-            memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
         }
         
         bool parameters_were_tweaked = false;
@@ -351,7 +345,6 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
                        &gui_initializer);
             
             fft_perform_and_get_magnitude(&analysis);
-            memcpy(graphics_ctx.ir.IR_buffer, analysis.IR_buffer[0], sizeof(real32) * IR_BUFFER_LENGTH); 
         }
         
         if(load_wav_was_clicked)

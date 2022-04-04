@@ -511,33 +511,39 @@ void draw_visualization_panel(Rect bounds, Analysis *analysis, UI_Context ui)
     rect_split_vert_middle(bounds, &ir_panel_bounds, &fft_panel_bounds);
     
     //~IR
-    draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, ui.g);
-    Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
-    draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, ui.g); 
-    
-    Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
-    Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
-    ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
-    
-    ui.g->ir.zoom_state = simple_slider(ui.g->ir.zoom_state, 600, zoom_slider_bounds, ui);
-    
-    draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, ui.g);
-    ui.g->ir.bounds = ir_graph_bounds;
-    
-    
+    {
+        draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, ui.g);
+        Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
+        draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, ui.g); 
+        
+        Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
+        Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
+        ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
+        
+        real32 normalized = (ui.g->FIXME_zoom_state - 0.01f) / 0.99f;
+        real32 new_normalized = simple_slider(normalized, 600, zoom_slider_bounds, ui);
+        ui.g->FIXME_zoom_state = new_normalized  * 0.99f + 0.01f;;
+        
+        draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, ui.g);
+        
+        Rect last_clip = draw_pull_last_clip(ui.g);
+        draw_ir(ir_graph_bounds, ui.g->FIXME_zoom_state, analysis, ui.g);
+        draw_push_atlas_command(last_clip, ui.g);
+    }
     //~fft
-    draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, ui.g);
-    Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
-    Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
-    
-    draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, ui.g); 
-    draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, ui.g);
-    
-    Rect last_clip = draw_pull_last_clip(ui.g);
-    draw_fft(fft_graph_bounds, analysis, ui.g);
-    draw_push_atlas_command(last_clip, ui.g);
+    {
+        draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, ui.g);
+        Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
+        Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
+        
+        draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, ui.g); 
+        draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, ui.g);
+        
+        Rect last_clip = draw_pull_last_clip(ui.g);
+        draw_fft(fft_graph_bounds, analysis, ui.g);
+        draw_push_atlas_command(last_clip, ui.g);
+    }
 }
-
 void draw_compiler_log(Compiler_Gui_Log *error_log, 
                        Rect bounds, 
                        UI_Context ui)
