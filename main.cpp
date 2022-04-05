@@ -146,7 +146,15 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
             .draw_indices = (u32*) arena_allocate(&app_allocator, sizeof(u32) * ATLAS_MAX_VERTEX_COUNT), 
             .draw_indices_count = 0,
             .draw_commands = (Draw_Command*) arena_allocate(&app_allocator, sizeof(Draw_Command) * 1000), 
-            .draw_command_count = 0
+            .draw_command_count = 0,
+        },
+        .popup_command_list = {
+            .draw_vertices = (Vertex*) arena_allocate(&app_allocator, sizeof(Vertex) * ATLAS_MAX_VERTEX_COUNT),
+            .draw_vertices_count = 0,
+            .draw_indices = (u32*) arena_allocate(&app_allocator, sizeof(u32) * ATLAS_MAX_VERTEX_COUNT), 
+            .draw_indices_count = 0,
+            .draw_commands = (Draw_Command*) arena_allocate(&app_allocator, sizeof(Draw_Command) * 1000), 
+            .draw_command_count = 0,
         },
         .FIXME_zoom_state = 1.0f
     };

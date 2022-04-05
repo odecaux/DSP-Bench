@@ -734,8 +734,50 @@ void opengl_render(OpenGL_Context *opengl_ctx, Graphics_Context *graphics_ctx)
         -1.0f, 1.0f, 0.0f, 1.0f,
     };
     
-    
     Draw_Command_List *cmd_list = &graphics_ctx->command_list; 
+    
+    //collapse popups onto the main command list
+    {
+        Draw_Command_List *popup_cmd_list = &graphics_ctx->popup_command_list; 
+        
+        //src -> dest
+        memcpy(cmd_list->draw_vertices + cmd_list->draw_vertices_count,
+               popup_cmd_list->draw_vertices,
+               popup_cmd_list->draw_vertices_count * sizeof(Vertex));
+        
+        for(u32 i = 0; i < popup_cmd_list->draw_indices_count; i++)
+        {
+            popup_cmd_list->draw_indices[i] += cmd_list->draw_vertices_count;
+        }
+        
+        memcpy(cmd_list->draw_indices + cmd_list->draw_indices_count,
+               popup_cmd_list->draw_indices, 
+               popup_cmd_list->draw_indices_count * sizeof(u32));
+        
+        for(u32 i = 0; i < popup_cmd_list->draw_command_count; i++)
+        {
+            Draw_Command *cmd = &popup_cmd_list->draw_commands[i];
+            if(cmd->type == Draw_Command_Type_ATLAS)
+            {
+                cmd->atlas.idx_offset += cmd_list->draw_indices_count;
+                cmd->atlas.vertex_offset += cmd_list->draw_vertices_count;
+            }
+        }
+        
+        memcpy(cmd_list->draw_commands + cmd_list->draw_command_count,
+               popup_cmd_list->draw_commands, 
+               popup_cmd_list->draw_command_count * sizeof(Draw_Command));
+        
+        
+        cmd_list->draw_indices_count += popup_cmd_list->draw_indices_count;
+        cmd_list->draw_vertices_count += popup_cmd_list->draw_vertices_count;
+        cmd_list->draw_command_count += popup_cmd_list->draw_command_count;
+        
+        popup_cmd_list->draw_command_count = 0;
+        popup_cmd_list->draw_vertices_count = 0;
+        popup_cmd_list->draw_indices_count = 0;
+    }
+    
     
     i32 last_command_type = -1;
     

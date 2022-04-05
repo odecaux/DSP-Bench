@@ -105,6 +105,8 @@ typedef struct {
     Vec2 window_dim;
     Font font;
     Draw_Command_List command_list;
+    Draw_Command_List popup_command_list;
+    u32 popup_draw_command_count;
     real32 FIXME_zoom_state;
 } Graphics_Context;
 
