@@ -37,7 +37,7 @@ typedef double real64;
 #define octave_min(x, y) (((x) < (y)) ? (x) : (y))
 #define octave_clamp(x, low, high) (((x) > (low)) ? (((x) < (high)) ? (x) : (high)) : (low))
 #define octave_abs(x) ((x > 0) ? (x) : -(x))
-#define octave_lerp(val, in_min, in_max, out_min, out_max) (out_min)+ ((out_max) - (out_min)) * ((val) - (in_min)) / ((in_max)- (in_min))
+#define octave_lerp(val, in_min, in_max, out_min, out_max) (out_min) + ((out_max) - (out_min)) * ((val) - (in_min)) / ((in_max)- (in_min))
 
 #define STRINGIFY(x) #x
 #define TOSTRING(x) STRINGIFY(x)
@@ -112,6 +112,14 @@ internal inline Vec2 vec2_minus(Vec2 a, Vec2 b)
     return Vec2{a.x - b.x, a.y - b.y};
 }
 
+internal inline Vec2 vec2_lerp(Vec2 a, Vec2 b, real32 x)
+{
+    return {
+        octave_lerp(x, 0.0f, 1.0f, a.x, b.x),
+        octave_lerp(x, 0.0f, 1.0f, a.y, b.y)
+    };
+}
+
 typedef struct {
     union{
         struct {
@@ -127,71 +135,80 @@ typedef struct {
     };
 } Rect;
 
+internal bool rect_equal(Rect a, Rect b)
+{
+    return 
+        a.x == b.x &&
+        a.y == b.y &&
+        a.w == b.w &&
+        a.h == b.h;
+}
+
 internal bool rect_contains(Rect bounds, Vec2 position)
 {
-    return position.x > bounds.origin.x &&
-        position.x < (bounds.origin.x + bounds.dim.x) &&
-        position.y > bounds.origin.y &&
-    (position.y < bounds.origin.y + bounds.dim.y);
+    return position.x > bounds.x &&
+        position.x < (bounds.x + bounds.w) &&
+        position.y > bounds.y &&
+    (position.y < bounds.y + bounds.h);
 }
 
 internal Rect rect_move_by(Rect bounds, Vec2 delta)
 {
-    bounds.origin.x += delta.x;
-    bounds.origin.y += delta.y;
+    bounds.x += delta.x;
+    bounds.y += delta.y;
     return bounds;
 }
 
 internal Rect rect_drop_bottom(Rect rect, real32 margin_bottom)
 {
-    rect.dim.y -= margin_bottom;
+    rect.h -= margin_bottom;
     return rect;
 }
 
 internal Rect rect_take_bottom(Rect rect, real32 margin_bottom)
 {
-    rect.origin.y += rect.dim.y - margin_bottom;
-    rect.dim.y = margin_bottom;
+    rect.y += rect.h - margin_bottom;
+    rect.h = margin_bottom;
     return rect;
 }
 
 internal Rect rect_drop_top(Rect rect, real32 margin_top)
 {
-    rect.dim.y -= margin_top;
-    rect.origin.y += margin_top;
+    rect.h -= margin_top;
+    rect.y += margin_top;
     return rect;
 }
 
 internal Rect rect_take_top(Rect rect, real32 margin_top)
 {
-    rect.dim.y = margin_top;
+    rect.h = margin_top;
     return rect;
 }
 
 
 internal Rect rect_drop_left(Rect rect, real32 margin_left)
 {
-    rect.dim.x -= margin_left;
-    rect.origin.x += margin_left;
+    rect.w -= margin_left;
+    rect.x += margin_left;
     return rect;
 }
 
 internal Rect rect_take_left(Rect rect, real32 margin_left)
 {
-    rect.dim.x = margin_left;
+    rect.w = margin_left;
     return rect;
 }
 
 internal Rect rect_take_right(Rect rect, real32 margin_right)
 {
-    rect.origin.x += rect.dim.x - margin_right;
-    rect.dim.x = margin_right;
+    rect.x += rect.w - margin_right;
+    rect.w = margin_right;
     return rect;
 }
 
 internal Rect rect_drop_right(Rect rect, real32 margin_right)
 {
-    rect.dim.x -= margin_right;
+    rect.w -= margin_right;
     return rect;
 }
 
@@ -203,9 +220,9 @@ internal void rect_split_from_left(Rect in, real32 margin_left, Rect *out_left, 
 
 internal void rect_split_vert_middle(Rect in, Rect *out_top, Rect *out_bottom)
 {
-    in.dim.y /= 2.0f;
+    in.h /= 2.0f;
     *out_top = in;
-    in.origin.y += in.dim.y;
+    in.y += in.h;
     *out_bottom = in;
 }
 
@@ -214,12 +231,12 @@ internal Rect rect_shrinked(Rect rect, real32 padding_x, real32 padding_y)
     
     return {
         .origin = {
-            rect.origin.x + padding_x,
-            rect.origin.y + padding_y
+            rect.x + padding_x,
+            rect.y + padding_y
         },
         .dim = {
-            octave_max(rect.dim.x - padding_x * 2, 0.0f),
-            octave_max(rect.dim.y - padding_y * 2, 0.0f)
+            octave_max(rect.w - padding_x * 2, 0.0f),
+            octave_max(rect.h - padding_y * 2, 0.0f)
         }
     };
 }
@@ -233,5 +250,37 @@ internal bool float_cmp(real32 a, real32 b, real32 epsilon)
 {
     return octave_abs(a - b) < epsilon;
 }
+
+
+typedef union Vec4u8 Color;
+
+union Vec4u8 {
+    struct {
+        u8 a;
+        u8 r;
+        u8 g;
+        u8 b;
+    };
+    u32 argb;
+};
+
+internal Color color_lighten_by(Color col, u8 val)
+{
+    
+    col.r = (u8) octave_min((i32) col.r + (i32) val, 255);
+    col.g = (u8) octave_min((i32) col.g + (i32) val, 255);
+    col.b = (u8) octave_min((i32) col.b + (i32) val, 255);
+    return col;
+}
+
+
+internal Color color_darken_by(Color col, u8 val)
+{
+    col.r = (u8) octave_max((i32) col.r - (i32) val, 0);
+    col.g = (u8) octave_max((i32) col.g - (i32) val, 0);
+    col.b = (u8) octave_max((i32) col.b - (i32) val, 0);
+    return col;
+}
+
 
 #endif //BASE_H

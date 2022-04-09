@@ -693,9 +693,9 @@ OpenGL_Context opengl_initialize(Window_Context *window, Font* font)
 void rect_to_ir_vertices(Rect rect, IR_Vertex *out_vertices)
 {
     Vec2 top_left = rect.origin;
-    Vec2 top_right = Vec2{ rect.origin.x + rect.dim.x, rect.origin.y };
-    Vec2 bottom_right = Vec2{ rect.origin.x + rect.dim.x, rect.origin.y + rect.dim.y};
-    Vec2 bottom_left = Vec2{ rect.origin.x, rect.origin.y + rect.dim.y};
+    Vec2 top_right = Vec2{ rect.x + rect.w, rect.y };
+    Vec2 bottom_right = Vec2{ rect.x + rect.w, rect.y + rect.h};
+    Vec2 bottom_left = Vec2{ rect.x, rect.y + rect.h};
     
     Vec2 uv_top_left = Vec2{ 0.0f, 1.0f};
     Vec2 uv_top_right = Vec2{ 1.0f, 1.0f};
@@ -817,7 +817,7 @@ void opengl_render(OpenGL_Context *opengl_ctx, Graphics_Context *graphics_ctx)
             if (clip_rect.w <= 0.0f || clip_rect.h <= 0.0f)
                 continue;
             */
-            glScissor(clip_rect.origin.x, window_dim.y - clip_rect.origin.y - clip_rect.dim.y,  clip_rect.dim.x, clip_rect.dim.y);
+            glScissor(clip_rect.x, window_dim.y - clip_rect.y - clip_rect.h,  clip_rect.w, clip_rect.h);
             
             glDrawElements(GL_TRIANGLES, (GLsizei)atlas_command->idx_count, GL_UNSIGNED_INT, 
                            (void*)(intptr_t)(atlas_command->idx_offset * sizeof(u32)));
@@ -860,13 +860,13 @@ void opengl_render(OpenGL_Context *opengl_ctx, Graphics_Context *graphics_ctx)
             IR_Vertex ir_vertices[6];
             rect_to_ir_vertices(bounds, ir_vertices);
             
-            i32 pixel_count = (i32)bounds.dim.x;
+            i32 pixel_count = (i32)bounds.w;
             ensure(pixel_count >= 0);
             i32 sample_count = ir_command->sample_count;
             
             Vec2 *temp = opengl_ctx->ir.integrate_temp_buffer;
             
-            if(bounds.dim.x < sample_count)
+            if(bounds.w < sample_count)
             {
                 
                 for(u32 pixel_idx = 0; pixel_idx < pixel_count; pixel_idx++)
@@ -898,9 +898,9 @@ void opengl_render(OpenGL_Context *opengl_ctx, Graphics_Context *graphics_ctx)
                                 6 * sizeof(IR_Vertex),
                                 ir_vertices);
                 
-                glTexBufferRange(GL_TEXTURE_BUFFER, GL_RG32F, opengl_ctx->ir.integrate_min_max_buffer, 0, sizeof(Vec2) * bounds.dim.x);
+                glTexBufferRange(GL_TEXTURE_BUFFER, GL_RG32F, opengl_ctx->ir.integrate_min_max_buffer, 0, sizeof(Vec2) * bounds.w);
                 glBufferSubData(GL_TEXTURE_BUFFER, 0, 
-                                bounds.dim.x * sizeof(Vec2), 
+                                bounds.w * sizeof(Vec2), 
                                 temp);
                 glDrawArrays(GL_TRIANGLES, 0, 6);
                 

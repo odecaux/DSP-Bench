@@ -75,7 +75,7 @@ internal Font load_fonts(const char* font_filename,
     memset(glyph_rects, 0, glyph_count * sizeof(stbrp_rect));
     
     
-    float PIXEL_SIZE = 22.0f;
+    float PIXEL_SIZE = 16.0f;
     u8 oversample_h = 4;
     u8 oversample_v = 4;
     const float scale = stbtt_ScaleForPixelHeight(&font_info, PIXEL_SIZE);

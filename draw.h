@@ -5,7 +5,7 @@
 
 //~ Fonts
 
-#define WHITE_RECT_POS Vec2{ 0.0f, 0.0f }
+#define WHITE_RECT_POS Vec2{ 0.001f, 0.001f }
 
 //TODO types 
 typedef struct {
@@ -128,6 +128,12 @@ function Rect draw_pull_last_clip(Draw_Command_List *cmd_list)
 //TODO rename
 function void draw_push_atlas_command(Rect clip_rect, Draw_Command_List *cmd_list)
 {
+    if(cmd_list->draw_command_count > 0)
+    {
+        Draw_Command *old_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
+        if(old_cmd->type == Draw_Command_Type_ATLAS && rect_equal(old_cmd->atlas.clip_rect, clip_rect))
+            return;
+    }
     Draw_Command *new_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count++];
     *new_cmd = {
         .type = Draw_Command_Type_ATLAS,
@@ -171,16 +177,19 @@ function void draw_ir(Rect bounds,
     };
 }
 
+#if 0
 function void draw_character(i32 codepoint, Color col, Rect bounds, Font *font, Draw_Command_List *cmd_list)
 {
+    ensure(cmd_list->draw_command_count > 0);
+    ensure(cmd_list->draw_commands[cmd_list->draw_command_count - 1].type == Draw_Command_Type_ATLAS);
+    
+    Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1]; 
     Glyph *glyph = &font->glyphs[font->codepoint_to_idx[codepoint]];
-    Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
-    ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
     auto top_left = bounds.origin;
-    auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
-    auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
-    auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
+    auto top_right = Vec2{ bounds.x + bounds.w, bounds.y };
+    auto bottom_right = Vec2{ bounds.x + bounds.w, bounds.y + bounds.h};
+    auto bottom_left = Vec2{ bounds.x, bounds.y + bounds.h};
     
     u32 vtx_idx = cmd_list->draw_vertices_count;
     Vertex *vtx_write = cmd_list->draw_vertices + cmd_list->draw_vertices_count;
@@ -215,6 +224,7 @@ function void draw_character(i32 codepoint, Color col, Rect bounds, Font *font, 
     cmd_list->draw_indices_count += 6;
     current_cmd->atlas.idx_count += 6;
 }
+#endif 
 
 //TODO c'est de la merde cette api mdr
 
@@ -270,9 +280,9 @@ function void draw_rectangle(Rect bounds, real32 width, Color color, Draw_Comman
 {
     bounds = rect_shrinked(bounds, width / 2, width / 2);
     auto top_left = bounds.origin;
-    auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
-    auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
-    auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
+    auto top_right = Vec2{ bounds.x + bounds.w, bounds.y };
+    auto bottom_right = Vec2{ bounds.x + bounds.w, bounds.y + bounds.h};
+    auto bottom_left = Vec2{ bounds.x, bounds.y + bounds.h};
     
     draw_line(top_left, top_right, color, width, cmd_list);
     draw_line(top_left, bottom_left, color, width, cmd_list);
@@ -285,9 +295,9 @@ function void fill_rectangle(Rect bounds, Color col, Draw_Command_List *cmd_list
     ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
     auto top_left = bounds.origin;
-    auto top_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y };
-    auto bottom_right = Vec2{ bounds.origin.x + bounds.dim.x, bounds.origin.y + bounds.dim.y};
-    auto bottom_left = Vec2{ bounds.origin.x, bounds.origin.y + bounds.dim.y};
+    auto top_right = Vec2{ bounds.x + bounds.w, bounds.y };
+    auto bottom_right = Vec2{ bounds.x + bounds.w, bounds.y + bounds.h};
+    auto bottom_left = Vec2{ bounds.x, bounds.y + bounds.h};
     
     u32 vtx_idx = cmd_list->draw_vertices_count;
     Vertex *vtx_write = cmd_list->draw_vertices + cmd_list->draw_vertices_count;
@@ -323,23 +333,24 @@ function void fill_rectangle(Rect bounds, Color col, Draw_Command_List *cmd_list
     current_cmd->atlas.idx_count += 6;
 }
 
-function real32 measure_text_width(String text, Font *font)
+function real32 measure_text_width(String text, real32 size, Font *font)
 {
+    real32 scale_factor = size / font->font_size;
     real32 width = 0;
     for(char *c = &text.data[0]; c < text.data + text.size; c++)
     {
-        width += font->codepoint_to_advancex[*c];
+        width += font->codepoint_to_advancex[*c] * scale_factor;
     }
     return width;
 }
 
-function void draw_text(const String& text, Rect bounds, Color col, Font *font, Draw_Command_List *cmd_list)
+function void draw_text(const String& text, Rect bounds, Color col, real32 size, Font *font, Draw_Command_List *cmd_list)
 {
     Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
     ensure(current_cmd->type == Draw_Command_Type_ATLAS);
     
-    real32 text_width = measure_text_width(text, font);
-    real32 width_remaining = bounds.dim.x - text_width;
+    real32 text_width = measure_text_width(text, size, font);
+    real32 width_remaining = bounds.w - text_width;
     
     real32 x;
     real32 x_end;
@@ -347,30 +358,33 @@ function void draw_text(const String& text, Rect bounds, Color col, Font *font, 
     if(width_remaining > 0.0f)
     {
         real32 left_margin  = width_remaining / 2.0f;
-        x = bounds.origin.x + left_margin;
+        x = bounds.x + left_margin;
         x_end = x + text_width;
     }
     else
     {
-        x = bounds.origin.x;
-        x_end = bounds.origin.x + bounds.dim.x;
+        x = bounds.x;
+        x_end = bounds.x + bounds.w;
     }
     
+    real32 scale_factor = size / font->font_size;
+    real32 height_remaining = bounds.h - size;
+    
     real32 y;
-    real32 height_remaining = bounds.dim.y - font->font_size;
     if(height_remaining > 0.0f)
     {
         real32 height_margin = height_remaining / 2.0f;
-        y = bounds.origin.y + height_margin + font->ascent;
+        y = bounds.y + height_margin + font->ascent * scale_factor;
     }
     else 
     {
-        y = bounds.origin.y + font->ascent;
+        y = bounds.y + font->ascent * scale_factor;
     }
+    
     for(auto i = 0; i < text.size; i++)
     {
         char c = text.str[i];
-        real32 advancex = font->codepoint_to_advancex[c];
+        real32 advancex = font->codepoint_to_advancex[c] * scale_factor;
         if(x + advancex > x_end)
         {
             break;
@@ -378,11 +392,15 @@ function void draw_text(const String& text, Rect bounds, Color col, Font *font, 
         
         Glyph *glyph = &font->glyphs[font->codepoint_to_idx[c]];
         
-        auto top_left = Vec2{x + glyph->X0, y + glyph->Y0};
-        auto top_right = Vec2{x + glyph->X1, y + glyph->Y0};
-        auto bottom_right = Vec2{x + glyph->X1, y + glyph->Y1};
-        auto bottom_left = Vec2{x + glyph->X0, y + glyph->Y1};
+        auto left = x + glyph->X0 * scale_factor;
+        auto right = x + glyph->X1 * scale_factor;
+        auto top = y + glyph->Y0 * scale_factor;
+        auto bottom = y + glyph->Y1 * scale_factor;
         
+        auto top_left = Vec2{left, top};
+        auto top_right = Vec2{right, top};
+        auto bottom_right = Vec2{right, bottom};
+        auto bottom_left = Vec2{left, bottom };
         
         u32 vtx_idx = cmd_list->draw_vertices_count;
         Vertex *vtx_write = cmd_list->draw_vertices + cmd_list->draw_vertices_count;
@@ -417,21 +435,8 @@ function void draw_text(const String& text, Rect bounds, Color col, Font *font, 
         cmd_list->draw_indices_count += 6;
         current_cmd->atlas.idx_count += 6;
         
-        x += glyph->advance_x;
+        x += glyph->advance_x * scale_factor;
     }
-}
-
-
-function void draw_slider(Rect slider_bounds, 
-                          real32 normalized_value, 
-                          Draw_Command_List *cmd_list)
-{
-    real32 slider_x = slider_bounds.origin.x + normalized_value * (slider_bounds.dim.x - SLIDER_WIDTH); 
-    Rect slider_rect = {
-        Vec2{slider_x, slider_bounds.origin.y},
-        Vec2{SLIDER_WIDTH, slider_bounds.dim.y}
-    };
-    fill_rectangle(slider_rect, Color_Front, cmd_list);
 }
 
 

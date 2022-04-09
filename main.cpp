@@ -178,6 +178,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     Audio_Parameters audio_parameters = {};
     MemoryBarrier();
     
+    
     if(!audio_initialize(&platform_audio_context, &audio_parameters, &audio_context, &app_allocator))
     {
         printf("failed to initialize audio\n");
@@ -231,6 +232,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     
     if(source_filename[0] != 0)
         plugin_reloader_stage_cold_compilation(&plugin_reloading_manager);
+    
     //~ IR/FFT
     
     Arena gui_IR_allocator = allocator_init(100 * 1204);
@@ -324,9 +326,11 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
             fft_perform_and_get_magnitude(&analysis);
         }
         
+        
         bool parameters_were_tweaked = false;
         bool load_wav_was_clicked = false;
         bool load_plugin_was_clicked = false;
+        
         frame(plugin_reloading_manager.front_handle->descriptor, 
               &graphics_ctx, 
               ui_state, 
@@ -337,8 +341,9 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
               &analysis,
               &parameters_were_tweaked,
               &load_wav_was_clicked,
-              &load_plugin_was_clicked
-              );
+              &load_plugin_was_clicked );
+        
+        ui_state.previous_selected_parameter_id = ui_state.selected_parameter_id;
         
         if(parameters_were_tweaked)
         {

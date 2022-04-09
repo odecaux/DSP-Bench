@@ -133,11 +133,11 @@ typedef struct
     bool left_ctrl_down;
 } IO;
 
-typedef u32 Color;
 
 enum Colors : u32 {
     Color_Front = 0xffffffff,
-    Color_Back = 0x00000000
+    Color_Frame = 0xff888888,
+    Color_Back = 0xff000000
 };
 
 typedef struct{

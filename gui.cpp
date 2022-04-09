@@ -15,7 +15,38 @@ struct UI_Context{
     IO io;
     UI_State *state;
     Graphics_Context *g;
+    Color color_front;
+    Color color_frame;
+    Color color_back;
+    real32 font_size;
 };
+
+void text_box(const String& text, Rect bounds, Color col, real32 size, Font *font, Draw_Command_List *cmd_list)
+{
+    Draw_Command *old_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
+    ensure(old_cmd->type == Draw_Command_Type_ATLAS);
+    
+    Rect old_clip_rect = old_cmd->atlas.clip_rect;
+    
+    draw_push_atlas_command(bounds, cmd_list);
+    draw_text(text, bounds, col, size, font, cmd_list);
+    
+    draw_push_atlas_command(old_clip_rect, cmd_list);
+}
+
+void draw_slider(Rect slider_bounds, 
+                 real32 normalized_value, 
+                 Color col,
+                 Draw_Command_List *cmd_list)
+{
+    real32 slider_x = slider_bounds.x + normalized_value * (slider_bounds.w - SLIDER_WIDTH); 
+    Rect slider_rect = {
+        Vec2{slider_x, slider_bounds.y},
+        Vec2{SLIDER_WIDTH, slider_bounds.h}
+    };
+    fill_rectangle(slider_rect, col, cmd_list);
+}
+
 
 //~ Widgets
 
@@ -23,10 +54,16 @@ real32 simple_slider(real32 normalized_value, i32 id,
                      Rect bounds, UI_Context ui)
 {
     
-    draw_rectangle(bounds, 1.0f, Color_Front, &ui.g->command_list);
-    draw_slider(bounds, normalized_value, &ui.g->command_list);
+    draw_rectangle(bounds, 1.0f, ui.color_frame, &ui.g->command_list);
+    draw_slider(bounds, normalized_value, ui.color_front,  &ui.g->command_list);
     
-    if(ui.io.mouse_clicked && rect_contains(bounds, ui.io.mouse_position))
+    
+    if(ui.state->selected_parameter_id == id && ui.io.mouse_released)
+    {
+        ui.state->previous_selected_parameter_id = ui.state->selected_parameter_id;
+        ui.state->selected_parameter_id = -1;
+    }
+    else if(ui.io.mouse_clicked && rect_contains(bounds, ui.io.mouse_position))
     {
         ensure(ui.state->selected_parameter_id == -1);
         ui.state->selected_parameter_id = id;
@@ -38,7 +75,7 @@ real32 simple_slider(real32 normalized_value, i32 id,
     if(ui.state->selected_parameter_id == id && ui.io.mouse_clicked)
     {
         real32 mouse_x = ui.io.mouse_position.x;
-        real32 normalized_mouse_value = (mouse_x - bounds.origin.x - (SLIDER_WIDTH / 2)) / (bounds.dim.x - SLIDER_WIDTH);
+        real32 normalized_mouse_value = (mouse_x - bounds.x - (SLIDER_WIDTH / 2)) / (bounds.w - SLIDER_WIDTH);
         
         return octave_clamp(normalized_mouse_value, 0.0f, 1.0f);
     }
@@ -46,7 +83,7 @@ real32 simple_slider(real32 normalized_value, i32 id,
     {
         
         real32 mouse_delta_x = (ui.io.left_ctrl_down) ? ui.io.mouse_delta.x / 4 : ui.io.mouse_delta.x;
-        real32 normalized_delta = (mouse_delta_x) / (bounds.dim.x - SLIDER_WIDTH);
+        real32 normalized_delta = (mouse_delta_x) / (bounds.w - SLIDER_WIDTH);
         return octave_clamp(normalized_delta + normalized_value, 0.0f, 1.0f);
     }
     else
@@ -69,23 +106,29 @@ real32 slider(real32 normalized_value,
     Rect current_value_bounds = rect_shrinked(rect_drop_top(bounds, FIELD_TITLE_HEIGHT), 2.5f, 2.5f);
     Rect slider_and_minmax_bounds = rect_move_by(current_value_bounds, {0.0f, FIELD_TITLE_HEIGHT});
     
-    draw_text(title, title_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+    draw_text(title, title_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
     
     Rect slider_bounds = rect_shrinked(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH, 0.0f);
     Rect min_label_bounds = rect_take_left(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
     Rect max_label_bounds = rect_take_right(slider_and_minmax_bounds, MIN_MAX_LABEL_WIDTH);
     
-    draw_rectangle(slider_bounds, 1.0f, Color_Front, &ui.g->command_list);
-    draw_rectangle(min_label_bounds, 1.0f, Color_Front, &ui.g->command_list);
-    draw_rectangle(max_label_bounds, 1.0f, Color_Front, &ui.g->command_list);
+    draw_rectangle(slider_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
+    draw_rectangle(min_label_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
+    draw_rectangle(max_label_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
     
-    draw_text(min_label, min_label_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
-    draw_text(max_label, max_label_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
-    draw_text(current_value_label, current_value_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+    draw_text(min_label, min_label_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
+    draw_text(max_label, max_label_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
+    draw_text(current_value_label, current_value_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
     
-    draw_slider(slider_bounds, normalized_value, &ui.g->command_list);
+    draw_slider(slider_bounds, normalized_value, ui.color_front, &ui.g->command_list);
     
-    if(ui.io.mouse_clicked && rect_contains(slider_bounds, ui.io.mouse_position))
+    
+    if(ui.state->selected_parameter_id == id && ui.io.mouse_released)
+    {
+        ui.state->previous_selected_parameter_id = ui.state->selected_parameter_id;
+        ui.state->selected_parameter_id = -1;
+    }
+    else if(ui.io.mouse_clicked && rect_contains(slider_bounds, ui.io.mouse_position))
     {
         ensure(ui.state->selected_parameter_id == -1);
         ui.state->selected_parameter_id = id;
@@ -95,10 +138,10 @@ real32 slider(real32 normalized_value,
                                          || ui.io.mouse_delta.y != 0.0f);
     
     real32 mouse_x = ui.io.mouse_position.x;
-    real32 normalized_mouse_x = (mouse_x - slider_bounds.origin.x - (SLIDER_WIDTH / 2)) / (slider_bounds.dim.x - SLIDER_WIDTH);
+    real32 normalized_mouse_x = (mouse_x - slider_bounds.x - (SLIDER_WIDTH / 2)) / (slider_bounds.w - SLIDER_WIDTH);
     
     real32 mouse_delta_x = (ui.io.left_ctrl_down) ? ui.io.mouse_delta.x / 4 : ui.io.mouse_delta.x;
-    real32 normalized_delta = (mouse_delta_x) / (slider_bounds.dim.x - SLIDER_WIDTH);
+    real32 normalized_delta = (mouse_delta_x) / (slider_bounds.w - SLIDER_WIDTH);
     
     if(ui.state->selected_parameter_id == id && ui.io.mouse_clicked)
     {
@@ -134,48 +177,64 @@ bool button(Rect bounds,
     
     bool hovered = rect_contains(bounds,ui.io.mouse_position); 
     bool clicked = false;
-    if(hovered && ui.io.mouse_clicked)
+    bool released = false;
+    
+    if(ui.state->selected_parameter_id == id && ui.io.mouse_released)
+    {
+        ui.state->previous_selected_parameter_id = ui.state->selected_parameter_id;
+        ui.state->selected_parameter_id = -1;
+        released = true;
+    }
+    else if(hovered && ui.io.mouse_clicked)
     {
         clicked = true;
         ui.state->selected_parameter_id = id;
     }
     bool down = ui.state->selected_parameter_id == id;
     
-    Rect text_bounds = rect_shrinked(bounds, 10.0f, 10.0f);
+    Rect text_bounds = rect_shrinked(bounds, 2.0f, 2.0f);
+    
     if(down)
     {
-        fill_rectangle(bounds, Color_Front, &ui.g->command_list); 
-        draw_rectangle(outline_bounds, 3.0f, 0xff000000, &ui.g->command_list);
-        draw_text(text, text_bounds, 0xff000000, &ui.g->font, &ui.g->command_list);
+        fill_rectangle(bounds, ui.color_frame, &ui.g->command_list); 
+        draw_rectangle(outline_bounds, 3.0f, ui.color_back, &ui.g->command_list);
+        text_box(text, text_bounds, ui.color_back, ui.font_size, &ui.g->font, &ui.g->command_list);
     }
     else if(hovered)
     {
-        fill_rectangle(bounds, 0xff000000, &ui.g->command_list); 
-        draw_rectangle(outline_bounds, 3.0f, Color_Front, &ui.g->command_list);
-        draw_text(text, text_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+        fill_rectangle(bounds, ui.color_back, &ui.g->command_list); 
+        draw_rectangle(outline_bounds, 3.0f, ui.color_frame, &ui.g->command_list);
+        text_box(text, text_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
     }
     else
     {
-        fill_rectangle(bounds, 0xff000000, &ui.g->command_list); 
-        draw_text(text, text_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+        fill_rectangle(bounds, ui.color_back, &ui.g->command_list); 
+        text_box(text, text_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
     }
     
-    draw_rectangle(bounds, 2.0f, Color_Front, &ui.g->command_list);
-    return clicked;
+    draw_rectangle(bounds, 2.0f, ui.color_frame, &ui.g->command_list);
+    return released;
 }
 
 
-bool toggle(Rect bounds, 
-            String text, 
-            u32 id, 
-            UI_Context ui,
-            bool *v)
+bool toggle_button(Rect bounds, 
+                   String text, 
+                   u32 id, 
+                   UI_Context ui,
+                   bool *value)
 {
     Rect outline_bounds = rect_shrinked(bounds, 2.0f, 2.0f);
     
     bool hovered = rect_contains(bounds,ui.io.mouse_position); 
     bool clicked = false;
-    if(hovered && ui.io.mouse_clicked)
+    
+    
+    if(ui.state->selected_parameter_id == id && ui.io.mouse_released)
+    {
+        ui.state->previous_selected_parameter_id = ui.state->selected_parameter_id;
+        ui.state->selected_parameter_id = -1;
+    }
+    else if(hovered && ui.io.mouse_clicked)
     {
         clicked = true;
         ensure(ui.state->selected_parameter_id == -1);
@@ -184,33 +243,206 @@ bool toggle(Rect bounds,
     
     bool down = ui.state->selected_parameter_id == id;
     
-    Rect text_bounds = rect_shrinked(bounds, 10.0f, 10.0f);
+    Rect text_bounds = rect_shrinked(bounds, 2.0f, 2.0f);
     
     if(clicked)
-        *v = !(*v);
+        *value = !(*value);
     
-    if(*v)
+    if(*value)
     {
-        fill_rectangle(bounds, Color_Front, &ui.g->command_list); 
-        draw_rectangle(outline_bounds, 3.0f, 0xff000000, &ui.g->command_list);
-        draw_text(text, text_bounds, 0xff000000, &ui.g->font, &ui.g->command_list);
+        fill_rectangle(bounds, ui.color_front, &ui.g->command_list); 
+        draw_rectangle(outline_bounds, 3.0f, ui.color_back, &ui.g->command_list);
+        text_box(text, text_bounds, ui.color_back, ui.font_size, &ui.g->font, &ui.g->command_list);
     }
     else if(hovered)
     {
-        fill_rectangle(bounds, 0xff000000, &ui.g->command_list); 
-        draw_rectangle(outline_bounds, 3.0f, Color_Front, &ui.g->command_list);
-        draw_text(text, text_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+        fill_rectangle(bounds, ui.color_back, &ui.g->command_list); 
+        draw_rectangle(outline_bounds, 3.0f, ui.color_frame, &ui.g->command_list);
+        text_box(text, text_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
     }
     else
     {
-        fill_rectangle(bounds, 0xff000000, &ui.g->command_list); 
-        draw_text(text, text_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+        fill_rectangle(bounds, ui.color_back, &ui.g->command_list); 
+        text_box(text, text_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
     }
     
-    draw_rectangle(bounds, 2.0f, Color_Front, &ui.g->command_list);
+    draw_rectangle(bounds, 2.0f, ui.color_frame, &ui.g->command_list);
     
     return clicked;
 }
+
+
+bool checkbox(Rect bounds, 
+              String text, 
+              u32 id, 
+              UI_Context ui,
+              bool *value)
+{
+    //TODO clip les bounds ?
+    
+    real32 checkbox_dim = 15;
+    
+    Rect checkbox_bound = { 
+        Vec2{bounds.x, bounds.y + (bounds.h / 2) - (checkbox_dim / 2)},
+        Vec2{checkbox_dim, checkbox_dim}
+    };
+    Rect text_bounds = rect_drop_left(bounds, checkbox_dim);
+    
+    
+    bool hovered = rect_contains(checkbox_bound,ui.io.mouse_position); 
+    bool clicked = false;
+    
+    if(ui.state->selected_parameter_id == id && ui.io.mouse_released)
+    {
+        ui.state->previous_selected_parameter_id = ui.state->selected_parameter_id;
+        ui.state->selected_parameter_id = -1;
+    }
+    else if(hovered && ui.io.mouse_clicked)
+    {
+        clicked = true;
+        ensure(ui.state->selected_parameter_id == -1);
+        ui.state->selected_parameter_id = id;
+    }
+    
+    bool down = ui.state->selected_parameter_id == id;
+    
+    
+    if(clicked)
+        *value = !(*value);
+    
+    Color color;
+    
+    draw_rectangle(checkbox_bound, 1.0f,  ui.color_frame, &ui.g->command_list);
+    
+    if(*value)
+    {
+        color = ui.color_front;
+        if(hovered && down)
+        {
+            
+        }
+        else if(hovered && !down)
+        {
+            
+        }
+        else if(!hovered && down)
+        {
+            
+        }
+        else if(!hovered && !down)
+        {
+            
+        }
+        //draw X
+        {
+            auto bounds = checkbox_bound;
+            auto top_left = bounds.origin;
+            auto top_right = Vec2{ bounds.x + bounds.w, bounds.y };
+            auto bottom_right = Vec2{ bounds.x + bounds.w, bounds.y + bounds.h};
+            auto bottom_left = Vec2{ bounds.x, bounds.y + bounds.h};
+            
+            auto top_left_s = vec2_lerp(top_left, bottom_right, 0.2f);
+            auto top_right_s = vec2_lerp(top_right, bottom_left, 0.2f);
+            auto bottom_right_s = vec2_lerp(bottom_right, top_left, 0.2f);
+            auto bottom_left_s = vec2_lerp(bottom_left, top_right, 0.2f);
+            
+            draw_line(top_left_s, bottom_right_s, ui.color_front, 1.5f, &ui.g->command_list);
+            draw_line(top_right_s, bottom_left_s, ui.color_front, 1.5f, &ui.g->command_list);
+        }
+    }
+    else 
+    {
+        if(hovered && down)
+        {
+            
+        }
+        else if(hovered && !down)
+        {
+            
+        }
+        else if(!hovered && down)
+        {
+            
+        }
+        else if(!hovered && !down)
+        {
+            
+        }
+    }
+    
+    text_box(text, text_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
+    return clicked;
+}
+
+struct Dropdown_State {
+    i32 id;
+    i32 count;
+    Rect bounds;
+};
+
+Dropdown_State dropdown_start(Rect bounds, i32 id, UI_Context ui)
+{
+    bool active = ui.state->selected_parameter_id == id;
+    bool hovered = rect_contains(bounds, ui.io.mouse_position); 
+    
+    if(!active){
+        bool clicked = false;
+        
+        if(hovered && ui.io.mouse_clicked)
+        {
+            clicked = true;
+            ensure(ui.state->selected_parameter_id == -1);
+            ui.state->selected_parameter_id = id;
+        }
+        fill_rectangle(bounds, ui.color_frame, &ui.g->command_list);
+    }
+    return {
+        id,
+        0, 
+        bounds
+    };
+}
+
+bool dropdown_elem(String text, Dropdown_State *drop, UI_Context ui)
+{
+    Rect bounds = drop->bounds;
+    bounds.y += drop->bounds.h * drop->count;
+    
+    bool active = ui.state->selected_parameter_id == drop->id && ui.state->previous_selected_parameter_id == drop->id;
+    
+    drop->count++;
+    
+    bool clicked = false;
+    if(active)
+    {
+        if(ui.io.mouse_clicked)
+        {
+            ui.state->selected_parameter_id = -1;
+            clicked = true;
+        }
+        draw_rectangle(bounds, 1.0f, ui.color_frame, &ui.g->popup_command_list);
+    }
+    
+    return clicked;
+}
+
+void dropdown_end(Dropdown_State drop, UI_Context ui)
+{
+    bool active = ui.state->selected_parameter_id == drop.id && ui.state->previous_selected_parameter_id == drop.id;
+    
+    Rect dropdown_bounds = drop.bounds;
+    dropdown_bounds.h *= drop.count;
+    
+    bool hovered = rect_contains(drop.bounds, ui.io.mouse_position); 
+    
+    if(active)
+    {
+        if(ui.io.mouse_clicked && !hovered)
+            ui.state->selected_parameter_id = -1;
+    }
+}
+
+//~
 
 void parameter_slider(u32 parameter_idx, Plugin_Descriptor_Parameter *parameter_descriptor, Plugin_Parameter_Value *current_parameter_value, Rect parameter_bounds, UI_Context ui, bool *parameters_were_tweaked)
 {
@@ -350,10 +582,10 @@ void header(Asset_File_State plugin_state,
                 }
             }
             
-            draw_rectangle(title_bounds, 1.0f, Color_Front, &ui.g->command_list);
+            draw_rectangle(title_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
             
             
-            draw_text(plugin_name, title_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+            draw_text(plugin_name, title_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
             Rect plugin_play_stop_bounds = rect_take_right(header_bounds, TITLE_HEIGHT);
             
             
@@ -369,15 +601,15 @@ void header(Asset_File_State plugin_state,
         case Asset_File_State_VALIDATING :
         case Asset_File_State_STAGE_USAGE :
         {
-            draw_rectangle(header_bounds, 1.0f, Color_Front, &ui.g->command_list);
-            draw_text(StringLit("Loading"), header_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+            draw_rectangle(header_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
+            draw_text(StringLit("Loading"), header_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
         }break;
         case Asset_File_State_STAGE_UNLOADING :
         case Asset_File_State_OK_TO_UNLOAD :
         case Asset_File_State_UNLOADING :
         {
-            draw_rectangle(header_bounds, 1.0f, Color_Front, &ui.g->command_list);
-            draw_text(StringLit("Unloading"), header_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+            draw_rectangle(header_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
+            draw_text(StringLit("Unloading"), header_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
         }break;
         case Asset_File_State_NONE :
         {
@@ -387,8 +619,8 @@ void header(Asset_File_State plugin_state,
             {
                 *load_plugin_was_clicked = true;
             }
-            draw_rectangle(header_bounds, 1.0f, Color_Front, &ui.g->command_list);
-            draw_text(StringLit("No plugin file"), header_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+            draw_rectangle(header_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
+            draw_text(StringLit("No plugin file"), header_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
         }break;
         
         case Asset_File_State_FAILED :
@@ -402,8 +634,8 @@ void header(Asset_File_State plugin_state,
                 *load_plugin_was_clicked = true;
             }
             
-            draw_rectangle(header_bounds, 1.0f, Color_Front, &ui.g->command_list);
-            draw_text(StringLit("Compilation Error"), header_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+            draw_rectangle(header_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
+            draw_text(StringLit("Compilation Error"), header_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
         }break;
     }
     
@@ -486,10 +718,10 @@ void plugin_parameter_panel(Plugin_Descriptor *descriptor,
                             UI_Context ui,
                             bool *parameters_were_tweaked)
 {
-    draw_rectangle(bounds, 1.0f, Color_Front, &ui.g->command_list);
+    draw_rectangle(bounds, 1.0f, ui.color_frame, &ui.g->command_list);
     
     Rect parameter_bounds = bounds;
-    parameter_bounds.dim.y = FIELD_TOTAL_HEIGHT;
+    parameter_bounds.h = FIELD_TOTAL_HEIGHT;
     
     for(u32 parameter_idx = 0; parameter_idx < descriptor->num_parameters && descriptor->error.flag == Compiler_Success; parameter_idx++)
     {
@@ -498,13 +730,13 @@ void plugin_parameter_panel(Plugin_Descriptor *descriptor,
         
         parameter_slider(parameter_idx, parameter_descriptor, current_parameter_value, parameter_bounds, ui, parameters_were_tweaked);
         
-        parameter_bounds.origin.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN * 2;
+        parameter_bounds.y += FIELD_TOTAL_HEIGHT + FIELD_MARGIN * 2;
     }
 }
 
 void draw_visualization_panel(Rect bounds, Analysis *analysis, UI_Context ui) 
 {
-    draw_rectangle(bounds, 1.0f, Color_Front, &ui.g->command_list);
+    draw_rectangle(bounds, 1.0f, ui.color_frame, &ui.g->command_list);
     
     Rect ir_panel_bounds;
     Rect fft_panel_bounds;
@@ -512,9 +744,9 @@ void draw_visualization_panel(Rect bounds, Analysis *analysis, UI_Context ui)
     
     //~IR
     {
-        draw_rectangle(ir_panel_bounds, 1.0f, Color_Front, &ui.g->command_list);
+        draw_rectangle(ir_panel_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
         Rect ir_title_bounds = rect_take_top(ir_panel_bounds, 50.0f);
-        draw_text(StringLit("Impulse Response"), ir_title_bounds, Color_Front, &ui.g->font, &ui.g->command_list); 
+        draw_text(StringLit("Impulse Response"), ir_title_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list); 
         
         Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
         Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
@@ -524,7 +756,7 @@ void draw_visualization_panel(Rect bounds, Analysis *analysis, UI_Context ui)
         real32 new_normalized = simple_slider(normalized, 600, zoom_slider_bounds, ui);
         ui.g->FIXME_zoom_state = new_normalized  * 0.99f + 0.01f;
         
-        draw_rectangle(ir_graph_bounds, 1.0f, Color_Front, &ui.g->command_list);
+        draw_rectangle(ir_graph_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
         
         Rect last_clip = draw_pull_last_clip(&ui.g->command_list);
         draw_ir(ir_graph_bounds, ui.g->FIXME_zoom_state, analysis, &ui.g->command_list);
@@ -532,12 +764,12 @@ void draw_visualization_panel(Rect bounds, Analysis *analysis, UI_Context ui)
     }
     //~fft
     {
-        draw_rectangle(fft_panel_bounds, 1.0f, Color_Front, &ui.g->command_list);
+        draw_rectangle(fft_panel_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
         Rect fft_title_bounds = rect_take_top(fft_panel_bounds, 50.0f);
         Rect fft_graph_bounds = rect_drop_top(fft_panel_bounds, 50.0f);
         
-        draw_text(StringLit("Frequency Response"), fft_title_bounds, Color_Front, &ui.g->font, &ui.g->command_list); 
-        draw_rectangle(fft_graph_bounds, 1.0f, Color_Front, &ui.g->command_list);
+        draw_text(StringLit("Frequency Response"), fft_title_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list); 
+        draw_rectangle(fft_graph_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
         
         Rect last_clip = draw_pull_last_clip(&ui.g->command_list);
         draw_fft(fft_graph_bounds, analysis, &ui.g->command_list);
@@ -549,15 +781,15 @@ void draw_compiler_log(Compiler_Gui_Log *error_log,
                        UI_Context ui)
 {
     
-    draw_rectangle(bounds, 1.0f, Color_Front, &ui.g->command_list);
+    draw_rectangle(bounds, 1.0f, ui.color_frame, &ui.g->command_list);
     
     Rect message_bounds = rect_take_top(bounds, TITLE_HEIGHT);
     
     for(i32 i = 0; i < error_log->message_count; i++)
     {
-        if(message_bounds.origin.y > bounds.origin.y + bounds.dim.y)
+        if(message_bounds.y > bounds.y + bounds.h)
             return;
-        draw_text(error_log->messages[i], message_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+        draw_text(error_log->messages[i], message_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
         message_bounds = rect_move_by(message_bounds, {0.0f, TITLE_HEIGHT});
     }
 }
@@ -576,7 +808,7 @@ void audio_file_footer(Asset_File_State audio_file_state,
             Rect play_loop_bounds = rect_take_right(footer_bounds, TITLE_HEIGHT * 2);
             footer_bounds = rect_drop_right(footer_bounds, TITLE_HEIGHT * 2);
             
-            draw_rectangle(play_loop_bounds, 1.0f, Color_Front, &ui.g->command_list);
+            draw_rectangle(play_loop_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
             
             Rect play_stop_bounds = rect_take_left(play_loop_bounds, TITLE_HEIGHT);
             Rect loop_bounds = rect_move_by(play_stop_bounds, {TITLE_HEIGHT, 0.0f});
@@ -588,7 +820,7 @@ void audio_file_footer(Asset_File_State audio_file_state,
                 *clicked_on_loop = true;
             
             
-            draw_text(StringLit("todo : draw filename, waveform idk"), footer_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+            draw_text(StringLit("todo : draw filename, waveform idk"), footer_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
             
         }break;
         case Asset_File_State_STAGE_BACKGROUND_LOADING :
@@ -597,22 +829,22 @@ void audio_file_footer(Asset_File_State audio_file_state,
         case Asset_File_State_VALIDATING :
         case Asset_File_State_STAGE_USAGE :
         {
-            draw_text(StringLit("Loading"), footer_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+            draw_text(StringLit("Loading"), footer_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
         }break;
         case Asset_File_State_STAGE_UNLOADING :
         case Asset_File_State_OK_TO_UNLOAD :
         case Asset_File_State_UNLOADING :
         {
-            draw_text(StringLit("Unloading"), footer_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+            draw_text(StringLit("Unloading"), footer_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
             
         }break;
         case Asset_File_State_NONE :
         {
-            draw_text(StringLit("No audio file"), footer_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+            draw_text(StringLit("No audio file"), footer_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
         }break;
         case Asset_File_State_FAILED :
         {
-            draw_text(StringLit("Bad audio file"), footer_bounds, Color_Front, &ui.g->font, &ui.g->command_list);
+            draw_text(StringLit("Bad audio file"), footer_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
         }break;
     }
     Rect load_button_bounds = rect_take_left(footer_bounds, TITLE_HEIGHT * 3);
@@ -621,7 +853,7 @@ void audio_file_footer(Asset_File_State audio_file_state,
     if(button(load_button_bounds, StringLit("Load"), 1024, ui))
         *clicked_on_load = true;
     
-    draw_rectangle(footer_bounds, 1.0f, Color_Front, &ui.g->command_list);
+    draw_rectangle(footer_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
 }
 
 
@@ -647,14 +879,34 @@ void frame(Plugin_Descriptor& descriptor,
     
     Rect window_bounds = { Vec2{0.0f, 0.0f}, graphics_ctx->window_dim };
     draw_push_atlas_command(window_bounds, &graphics_ctx->command_list);
+    draw_push_atlas_command(window_bounds, &graphics_ctx->popup_command_list);
     
-    UI_Context ui{ frame_io, &ui_state, graphics_ctx};
+    UI_Context ui{ 
+        .io = frame_io, 
+        .state = &ui_state, 
+        .g = graphics_ctx,
+        .color_front = { .argb = Color_Front },
+        .color_frame = { .argb = Color_Frame },
+        .color_back = { .argb = Color_Back },
+        .font_size = 20.0f
+    };
     
-    if(frame_io.mouse_released)
-    {
-        ui_state.previous_selected_parameter_id = ui_state.selected_parameter_id;
-        ui_state.selected_parameter_id = -1;
-    }
+    /*
+        Rect toggle_bounds_0 = { Vec2{ 100.0f, 30.0f} , Vec2{ 30.0f, 18.0f} };
+        auto drop = dropdown_start(toggle_bounds_0, 10000003, ui); 
+        
+        if(dropdown_elem(StringLit("test1"), &drop, ui))
+        {
+            printf("cheh\n");
+        }
+        if(dropdown_elem(StringLit("test1"), &drop, ui))
+        {
+            printf("cheh 2\n");
+        }
+        
+        dropdown_end(drop, ui);
+        return;
+        */
     
     Rect header_bounds = rect_shrinked(rect_take_top(window_bounds, TITLE_HEIGHT + 10.0f), 5.0f, 10.0f);
     
@@ -662,7 +914,7 @@ void frame(Plugin_Descriptor& descriptor,
     Rect main_panel_bounds = rect_drop_bottom(window_bounds, TITLE_HEIGHT);
     
     Rect footer_bounds = rect_shrinked(rect_take_bottom(window_bounds, TITLE_HEIGHT + 10.0f), 5.0f, 10.0f);
-    draw_rectangle(footer_bounds, 1.0f, Color_Front, &ui.g->command_list);
+    draw_rectangle(footer_bounds, 1.0f, ui.color_frame, &ui.g->command_list);
     
     MemoryBarrier();
     auto plugin_state = *audio_ctx->m->plugin_state; 
@@ -722,4 +974,5 @@ void frame(Plugin_Descriptor& descriptor,
             ensure(audio_file_state == Asset_File_State_IN_USE);
         }
     }
+    
 }
