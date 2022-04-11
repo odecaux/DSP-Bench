@@ -778,6 +778,14 @@ void opengl_render(OpenGL_Context *opengl_ctx, Graphics_Context *graphics_ctx)
         popup_cmd_list->draw_indices_count = 0;
     }
     
+    for(i32 vtx_idx = 0; vtx_idx < cmd_list->draw_vertices_count; vtx_idx++)
+    {
+        Vec2 *uv = &cmd_list->draw_vertices[vtx_idx].uv;
+        if(uv->x == -1.0f || uv->y == -1.0f)
+        {
+            *uv = graphics_ctx->font.white_rect_pos;
+        }
+    }
     
     i32 last_command_type = -1;
     

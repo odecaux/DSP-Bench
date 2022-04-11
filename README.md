@@ -8,6 +8,7 @@ For now there are two heavy dependencies : clang/llvm and Intel Performance Prim
 ### TODO
 
 Important : \
+Unicode \
 Audio device unplug/change \
 Input audio device as source \
 Disable hot-reload button \
@@ -25,6 +26,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+Fallback glyphs
 FFT processing available to the plugins \
 Plugin can allocate memory \
 Panel toggle : compiler log and IR \

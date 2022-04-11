@@ -5,7 +5,7 @@
 
 //~ Fonts
 
-#define WHITE_RECT_POS Vec2{ 0.001f, 0.001f }
+#define WHITE_RECT_POS Vec2{ -1.0f, -1.0f }
 
 //TODO types 
 typedef struct {
@@ -17,7 +17,7 @@ typedef struct {
 } Glyph;
 
 typedef struct{
-    float font_size; 
+    real32 font_size; 
     
     i32 *codepoint_to_idx;  
     real32 *codepoint_to_advancex; 
@@ -26,8 +26,9 @@ typedef struct{
     Glyph *glyphs;
     u32 glyph_count;
     
-    //TODO fallback
+    i32 fallback_glyph;
     
+    Vec2 white_rect_pos;
     real32 ascent;
     real32 descent;
     
@@ -176,57 +177,6 @@ function void draw_ir(Rect bounds,
         }
     };
 }
-
-#if 0
-function void draw_character(i32 codepoint, Color col, Rect bounds, Font *font, Draw_Command_List *cmd_list)
-{
-    ensure(cmd_list->draw_command_count > 0);
-    ensure(cmd_list->draw_commands[cmd_list->draw_command_count - 1].type == Draw_Command_Type_ATLAS);
-    
-    Draw_Command *current_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1]; 
-    Glyph *glyph = &font->glyphs[font->codepoint_to_idx[codepoint]];
-    
-    auto top_left = bounds.origin;
-    auto top_right = Vec2{ bounds.x + bounds.w, bounds.y };
-    auto bottom_right = Vec2{ bounds.x + bounds.w, bounds.y + bounds.h};
-    auto bottom_left = Vec2{ bounds.x, bounds.y + bounds.h};
-    
-    u32 vtx_idx = cmd_list->draw_vertices_count;
-    Vertex *vtx_write = cmd_list->draw_vertices + cmd_list->draw_vertices_count;
-    
-    vtx_write[0].pos = bottom_left;
-    vtx_write[0].col = col;
-	vtx_write[0].uv = Vec2{glyph->U0, glyph->V0};
-    
-	vtx_write[1].pos = top_right;
-    vtx_write[1].col = col;
-	vtx_write[1].uv = Vec2{glyph->U1, glyph->V1};
-    
-	vtx_write[2].pos = top_left;
-    vtx_write[2].col = col;
-	vtx_write[2].uv = Vec2{glyph->U0, glyph->V1};
-    
-	vtx_write[3].pos = bottom_right;
-    vtx_write[3].col = col;
-	vtx_write[3].uv = Vec2{glyph->U1, glyph->V0};
-    
-    cmd_list->draw_vertices_count += 4;
-    
-    u32 *idx_write = cmd_list->draw_indices + cmd_list->draw_indices_count;
-    
-    idx_write[0] = vtx_idx;
-    idx_write[1] = vtx_idx + 1;
-    idx_write[2] = vtx_idx + 2;
-    idx_write[3] = vtx_idx;
-    idx_write[4] = vtx_idx + 3;
-    idx_write[5] = vtx_idx + 1;
-    
-    cmd_list->draw_indices_count += 6;
-    current_cmd->atlas.idx_count += 6;
-}
-#endif 
-
-//TODO c'est de la merde cette api mdr
 
 function void draw_line(Vec2 start, Vec2 end, Color col, real32 width, Draw_Command_List *cmd_list)
 {
@@ -390,7 +340,16 @@ function void draw_text(const String& text, Rect bounds, Color col, real32 size,
             break;
         }
         
-        Glyph *glyph = &font->glyphs[font->codepoint_to_idx[c]];
+        i32 glyph_idx = font->codepoint_to_idx[c];
+        Glyph *glyph;
+        if(glyph_idx == -1)
+        {
+            glyph = &font->glyph[font->fallback_glyph];
+        }
+        else 
+        {
+            glyph = &font->glyphs[glyph_idx];
+        }
         
         auto left = x + glyph->X0 * scale_factor;
         auto right = x + glyph->X1 * scale_factor;

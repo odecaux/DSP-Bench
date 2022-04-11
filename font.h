@@ -252,7 +252,7 @@ internal Font load_fonts(const char* font_filename,
         grayscale_pixels[offset + texture_width + 1] = 
         255;
     
-    //Vec2 white_rect_pos = Vec2{ (white_rect.x + 0.5f) * uv_scale.x, (white_rect.y + 0.5f) * uv_scale.y};
+    Vec2 white_rect_pos = Vec2{ (white_rect.x + 0.5f) * uv_scale.x, (white_rect.y + 0.5f) * uv_scale.y};
     
     u32 *rgba_pixels = (u32*) arena_allocate(app_allocator, sizeof(u32) * texture_width * texture_height);
     
@@ -272,7 +272,8 @@ internal Font load_fonts(const char* font_filename,
         .highest_codepoint = max_codepoint,
         .glyphs = glyphs,
         .glyph_count = (u32)glyph_count, //TODO ono
-        //.white_rect_pos = white_rect_pos,
+        .fallback_glyph = codepoint_to_idx[(i32)' '],
+        .white_rect_pos = white_rect_pos,
         .ascent = ascent,
         .descent = descent,
         .atlas_pixels = rgba_pixels, 

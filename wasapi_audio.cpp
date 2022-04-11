@@ -54,12 +54,12 @@ void print_wave_format(WAVEFORMATEX *format)
     
 }
 
-u64 reftimes_to_num_samples(const REFERENCE_TIME t, const float sample_rate)
+u64 from_reftimes(const REFERENCE_TIME t, const float sample_rate)
 {
     return u64(sample_rate * float(t) * 0.0000001 + 0.5f);
 }
 
-REFERENCE_TIME num_samples_to_reftime(u64 num_samples, float sample_rate)
+REFERENCE_TIME to_reftimes(u64 num_samples, float sample_rate)
 {
     return REFERENCE_TIME(num_samples * 10000.0f * 1000.0f / sample_rate + 0.5f);
 }
@@ -70,6 +70,7 @@ struct WasapiContext{
     HANDLE shutdown_event;
     
     IMMDeviceEnumerator *enumerator;
+    IMMDevice *input_device;
     IMMDevice *output_device;
     IAudioClient *audio_client;
     IAudioRenderClient *render_client;
@@ -220,6 +221,7 @@ bool audio_initialize(void **out_ctx,
                       Arena *app_allocator)
 {
     auto *ctx = (WasapiContext*) arena_allocate(app_allocator, sizeof(WasapiContext));
+    *ctx = {};
     
     CoInitializeEx(NULL, COINIT_MULTITHREADED); 
     
@@ -229,79 +231,77 @@ bool audio_initialize(void **out_ctx,
     
     auto hr = CoCreateInstance(CLSID_MMDeviceEnumerator, NULL, CLSCTX_ALL, IID_IMMDeviceEnumerator,
                                (void**)&ctx->enumerator);
-    
     if_failed(hr, "failed to create instance\n");
     
-    hr = ctx->enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &ctx->output_device);
-    if_failed(hr ,"failed to get default device\n");
+    {
+        hr = ctx->enumerator->GetDefaultAudioEndpoint(eCapture, eMultimedia, &ctx->input_device);
+        if_failed(hr ,"failed to get default input device\n");
+        
+        hr = ctx->input_device->Activate(IID_IAudioClient, 
+                                         CLSCTX_ALL, 
+                                         0, 
+                                         (void**) &ctx->audio_client);
+        if_failed(hr ,"failed to active audio client\n");
+    }
     
-    
-    hr = ctx->output_device->Activate(IID_IAudioClient, 
-                                      CLSCTX_ALL, 
-                                      0, 
-                                      (void**) &ctx->audio_client);
-    if_failed(hr ,"failed to active audio client\n");
+    {
+        hr = ctx->enumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &ctx->output_device);
+        if_failed(hr ,"failed to get default output device\n");
+        
+        hr = ctx->output_device->Activate(IID_IAudioClient, 
+                                          CLSCTX_ALL, 
+                                          0, 
+                                          (void**) &ctx->audio_client);
+        if_failed(hr ,"failed to active audio client\n");
+    }
     
     //~ Format
     
-    WAVEFORMATEX wave_format_asked{
-        . wFormatTag = WAVE_FORMAT_IEEE_FLOAT ,
-        . nChannels = 2,
-        . nSamplesPerSec = 44100,
-        . nAvgBytesPerSec = 2 * sizeof(real32) * 44100,
-        . nBlockAlign = 2 * sizeof (real32),
-        . wBitsPerSample = sizeof (real32) * 8,
-        . cbSize = 0,
-    };
-    
-    WAVEFORMATEX* closest = nullptr;
-    hr = ctx->audio_client->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, &wave_format_asked, &closest);
-    if_failed(hr, "unsupported format\n");
-    
     WAVEFORMATEXTENSIBLE wave_format_given;
-    if(closest == nullptr)
     {
-        memcpy (&wave_format_given, &wave_format_asked, sizeof(WAVEFORMATEX));
-        //printf("ok\n");
-    }
-    else
-    {
-        if(closest->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
+        WAVEFORMATEX wave_format_asked{
+            . wFormatTag = WAVE_FORMAT_IEEE_FLOAT ,
+            . nChannels = 2,
+            . nSamplesPerSec = 44100,
+            . nAvgBytesPerSec = 2 * sizeof(real32) * 44100,
+            . nBlockAlign = 2 * sizeof (real32),
+            . wBitsPerSample = sizeof (real32) * 8,
+            . cbSize = 0,
+        };
+        
+        WAVEFORMATEX* closest = nullptr;
+        hr = ctx->audio_client->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, &wave_format_asked, &closest);
+        if_failed(hr, "unsupported format\n");
+        
+        if(closest == nullptr)
         {
-            //printf("extensible\n");
-            memcpy (&wave_format_given, closest, sizeof(WAVEFORMATEXTENSIBLE));
+            memcpy (&wave_format_given, &wave_format_asked, sizeof(WAVEFORMATEX));
         }
         else
         {
-            memcpy (&wave_format_given, closest, sizeof(WAVEFORMATEX));
+            if(closest->wFormatTag == WAVE_FORMAT_EXTENSIBLE)
+                memcpy (&wave_format_given, closest, sizeof(WAVEFORMATEXTENSIBLE));
+            else
+                memcpy (&wave_format_given, closest, sizeof(WAVEFORMATEX));
+            
+            CoTaskMemFree(closest);
         }
-        CoTaskMemFree(closest);
     }
-    /*
-    printf("\nformat asked :\n");
-    print_wave_format(&wave_format_asked);
     
-    printf("\nformat given :\n");
-    print_wave_format(&wave_format_given.Format);
-    */
-    Audio_Parameters param;
+    Audio_Parameters param = {
+        .sample_rate = (real32)wave_format_given.Format.nSamplesPerSec,
+        .num_channels = wave_format_given.Format.nChannels,
+        .num_samples = 0, //later
+        .bit_depth = wave_format_given.Format.wBitsPerSample
+    };
     
-    param.sample_rate = (real32)wave_format_given.Format.nSamplesPerSec;
-    param.num_channels = wave_format_given.Format.nChannels;
-    param.bit_depth = wave_format_given.Format.wBitsPerSample;
-    
-    
-    //~ eriods
     REFERENCE_TIME default_period, min_period;
     ctx->audio_client->GetDevicePeriod(&default_period, &min_period);
     
-    u64 device_period_num_samples_min = reftimes_to_num_samples(min_period, param.sample_rate);
-    u64 device_period_num_samples_default  = reftimes_to_num_samples(default_period, param.sample_rate);
+    //u64 device_period_num_samples_min = from_reftimes(min_period, param.sample_rate);
+    u64 device_period_num_samples_default  = from_reftimes(default_period, param.sample_rate);
+    u32 user_buffer_num_samples = next_power_of_two(device_period_num_samples_default); 
     
-    //printf("min device period: %llu samples\ndefault device period : %llu samples\n", device_period_num_samples_min, device_period_num_samples_default);
-    
-    
-    //~ Initialisation
     
     hr = ctx->audio_client->Initialize(AUDCLNT_SHAREMODE_SHARED, 
                                        AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_NOPERSIST, 
@@ -309,6 +309,7 @@ bool audio_initialize(void **out_ctx,
                                        0,
                                        (WAVEFORMATEX*)&wave_format_given, 
                                        0);
+    
     if(hr != S_OK)
     {
         if (hr == AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED )  // AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED
@@ -320,9 +321,7 @@ bool audio_initialize(void **out_ctx,
             if_failed(hr, "failed to get buffer size again\n");
             ctx->audio_client->Release();
             
-            //printf("new buffer size %lu\n", num_frames);
-            
-            REFERENCE_TIME new_buffer_period = num_samples_to_reftime(num_frames, param.sample_rate);
+            REFERENCE_TIME new_buffer_period = to_reftimes(num_frames, param.sample_rate);
             
             hr = ctx->output_device->Activate(IID_IAudioClient, 
                                               CLSCTX_ALL, 
@@ -365,10 +364,6 @@ bool audio_initialize(void **out_ctx,
         }
     }
     
-    
-    //printf("\n\ninitialized\n");
-    
-    
     hr = ctx->audio_client->SetEventHandle(ctx->audio_sample_ready_event);
     if_failed(hr ,"failed to set device handlee\n");
     
@@ -380,27 +375,17 @@ bool audio_initialize(void **out_ctx,
     
     
     //~ Buffer Sizes
-    
     hr = ctx->audio_client->GetBufferSize(&ctx->system_num_allocated_samples);
     
     UINT32 padding;
     hr = ctx->audio_client->GetCurrentPadding(&padding);
     if_failed(hr, "failed to get padding\n");
     
-    //printf("system num allocated samples : %d, padding %d\n", ctx->system_num_allocated_samples, padding);
-    //printf("system buffer duration : %d ms\n", 1000 * ctx->system_num_allocated_samples / (i32)param.sample_rate);
-    
-    u32 user_buffer_num_samples = next_power_of_two(device_period_num_samples_default); 
-    
     
     //~ User Buffer
-    
     u64 reservoir_byte_size = (user_buffer_num_samples * wave_format_given.Format.nBlockAlign * param.num_channels);
     
     void* reservoir_buffer_base = arena_allocate(app_allocator, reservoir_byte_size);
-    
-    //printf("reservoir num samples : %lu\n", user_buffer_num_samples);
-    
     
     real32** channel_indexer = (real32**) arena_allocate(app_allocator, sizeof(real32*) * param.num_channels);
     for(u64 i = 0; i < param.num_channels; ++i)
@@ -408,7 +393,6 @@ bool audio_initialize(void **out_ctx,
         channel_indexer[i] = (real32*)((u64)reservoir_buffer_base + user_buffer_num_samples * wave_format_given.Format.nBlockAlign * i); 
     }
     ctx->user_buffer = {channel_indexer};
-    
     
     //~ Fill first callback with silence
     
