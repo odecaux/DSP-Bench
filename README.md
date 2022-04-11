@@ -20,13 +20,13 @@ Draggable IR \
 Time and frequency markers on the graphs \
 Plugin browser \
 Reset State button \
-Font sizes system (load multiple font sizes or stretch uv) \
 Beautiful UI \
 Plugin chain, maybe graph \
 \
 Done : \
 \
-Fallback glyphs
+Fallback glyphs \
+Scale font \
 FFT processing available to the plugins \
 Plugin can allocate memory \
 Panel toggle : compiler log and IR \

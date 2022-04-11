@@ -344,7 +344,7 @@ function void draw_text(const String& text, Rect bounds, Color col, real32 size,
         Glyph *glyph;
         if(glyph_idx == -1)
         {
-            glyph = &font->glyph[font->fallback_glyph];
+            glyph = &font->glyphs[font->fallback_glyph];
         }
         else 
         {
