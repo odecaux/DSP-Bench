@@ -4,8 +4,8 @@
 #include "stdio.h"
 
 #include "base.h"
-#include "win32_helpers.h"
 #include "structs.h"
+#include "win32_helpers.h"
 #include "memory.h"
 #include "audio.h"
 #include "plugin.h"

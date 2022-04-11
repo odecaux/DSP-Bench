@@ -8,7 +8,7 @@ set code=%cd%
 
 pushd build
 del gui_*.pdb > NUL 2> NUL
-cl %debug_opts% "%code%\gui.cpp" /Fegui_out.dll  /D_USRDLL /D_WINDLL /link /PDB:gui_%random%.pdb /DLL
+cl %debug_opts% "%code%\gui.cpp" User32.lib /Fegui_out.dll  /D_USRDLL /D_WINDLL /link /PDB:gui_%random%.pdb /DLL
 del gui.dll
 ren gui_out.dll gui.dll
 popd

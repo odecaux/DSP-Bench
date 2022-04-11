@@ -8,6 +8,7 @@ For now there are two heavy dependencies : clang/llvm and Intel Performance Prim
 ### TODO
 
 Important : \
+SetCursorPos depuis l'UI \
 Unicode \
 Audio device unplug/change \
 Input audio device as source \
@@ -25,6 +26,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+Mouse Wheel \
 Fallback glyphs \
 Scale font \
 FFT processing available to the plugins \

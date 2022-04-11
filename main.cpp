@@ -159,7 +159,9 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
         .FIXME_zoom_state = 1.0f
     };
     
-    Window_Context window = win32_init_window(&graphics_ctx.window_dim);
+    IO frame_io = io_initial_state();
+    Window_Backend_Context window;
+    win32_init_window(&window, &graphics_ctx.window_dim, &frame_io);
     OpenGL_Context opengl_ctx = opengl_initialize(&window, &graphics_ctx.font);
     
     win32_print_elapsed(time_program_begin, "time to graphics");
@@ -250,7 +252,6 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     u64 gui_dll_last_write_time = win32_get_last_write_time("gui.dll");
 #endif
     
-    IO frame_io = io_initial_state();
     UI_State ui_state = {-1, -1, false};
     i64 last_time = win32_get_time();
     bool done = false;
@@ -262,7 +263,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     
     while(!done)
     {
-        win32_message_dispatch(&window, &frame_io, &done);
+        win32_message_dispatch(&window, &done);
         if(done) break;
         
         frame_io = io_state_advance(frame_io);
@@ -409,15 +410,6 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
         else {
             plugin_check_for_save_and_stage_hot_reload(&plugin_reloading_manager);
         }
-        
-        //TODO les id c'est un hack
-        if(ui_state.selected_parameter_id != -1 && 
-           ui_state.selected_parameter_id < 255 && 
-           frame_io.mouse_clicked)
-            ShowCursor(FALSE);
-        else if(ui_state.previous_selected_parameter_id != -1 && frame_io.mouse_released && ui_state.previous_selected_parameter_id < 255)
-            ShowCursor(TRUE);
-        
         
         opengl_render(&opengl_ctx, &graphics_ctx);
         

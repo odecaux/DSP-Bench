@@ -17,6 +17,10 @@ IO io_initial_state()
         
         .right_mouse_down = false,
         .mouse_double_clicked = false,
+        
+        .mousewheel_delta = 0.0f,
+        .mousewheel_h_delta = 0.0f,
+        
         .delete_pressed = false,
         
         /*
@@ -43,7 +47,7 @@ IO io_state_advance(IO io)
 	{
 		io.mouse_position = Vec2(-99999.0f, -99999.0f);
 	}
-
+    
 	if ((io.mouse_position.x < 0.0f && io.mouse_position.y < 0.0f) ||
 		(io.mouse_pos_prev.x < 0.0f && io.mouse_pos_prev.y < 0.0f))
 	{
@@ -54,7 +58,7 @@ IO io_state_advance(IO io)
 		io.mouse_delta.x = io.mouse_position.x - io.mouse_pos_prev.x;
 		io.mouse_delta.y = io.mouse_position.y - io.mouse_pos_prev.y;
 	}
-
+    
 	io.mouse_pos_prev = io.mouse_position;
     io.mouse_released = !io.mouse_down && io.mouse_down_time >= 0.0f;
     

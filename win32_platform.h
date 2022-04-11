@@ -3,57 +3,9 @@
 #ifndef WIN32_PLATFORM_H
 #define WIN32_PLATFORM_H
 
+LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param);
 
-
-
-LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param)
-{
-    LRESULT result = 0;
-    
-    
-    if (message == WM_CREATE)
-    {
-        LPCREATESTRUCT pcs = (LPCREATESTRUCT)l_param;
-        Vec2 *window_dim = (Vec2*)pcs->lpCreateParams;
-        SetWindowLongPtr(window, GWLP_USERDATA, (LONG_PTR)(window_dim));
-        
-        result = 1;
-    }
-    else {
-        
-        Vec2 *window_dim = (Vec2*)(GetWindowLongPtrW(window, GWLP_USERDATA));
-        
-        if(message == WM_SIZE)
-        {
-            UINT width = LOWORD(l_param);
-            UINT height = HIWORD(l_param);
-            *window_dim = { (real32)width, (real32)height };
-            return 0;
-        }
-        
-        else if(message == WM_SIZING)
-        {
-            RECT rect = *(RECT*)(l_param);
-            real32 new_width = (real32)(rect.right - rect.left);
-            real32 new_height = (real32)(rect.bottom - rect.top);
-            *window_dim = { new_width, new_height};
-            return TRUE;
-        }
-        
-        else if(message == WM_DESTROY || message == WM_DESTROY || message == WM_QUIT)
-        {
-            PostQuitMessage(0);
-            return 0;
-        }
-        else 
-        {
-            result = DefWindowProc(window, message, w_param, l_param); 
-        }
-    }
-    return result;
-}
-
-Window_Context win32_init_window(Vec2* window_dim)
+void win32_init_window(Window_Backend_Context *window, Vec2* window_dim, IO *frame_io)
 {
     HINSTANCE instance = GetModuleHandle(0);
     
@@ -69,26 +21,27 @@ Window_Context win32_init_window(Vec2* window_dim)
     };
     RegisterClassEx(&main_class);
     
-    
-    HWND window = CreateWindow("Main Class", "Test", 
-                               WS_OVERLAPPEDWINDOW,
-                               CW_USEDEFAULT, 
-                               CW_USEDEFAULT, 
-                               (u32)window_dim->x, (u32)window_dim->y + 30,
-                               0,0,
-                               instance, 
-                               window_dim);
-    
-    return { window };
+    window->frame_io = frame_io;
+    window->dim = window_dim;
+    window->window = CreateWindow("Main Class", "DSP Bench", 
+                                  WS_OVERLAPPEDWINDOW,
+                                  CW_USEDEFAULT, 
+                                  CW_USEDEFAULT, 
+                                  (u32)window_dim->x, (u32)window_dim->y + 30,
+                                  0,0,
+                                  instance, 
+                                  window);
 }
 
-void win32_message_dispatch(Window_Context *window_ctx, IO *frame_io, bool *done)
+
+void win32_message_dispatch(Window_Backend_Context *window_ctx, bool *done)
 {
     MSG message;
-    HWND window = window_ctx->window;
+    IO *frame_io = window_ctx->frame_io;
     
     frame_io->delete_pressed = false;
     frame_io->left_ctrl_pressed = false;
+    frame_io->mousewheel_delta = 0.0f;
     
     while(PeekMessage(&message,0,0,0, PM_REMOVE))
     {
@@ -100,63 +53,141 @@ void win32_message_dispatch(Window_Context *window_ctx, IO *frame_io, bool *done
                 *done = true;
             }break;
             
-            case WM_LBUTTONDOWN :
-            {
-                frame_io->mouse_down = true;
-                SetCapture(window); 
-            }break;
-            
-            case WM_LBUTTONUP :
-            {
-                frame_io->mouse_down = false;
-                if(!frame_io->right_mouse_down)
-                    ReleaseCapture(); 
-            }break;
-            
-            
-            case WM_RBUTTONDOWN :
-            {
-                frame_io->right_mouse_down = true;
-                SetCapture(window); 
-            }break;
-            
-            case WM_RBUTTONUP :
-            {
-                frame_io->right_mouse_down = false;
-                if(!frame_io->mouse_down)
-                    ReleaseCapture();
-            }break;
-            
-            case WM_KEYDOWN:{
-                switch(message.wParam)
-                {
-                    case VK_DELETE :
-                    case VK_BACK :
-                    {
-                        frame_io->delete_pressed = true;
-                    }break;
-                    
-                    case VK_CONTROL :
-                    {
-                        frame_io->left_ctrl_pressed = true;
-                        frame_io->left_ctrl_down = true;
-                    }break;
-                }
-            }break;
-            
-            case WM_KEYUP:{
-                switch(message.wParam)
-                {
-                    case VK_CONTROL :
-                    {
-                        frame_io->left_ctrl_down = false;
-                    }break;
-                }
-            }break;
         }
         
         TranslateMessage(&message);
         DispatchMessage(&message);
+    }
+}
+
+LRESULT CALLBACK WindowProc(HWND window_handle, UINT message, WPARAM w_param, LPARAM l_param)
+{
+    if (message == WM_CREATE)
+    {
+        LPCREATESTRUCT pcs = (LPCREATESTRUCT)l_param;
+        Window_Backend_Context *window_ctx = (Window_Backend_Context*)pcs->lpCreateParams;
+        SetWindowLongPtr(window_handle, GWLP_USERDATA, (LONG_PTR)(window_ctx));
+        return 1;
+    }
+    
+    Window_Backend_Context *window_ctx = (Window_Backend_Context*)(GetWindowLongPtrW(window_handle, GWLP_USERDATA));
+    
+    if(!window_ctx)
+    {
+        return CallWindowProc(DefWindowProc, window_handle, message, w_param, l_param);
+    } 
+    
+    ensure(window_handle == window_ctx->window);
+    IO *frame_io = window_ctx->frame_io;
+    
+    switch(message)
+    {
+        case WM_SIZE : 
+        {
+            UINT width = LOWORD(l_param);
+            UINT height = HIWORD(l_param);
+            *window_ctx->dim = { (real32)width, (real32)height };
+            return 0;
+        } break;
+        
+        case WM_SIZING : 
+        {
+            RECT rect = *(RECT*)(l_param);
+            real32 new_width = (real32)(rect.right - rect.left);
+            real32 new_height = (real32)(rect.bottom - rect.top);
+            *window_ctx->dim = { new_width, new_height};
+            return TRUE;
+        } break;
+        
+        case WM_DESTROY : 
+        case WM_QUIT : 
+        {
+            PostQuitMessage(0);
+            return 0;
+        } break;
+        
+        
+        case WM_LBUTTONDOWN :
+        {
+            frame_io->mouse_down = true;
+            SetCapture(window_handle); 
+            return 0;
+        }break;
+        
+        case WM_LBUTTONUP :
+        {
+            frame_io->mouse_down = false;
+            if(!frame_io->right_mouse_down)
+                ReleaseCapture();
+            return 0;
+        }break;
+        
+        case WM_RBUTTONDOWN :
+        {
+            frame_io->right_mouse_down = true;
+            SetCapture(window_handle); 
+            return 0;
+        }break;
+        
+        case WM_RBUTTONUP :
+        {
+            frame_io->right_mouse_down = false;
+            if(!frame_io->mouse_down)
+                ReleaseCapture();
+            return 0;
+        }break;
+        
+        case WM_MOUSEWHEEL:
+        {
+            i16 amount = GET_WHEEL_DELTA_WPARAM(w_param);
+            frame_io->mousewheel_delta = (real32) amount / WHEEL_DELTA;
+            return 0;
+        }break;
+        
+        case WM_MOUSEHWHEEL:
+        {
+            i16 amount = GET_WHEEL_DELTA_WPARAM(w_param);
+            frame_io->mousewheel_h_delta = (real32) amount / WHEEL_DELTA;
+            return 0;
+        }break;
+        
+        //keys 
+        
+        case WM_KEYDOWN:
+        {
+            switch(w_param)
+            {
+                case VK_DELETE :
+                case VK_BACK :
+                {
+                    frame_io->delete_pressed = true;
+                }break;
+                
+                case VK_CONTROL :
+                {
+                    frame_io->left_ctrl_pressed = true;
+                    frame_io->left_ctrl_down = true;
+                }break;
+            }
+            return 0;
+        }break;
+        
+        case WM_KEYUP:
+        {
+            switch(w_param)
+            {
+                case VK_CONTROL :
+                {
+                    frame_io->left_ctrl_down = false;
+                }break;
+            }
+            return 0;
+        }break;
+        
+        default : 
+        {
+            return CallWindowProc(DefWindowProc, window_handle, message, w_param, l_param); 
+        } break;
     }
 }
 

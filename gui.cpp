@@ -50,6 +50,8 @@ void draw_slider(Rect slider_bounds,
 
 //~ Widgets
 
+
+
 real32 simple_slider(real32 normalized_value, i32 id, 
                      Rect bounds, UI_Context ui)
 {
@@ -62,11 +64,13 @@ real32 simple_slider(real32 normalized_value, i32 id,
     {
         ui.state->previous_selected_parameter_id = ui.state->selected_parameter_id;
         ui.state->selected_parameter_id = -1;
+        ShowCursor(TRUE);
     }
     else if(ui.io.mouse_clicked && rect_contains(bounds, ui.io.mouse_position))
     {
         ensure(ui.state->selected_parameter_id == -1);
         ui.state->selected_parameter_id = id;
+        ShowCursor(FALSE);
     }
     
     bool dragging = ui.io.mouse_down && (ui.io.mouse_delta.x != 0.0f
@@ -127,11 +131,13 @@ real32 slider(real32 normalized_value,
     {
         ui.state->previous_selected_parameter_id = ui.state->selected_parameter_id;
         ui.state->selected_parameter_id = -1;
+        ShowCursor(TRUE);
     }
     else if(ui.io.mouse_clicked && rect_contains(slider_bounds, ui.io.mouse_position))
     {
         ensure(ui.state->selected_parameter_id == -1);
         ui.state->selected_parameter_id = id;
+        ShowCursor(FALSE); //NOTE casse les couilles, pcq du coup on doit link avec user32.lib
     }
     
     bool dragging = ui.io.mouse_down && (ui.io.mouse_delta.x != 0.0f
@@ -629,7 +635,7 @@ void header(Asset_File_State plugin_state,
             Rect load_plugin_button_bounds = rect_take_left(header_bounds, TITLE_HEIGHT * 3);
             header_bounds = rect_drop_left(header_bounds, TITLE_HEIGHT * 3);
             
-            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, ui))
+            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1025, ui))
             {
                 *load_plugin_was_clicked = true;
             }
@@ -751,6 +757,13 @@ void draw_visualization_panel(Rect bounds, Analysis *analysis, UI_Context ui)
         Rect ir_graph_bounds = rect_drop_top(ir_panel_bounds, 50.0f);
         Rect zoom_slider_bounds = rect_take_bottom(ir_graph_bounds, 30.0f);
         ir_graph_bounds = rect_drop_bottom(ir_graph_bounds, 30.0f);
+        
+        if(rect_contains(ir_graph_bounds, ui.io.mouse_position) && ui.io.mousewheel_delta != 0.0f)
+        {
+            real32 mousewheel_delta = ui.io.mousewheel_delta / 5.0f;
+            ui.g->FIXME_zoom_state = octave_clamp( ui.g->FIXME_zoom_state + mousewheel_delta, 0.01f, 1.0f);
+        }
+        
         
         real32 normalized = (ui.g->FIXME_zoom_state - 0.01f) / 0.99f;
         real32 new_normalized = simple_slider(normalized, 600, zoom_slider_bounds, ui);

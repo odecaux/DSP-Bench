@@ -667,7 +667,7 @@ OpenGL_Context_FFT opengl_initialize_fft()
     };
 }
 
-OpenGL_Context opengl_initialize(Window_Context *window, Font* font)
+OpenGL_Context opengl_initialize(Window_Backend_Context *window, Font* font)
 {
     
     OpenGL_Context_Win32 ctx_win32 = opengl_initialize_win32(window->window);

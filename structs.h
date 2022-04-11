@@ -118,6 +118,9 @@ typedef struct
     bool mouse_double_clicked;
     bool right_mouse_clicked;
     
+    real32 mousewheel_delta;
+    real32 mousewheel_h_delta;
+    
     bool delete_pressed;
     
     Vec2 mouse_position;
@@ -146,7 +149,7 @@ typedef struct{
     bool show_error_log;
 } UI_State;
 
-struct Window_Context;
+struct Window_Backend_Context;
 
 //~ DSP/IR/FFT
 typedef struct {

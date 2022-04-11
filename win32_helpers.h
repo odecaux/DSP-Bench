@@ -104,9 +104,11 @@ function bool win32_open_file(char *out_buffer, u32 max_buffer_size, char *filte
         return false;
 }
 
-typedef struct Window_Context{
-    HWND window;
-} Window_Context;
+typedef struct Window_Backend_Context {
+    HWND window; //TODO rename
+    Vec2 *dim;
+    IO *frame_io;
+} Window_Backend_Context;
 
 function u64 win32_get_last_write_time(const char *filename)
 {
@@ -141,7 +143,7 @@ function bool win32_query_file_change(const char *filename, u64 *previous_write_
     }
 }
 
-function Vec2 win32_get_mouse_position(Window_Context *window_ctx)
+function Vec2 win32_get_mouse_position(Window_Backend_Context *window_ctx)
 {
     POINT mouse_position;
     GetCursorPos(&mouse_position);
