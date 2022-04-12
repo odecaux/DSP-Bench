@@ -26,6 +26,7 @@ Plugin chain, maybe graph \
 \
 Done : \
 \
+Runtime Errors : Initialization \
 Mouse Wheel \
 Fallback glyphs \
 Scale font \

@@ -6,9 +6,10 @@
 
 //~ Plugin
 
+
 typedef void(*audio_callback_t)(void*, void*, float**, unsigned int, unsigned int, float);
 typedef void(*default_parameters_t)(void*);
-typedef int(*initialize_state_t)(void*, void*, unsigned int, float, void*);
+typedef Runtime_Error_Flag(*initialize_state_t)(void*, void*, unsigned int, float, void*);
 
 
 enum  Plugin_Parameter_Type{
@@ -144,6 +145,8 @@ internal void *plugin_allocate_bytes(int num_bytes, Initializer* initializer)
 void plugin_reset_handle(Plugin *plugin);
 
 bool plugin_descriptor_compare(Plugin_Descriptor *a, Plugin_Descriptor *b);
+
+void plugin_write_runtime_error_on_log(Runtime_Error_Flag flag, Compiler_Gui_Log *log);
 
 void plugin_write_all_errors_on_log(Plugin *handle, Compiler_Gui_Log *log);
 
@@ -291,13 +294,13 @@ void plugin_load_button_was_clicked(Plugin_Reloading_Manager *m);
 void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m);
 
 
-void compute_IR(Plugin& handle, 
-                real32** IR_buffer, 
-                u32 IR_length, 
-                Audio_Parameters audio_parameters,
-                Plugin_Parameter_Value* current_parameters_values,
-                Arena *scratch_allocator,
-                Initializer *initializer);
+Runtime_Error_Flag compute_IR(Plugin& handle, 
+                              real32** IR_buffer, 
+                              u32 IR_length, 
+                              Audio_Parameters audio_parameters,
+                              Plugin_Parameter_Value* current_parameters_values,
+                              Arena *scratch_allocator,
+                              Initializer *initializer);
 
 
 #endif //DESCRIPTOR_H

@@ -18,4 +18,6 @@ CUSTOM_COMPILER_ERROR_FLAG(Compiler_Struct_Parsing_Error)
 CUSTOM_COMPILER_ERROR_FLAG(Compiler_Clang_Error)
 CUSTOM_COMPILER_ERROR_FLAG(Compiler_Cant_Take_Module)
 CUSTOM_COMPILER_ERROR_FLAG(Compiler_Cant_Launch_Jit)
+
+CUSTOM_RUNTIME_ERROR_FLAG(Runtime_No_Error) 
 CUSTOM_RUNTIME_ERROR_FLAG(Runtime_Low_Memory)

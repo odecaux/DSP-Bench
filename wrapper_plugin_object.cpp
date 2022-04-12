@@ -54,15 +54,24 @@ extern "C" {
     int __cdecl _setjmp(jmp_buf _Buf);
     
     __attribute__((noreturn)) void longjmp(jmp_buf _Buf, int _Value);
-    static jmp_buf buf;
     
     //~
+    
+    static jmp_buf buf;
+    static Runtime_Error error;
+    
     void initialize_state_type_wrapper(void* parameters_ptr, void* out_initial_state_ptr, unsigned int num_channels, float sample_rate, void *allocator);
     
     float *plugin_allocate_buffer_app(int num_sample, void* initializer);
     __cdecl float *allocate_buffer(int num_samples, void* initializer)
     {
-        return plugin_allocate_buffer_app(num_samples, initializer);
+        float *buffer = plugin_allocate_buffer_app(num_samples, initializer);
+        if(buffer == 0)
+        {
+            error = Runtime_Low_Memory;
+            longjmp(buf, 1);
+        }
+        return buffer;
     }
     
     float **plugin_allocate_buffers_app(int num_samples, int num_channels, void* initializer);
@@ -71,31 +80,37 @@ extern "C" {
         float **buffers = plugin_allocate_buffers_app(num_samples, num_channels, initializer);
         if(buffers == 0)
         {
+            error = Runtime_Low_Memory;
             longjmp(buf, 1);
         }
+        return buffers; 
     }
-    
     
     void *plugin_allocate_bytes_app(int num_sample, void* initializer);
     __cdecl void *allocate_bytes(int num_bytes, void* initializer)
     {
-        return plugin_allocate_bytes_app(num_bytes, initializer);
+        void *bytes = plugin_allocate_bytes_app(num_bytes, initializer);
+        if(bytes == 0)
+        {
+            error = Runtime_Low_Memory;
+            longjmp(buf, 1);
+        }
+        return bytes;
     }
     
     
     __cdecl int initialize_state_error_wrapper(void* parameters_ptr, void* out_initial_state_ptr, unsigned int num_channels, float sample_rate, void *allocator)
     {
-        if(_setjmp(buf) != 0)
+        error = Runtime_No_Error;
+        if(_setjmp(buf) == 0)
         {
             initialize_state_type_wrapper(parameters_ptr, out_initial_state_ptr, num_channels,
                                           sample_rate, allocator);
-            return 1;
+            return Runtime_No_Error;
         }
         else 
         {
-            return 0;
+            return Runtime_Low_Memory;
         }
     }
-    
-    
 }

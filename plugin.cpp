@@ -14,13 +14,13 @@
 #include "hardcoded_values.h"
 
 
-void compute_IR(Plugin& handle, 
-                real32** IR_buffer, 
-                u32 IR_length, 
-                Audio_Parameters audio_parameters,
-                Plugin_Parameter_Value* current_parameters_values,
-                Arena *scratch_allocator,
-                Initializer *initializer)
+Runtime_Error_Flag compute_IR(Plugin& handle, 
+                              real32** IR_buffer, 
+                              u32 IR_length, 
+                              Audio_Parameters audio_parameters,
+                              Plugin_Parameter_Value* current_parameters_values,
+                              Arena *scratch_allocator,
+                              Initializer *initializer)
 {
     char *initial_allocator_position = arena_current(scratch_allocator);
     
@@ -38,22 +38,23 @@ void compute_IR(Plugin& handle,
     
     plugin_set_parameter_holder_from_values(&handle.descriptor, current_parameters_values, IR_parameters_holder);
     
-    int error_code = handle.initialize_state_f(IR_parameters_holder, 
-                                               IR_state_holder, 
-                                               audio_parameters.num_channels, 
-                                               audio_parameters.sample_rate, 
-                                               initializer);
+    Runtime_Error_Flag error = handle.initialize_state_f(IR_parameters_holder, 
+                                                         IR_state_holder, 
+                                                         audio_parameters.num_channels, 
+                                                         audio_parameters.sample_rate, 
+                                                         initializer);
     
-    printf("error code : %d\n", error_code);
-    exit(0);
-    handle.audio_callback_f(IR_parameters_holder, 
-                            IR_state_holder, 
-                            IR_buffer, 
-                            audio_parameters.num_channels, 
-                            IR_length, 
-                            audio_parameters.sample_rate);
-    
+    if(error == Runtime_No_Error)
+    {
+        handle.audio_callback_f(IR_parameters_holder, 
+                                IR_state_holder, 
+                                IR_buffer, 
+                                audio_parameters.num_channels, 
+                                IR_length, 
+                                audio_parameters.sample_rate);
+    }
     arena_reset(scratch_allocator, initial_allocator_position);
+    return error;
 }
 
 
@@ -331,10 +332,10 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
     };
 }
 
-void plugin_populate_from_descriptor(Plugin *handle, 
-                                     Arena *allocator, 
-                                     Initializer *initializer,
-                                     Audio_Parameters audio_parameters)
+Runtime_Error_Flag plugin_populate_from_descriptor(Plugin *handle, 
+                                                   Arena *allocator, 
+                                                   Initializer *initializer,
+                                                   Audio_Parameters audio_parameters)
 {
     handle->parameter_values_audio_side = (Plugin_Parameter_Value*)arena_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
     
@@ -345,15 +346,21 @@ void plugin_populate_from_descriptor(Plugin *handle,
     
     handle->default_parameters_f(handle->parameters_holder);
     
-    handle->initialize_state_f(handle->parameters_holder, 
-                               handle->state_holder, 
-                               audio_parameters.num_channels,
-                               audio_parameters.sample_rate, 
-                               initializer);
     
+    Runtime_Error_Flag error = handle->initialize_state_f(handle->parameters_holder, 
+                                                          handle->state_holder, 
+                                                          audio_parameters.num_channels,
+                                                          audio_parameters.sample_rate, 
+                                                          initializer);
+    
+    if(error != Runtime_No_Error)
+    {
+        return error;
+    }
     plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_ui_side, handle->parameters_holder);
     plugin_set_parameter_values_from_holder(&handle->descriptor, handle->parameter_values_audio_side, handle->parameters_holder);
     handle->ring = plugin_parameters_ring_buffer_initialize(handle->descriptor.num_parameters, RING_BUFFER_SLOT_COUNT, allocator);
+    return Runtime_No_Error;
 }
 
 
@@ -379,13 +386,29 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             ATOMIC_HARNESS();
             if(m->front_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
             {
-                plugin_populate_from_descriptor(m->front_handle, m->front_allocator, m->front_initializer, audio_parameters);
+                Runtime_Error_Flag error = plugin_populate_from_descriptor(m->front_handle, m->front_allocator, m->front_initializer, audio_parameters);
                 
-                m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
-                
-                ensure(compare_exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE, Asset_File_State_VALIDATING));
-                
-                *handle_to_pull_ir_from = m->front_handle;
+                if(error == Runtime_No_Error)
+                {
+                    
+                    m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
+                    
+                    ensure(compare_exchange_32(m->plugin_state, Asset_File_State_STAGE_USAGE, Asset_File_State_VALIDATING));
+                    
+                    *handle_to_pull_ir_from = m->front_handle;
+                }
+                else 
+                {
+                    printf("initialization failed\n");
+                    plugin_write_runtime_error_on_log(error, &m->gui_log);
+                    plugin_reset_handle(m->back_handle, m->back_allocator);
+                    
+                    m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
+                    
+                    printf("done cleaning up\n");
+                    ATOMIC_HARNESS();
+                    ensure(compare_exchange_32(m->plugin_state, Asset_File_State_FAILED, Asset_File_State_VALIDATING));
+                }
             }
             else
             {
@@ -401,7 +424,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
                 
                 printf("done cleaning up\n");
                 ATOMIC_HARNESS();
-                ensure(compare_exchange_32(m->plugin_state, Asset_File_State_FAILED,Asset_File_State_VALIDATING));
+                ensure(compare_exchange_32(m->plugin_state, Asset_File_State_FAILED, Asset_File_State_VALIDATING));
             }
         }break;
         
@@ -417,22 +440,47 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             {
                 printf("hot : compiler success\n");
                 
-                plugin_populate_from_descriptor(m->back_handle, m->back_allocator, m->back_initializer, audio_parameters);
+                Runtime_Error_Flag error = plugin_populate_from_descriptor(m->back_handle, m->back_allocator, m->back_initializer, audio_parameters);
                 
-                
-                m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
-                *handle_to_pull_ir_from = m->back_handle;
-                
-                ATOMIC_HARNESS();
-                ensure(compare_exchange_32(m->plugin_state,
-                                           Asset_File_State_HOT_RELOAD_STAGE_SWAP,
-                                           Asset_File_State_HOT_RELOAD_VALIDATING));
-                
-                printf("hot reload validation done\n");
+                if(error == Runtime_No_Error) 
+                {
+                    
+                    m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
+                    *handle_to_pull_ir_from = m->back_handle;
+                    
+                    ATOMIC_HARNESS();
+                    ensure(compare_exchange_32(m->plugin_state,
+                                               Asset_File_State_HOT_RELOAD_STAGE_SWAP,
+                                               Asset_File_State_HOT_RELOAD_VALIDATING));
+                    printf("hot reload validation done\n");
+                }
+                else 
+                {
+                    printf("initialization failed\n");
+                    plugin_write_runtime_error_on_log(error, &m->gui_log);
+                    plugin_reset_handle(m->back_handle, m->back_allocator);
+                    
+                    m->plugin_last_write_time = win32_get_last_write_time(m->source_filename);
+                    
+                    printf("hot : done cleaning up, back in use\n");
+                    
+                    if(m->front_handle->descriptor.error.flag != Compiler_Success)
+                    {
+                        ATOMIC_HARNESS();
+                        ensure(compare_exchange_32(m->plugin_state,
+                                                   Asset_File_State_FAILED,
+                                                   Asset_File_State_HOT_RELOAD_VALIDATING));
+                    }
+                    else{
+                        ATOMIC_HARNESS();
+                        ensure(compare_exchange_32(m->plugin_state,
+                                                   Asset_File_State_STAGE_USAGE,
+                                                   Asset_File_State_HOT_RELOAD_VALIDATING));
+                    }
+                }
             }
-            else 
+            else //failure 
             {
-                
                 printf("hot : compilation failed\n");
                 ensure(!m->back_handle->clang_ctx);
                 ensure(!m->back_handle->parameter_values_audio_side);
@@ -443,7 +491,8 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
                 
                 printf("hot : done cleaning up, back in use\n");
                 
-                if(m->front_handle->descriptor.error.flag != Compiler_Success){
+                if(m->front_handle->descriptor.error.flag != Compiler_Success)
+                {
                     ATOMIC_HARNESS();
                     ensure(compare_exchange_32(m->plugin_state,
                                                Asset_File_State_FAILED,
@@ -640,13 +689,31 @@ void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m)
 #define CUSTOM_COMPILER_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
 #define CUSTOM_RUNTIME_ERROR_FLAG(flag) 
 
-String compiler_error_flag_to_string(Compiler_Error_Flag flag)
+String compiler_error_flag_to_string(int flag)
 {
     switch(flag)
     {
 #include "errors.inc"
         default : {
             ensure(false && "why doesn't this switch cover all compiler errors ?\n");
+            return {};
+        }
+    }
+}
+#undef CUSTOM_COMPILER_ERROR_FLAG
+#undef CUSTOM_RUNTIME_ERROR_FLAG
+
+//~ Error messages
+#define CUSTOM_COMPILER_ERROR_FLAG(flag) 
+#define CUSTOM_RUNTIME_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
+
+String runtime_error_flag_to_string(int flag)
+{
+    switch(flag)
+    {
+#include "errors.inc"
+        default : {
+            ensure(false && "why doesn't this switch cover all runtime errors ?\n");
             return {};
         }
     }
@@ -764,6 +831,24 @@ void append_clang_message_to_log(Compiler_Gui_Log *log, Clang_Error *error)
     strncpy(new_message->str + location_char_length, error->message.str, error->message.size);
     
     new_message->size = error->message.size + location_char_length;
+    log->holder_current += align(new_message->size);
+}
+
+void plugin_write_runtime_error_on_log(Runtime_Error_Flag flag, Compiler_Gui_Log *log)
+{
+    log->message_count = 0;
+    log->holder_current = log->holder_base;
+    String flag_string = runtime_error_flag_to_string(flag);
+    
+    ensure(log->message_count < log->message_capacity);
+    String *new_message = &log->messages[log->message_count++];
+    new_message->str = log->holder_current;
+    
+    i32 header_char_length = sprintf(new_message->str, "runtime error : ");
+    
+    strncpy(new_message->str + header_char_length, flag_string.str, flag_string.size);
+    
+    new_message->size = flag_string.size + header_char_length;
     log->holder_current += align(new_message->size);
 }
 

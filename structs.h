@@ -48,6 +48,15 @@ enum Compiler_Error_Flag{
 #undef CUSTOM_COMPILER_ERROR_FLAG
 #undef CUSTOM_RUNTIME_ERROR_FLAG
 
+
+#define CUSTOM_COMPILER_ERROR_FLAG(flag)  
+#define CUSTOM_RUNTIME_ERROR_FLAG(flag) flag,
+enum Runtime_Error_Flag : int {
+#include "errors.inc"
+};
+#undef CUSTOM_COMPILER_ERROR_FLAG
+#undef CUSTOM_RUNTIME_ERROR_FLAG
+
 enum Compiler_Failure_Stage{
     Compiler_Failure_Stage_Clang_First_Pass,
     Compiler_Failure_Stage_Finding_Decls,
