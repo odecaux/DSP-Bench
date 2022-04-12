@@ -152,10 +152,16 @@ enum Colors : u32 {
     Color_Back = 0xff000000
 };
 
+typedef enum {
+    Panel_Log,
+    Panel_Plugin,
+    Panel_Audio_Setup
+} Panel;
+
 typedef struct{
     i64 selected_parameter_id;
     i64 previous_selected_parameter_id;
-    bool show_error_log;
+    Panel current_panel;
 } UI_State;
 
 struct Window_Backend_Context;

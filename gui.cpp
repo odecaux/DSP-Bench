@@ -21,7 +21,7 @@ struct UI_Context{
     real32 font_size;
 };
 
-void text_box(const String& text, Rect bounds, Color col, real32 size, Font *font, Draw_Command_List *cmd_list)
+void text_box(String text, Rect bounds, Color col, real32 size, Font *font, Draw_Command_List *cmd_list)
 {
     Draw_Command *old_cmd = &cmd_list->draw_commands[cmd_list->draw_command_count - 1];
     ensure(old_cmd->type == Draw_Command_Type_ATLAS);
@@ -47,10 +47,7 @@ void draw_slider(Rect slider_bounds,
     fill_rectangle(slider_rect, col, cmd_list);
 }
 
-
 //~ Widgets
-
-
 
 real32 simple_slider(real32 normalized_value, i32 id, 
                      Rect bounds, UI_Context ui)
@@ -386,21 +383,21 @@ struct Dropdown_State {
     Rect bounds;
 };
 
-Dropdown_State dropdown_start(Rect bounds, i32 id, UI_Context ui)
+Dropdown_State dropdown_start(Rect bounds, String text, i32 id, UI_Context ui)
 {
     bool active = ui.state->selected_parameter_id == id;
     bool hovered = rect_contains(bounds, ui.io.mouse_position); 
     
     if(!active){
         bool clicked = false;
-        
         if(hovered && ui.io.mouse_clicked)
         {
             clicked = true;
             ensure(ui.state->selected_parameter_id == -1);
             ui.state->selected_parameter_id = id;
         }
-        fill_rectangle(bounds, ui.color_frame, &ui.g->command_list);
+        draw_rectangle(bounds, 1.0f, ui.color_frame, &ui.g->command_list);
+        text_box(text, bounds, ui.color_front,ui. font_size, &ui.g->font, &ui.g->command_list);
     }
     return {
         id,
@@ -427,6 +424,7 @@ bool dropdown_elem(String text, Dropdown_State *drop, UI_Context ui)
             clicked = true;
         }
         draw_rectangle(bounds, 1.0f, ui.color_frame, &ui.g->popup_command_list);
+        text_box(text, bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->popup_command_list);
     }
     
     return clicked;
@@ -647,9 +645,9 @@ void header(Asset_File_State plugin_state,
     
 }
 
-void draw_compiler_log(Compiler_Gui_Log *error_log, 
-                       Rect bounds, 
-                       UI_Context ui);
+void main_panel_compiler_log(Compiler_Gui_Log *error_log, 
+                             Rect bounds, 
+                             UI_Context ui);
 
 void plugin_parameter_panel(Plugin_Descriptor *descriptor, 
                             Plugin_Parameter_Value* current_parameter_values,
@@ -682,36 +680,19 @@ void main_panel_pluin_and_viz(Asset_File_State plugin_state,
         case Asset_File_State_HOT_RELOAD_STAGE_DISPOSE :
         case Asset_File_State_HOT_RELOAD_DISPOSING :
         {
-            Rect tab_switcher_bounds = rect_shrinked(rect_take_top(main_panel_bounds, TITLE_HEIGHT), 5.0f, 5.0f); 
             
-            main_panel_bounds = rect_drop_top(main_panel_bounds, TITLE_HEIGHT); 
+            Rect left_panel_bounds = rect_shrinked(rect_take_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
+            Rect right_panel_bounds = rect_shrinked(rect_drop_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
             
-            tab_switcher_bounds = rect_take_left(tab_switcher_bounds, 100.0f);
-            if(button(tab_switcher_bounds, StringLit("Log"), 444, ui))
-            {
-                ui.state->show_error_log = !ui.state->show_error_log;
-            }
+            plugin_parameter_panel(descriptor, current_parameter_values, left_panel_bounds, ui, parameters_were_tweaked);
             
-            if(!ui.state->show_error_log)
-            {
-                Rect left_panel_bounds = rect_shrinked(rect_take_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
-                Rect right_panel_bounds = rect_shrinked(rect_drop_left(main_panel_bounds, PARAMETER_PANEL_WIDTH), 5.0f, 5.0f);
-                
-                plugin_parameter_panel(descriptor, current_parameter_values, left_panel_bounds, ui, parameters_were_tweaked);
-                
-                draw_visualization_panel(right_panel_bounds, analysis, ui);
-            }
-            else
-            {
-                
-                rect_shrink(&main_panel_bounds, 5.0f, 5.0f);
-                draw_compiler_log(error_log, main_panel_bounds, ui);
-            }
+            draw_visualization_panel(right_panel_bounds, analysis, ui);
+            
         } break;
         
         case Asset_File_State_FAILED :
         {
-            draw_compiler_log(error_log, main_panel_bounds, ui);
+            main_panel_compiler_log(error_log, main_panel_bounds, ui);
             
         }break;
     }
@@ -789,11 +770,12 @@ void draw_visualization_panel(Rect bounds, Analysis *analysis, UI_Context ui)
         draw_push_atlas_command(last_clip, &ui.g->command_list);
     }
 }
-void draw_compiler_log(Compiler_Gui_Log *error_log, 
-                       Rect bounds, 
-                       UI_Context ui)
+void main_panel_compiler_log(Compiler_Gui_Log *error_log, 
+                             Rect bounds, 
+                             UI_Context ui)
 {
     
+    bounds = rect_shrinked(bounds, 5.0f, 5.0f);
     draw_rectangle(bounds, 1.0f, ui.color_frame, &ui.g->command_list);
     
     Rect message_bounds = rect_take_top(bounds, TITLE_HEIGHT);
@@ -805,6 +787,43 @@ void draw_compiler_log(Compiler_Gui_Log *error_log,
         draw_text(error_log->messages[i], message_bounds, ui.color_front, ui.font_size, &ui.g->font, &ui.g->command_list);
         message_bounds = rect_move_by(message_bounds, {0.0f, TITLE_HEIGHT});
     }
+}
+
+void main_panel_audio_setup(Rect bounds, 
+                            UI_Context ui)
+{
+    bounds = rect_shrinked(bounds, 5.0f, 5.0f);
+    draw_rectangle(bounds, 1.0f, ui.color_frame, &ui.g->command_list);
+    
+    
+    Rect audio_thread_toggle_bounds = rect_take_top(bounds, 40);
+    audio_thread_toggle_bounds = rect_move_by(audio_thread_toggle_bounds, {10.0f, 0.0f});
+    audio_thread_toggle_bounds = rect_take_left(audio_thread_toggle_bounds, 100);
+    
+    bool use_audio_thread = false;
+    checkbox(audio_thread_toggle_bounds, StringLit("Audio Thread"), 5555, ui, &use_audio_thread);
+    
+    Rect audio_input_dropdown_bounds = rect_move_by(audio_thread_toggle_bounds, Vec2{0.0f, 60.0f});
+    Rect audio_output_dropdown_bounds = rect_move_by(audio_input_dropdown_bounds, Vec2{120, 0.0f});
+    
+    auto input_drop = dropdown_start(audio_input_dropdown_bounds, StringLit("input 1"), 5556, ui); 
+    if(dropdown_elem(StringLit("input 1"), &input_drop , ui))
+    {
+    }
+    if(dropdown_elem(StringLit("input 2"), &input_drop , ui))
+    {
+    }
+    dropdown_end(input_drop, ui);
+    
+    
+    auto output_drop = dropdown_start(audio_output_dropdown_bounds, StringLit("output 1"), 5557, ui); 
+    if(dropdown_elem(StringLit("output 1"), &output_drop , ui))
+    {
+    }
+    if(dropdown_elem(StringLit("output 2"), &output_drop , ui))
+    {
+    }
+    dropdown_end(output_drop, ui);
 }
 
 void audio_file_footer(Asset_File_State audio_file_state, 
@@ -872,9 +891,7 @@ void audio_file_footer(Asset_File_State audio_file_state,
 
 
 
-#ifdef DEBUG 
 extern "C" __declspec(dllexport)
-#endif
 void frame(Plugin_Descriptor& descriptor, 
            Graphics_Context *graphics_ctx, 
            UI_State& ui_state, 
@@ -904,23 +921,6 @@ void frame(Plugin_Descriptor& descriptor,
         .font_size = 20.0f
     };
     
-    /*
-        Rect toggle_bounds_0 = { Vec2{ 100.0f, 30.0f} , Vec2{ 30.0f, 18.0f} };
-        auto drop = dropdown_start(toggle_bounds_0, 10000003, ui); 
-        
-        if(dropdown_elem(StringLit("test1"), &drop, ui))
-        {
-            printf("cheh\n");
-        }
-        if(dropdown_elem(StringLit("test1"), &drop, ui))
-        {
-            printf("cheh 2\n");
-        }
-        
-        dropdown_end(drop, ui);
-        return;
-        */
-    
     Rect header_bounds = rect_shrinked(rect_take_top(window_bounds, TITLE_HEIGHT + 10.0f), 5.0f, 10.0f);
     
     window_bounds = rect_drop_top(window_bounds, TITLE_HEIGHT); 
@@ -947,9 +947,48 @@ void frame(Plugin_Descriptor& descriptor,
             *load_plugin_was_clicked = true;
     }
     
+    Rect tab_bounds = rect_shrinked(rect_take_top(main_panel_bounds, TITLE_HEIGHT), 5.0f, 5.0f); 
+    main_panel_bounds = rect_drop_top(main_panel_bounds, TITLE_HEIGHT); 
     
-    main_panel_pluin_and_viz(plugin_state, &descriptor, current_parameter_values, error_log, analysis, 
-                             main_panel_bounds, ui, parameters_were_tweaked);
+    Rect plugin_tab_bounds = rect_take_left(tab_bounds, 100.0f);
+    Rect log_tab_bounds = rect_move_by(plugin_tab_bounds, {110.0f, 0.0f});
+    Rect audio_setup_tab_bounds = rect_move_by(log_tab_bounds, {110.0f, 0.0f});
+    
+    if(button(plugin_tab_bounds, StringLit("Plugin"), 444, ui))
+    {
+        ui.state->current_panel = Panel_Plugin;
+    }
+    
+    if(button(log_tab_bounds, StringLit("Log"), 445, ui))
+    {
+        ui.state->current_panel = Panel_Log;
+    }
+    
+    if(button(audio_setup_tab_bounds, StringLit("Setup"), 446, ui))
+    {
+        ui.state->current_panel = Panel_Audio_Setup;
+    }
+    
+    switch(ui.state->current_panel)
+    {
+        case Panel_Plugin :
+        {
+            main_panel_pluin_and_viz(plugin_state, &descriptor, current_parameter_values, error_log, analysis, 
+                                     main_panel_bounds, ui, parameters_were_tweaked);
+        } break;
+        
+        case Panel_Log :
+        {
+            
+            main_panel_compiler_log(error_log, main_panel_bounds, ui);
+        } break;
+        
+        case Panel_Audio_Setup :
+        {
+            main_panel_audio_setup(main_panel_bounds, ui);
+        } break;
+    }
+    
     
     
     //~footer

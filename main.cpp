@@ -252,7 +252,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     u64 gui_dll_last_write_time = win32_get_last_write_time("gui.dll");
 #endif
     
-    UI_State ui_state = {-1, -1, false};
+    UI_State ui_state = {-1, -1, Panel_Plugin};
     i64 last_time = win32_get_time();
     bool done = false;
     
