@@ -39,7 +39,7 @@ State initialize_state(const Parameters& param,
     phasor_32_array(initial_state.buffer[0], 1.0f, 0.02f, BUFFER_SIZE, &phase);
     */
     
-    set_array(2.0, initial_state.buffer[0], BUFFER_SIZE);
+    set_array(.1, initial_state.buffer[0], BUFFER_SIZE);
     real32 *db = (real32*)allocate_bytes(sizeof(real32) * BUFFER_SIZE, initialization_context);
     
     //to_db_32_array(initial_state.buffer[0], initial_state.buffer[0], BUFFER_SIZE);
@@ -83,6 +83,7 @@ void audio_callback(const Parameters& param,
     {
         for(int channel = 0; channel < num_channels; channel++)
         {
+            state.buffer[0][state.cursor] += 0.1f;
             out_buffer[channel][sample] =  state.buffer[0][state.cursor]; 
             //out_buffer[channel][sample] =  state.fft_out_real[sample] ;
         }

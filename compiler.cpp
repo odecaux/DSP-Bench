@@ -25,6 +25,7 @@
 
 struct LLVM_Context {
     llvm::LLVMContext llvm_context;
+    std::unique_ptr<llvm::Module> wrapper_module;
 };
 
 struct Decl_Handle{
@@ -231,6 +232,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
                  Plugin_Descriptor& descriptor,
                  Plugin_Required_Decls& decls,
                  llvm::LLVMContext *llvm_context,
+                 llvm::Module *wrapper_module,
                  clang::ASTContext *ast_context,
                  Plugin *plugin,
                  Arena *allocator);
@@ -346,9 +348,9 @@ LLVM_Context* create_llvm_context_impl()
     llvm::sys::DynamicLibrary::AddSymbol("cosh_64", oct_cosh_64);
     llvm::sys::DynamicLibrary::AddSymbol("tanh_64", oct_tanh_64);
     
-    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffer", plugin_allocate_buffer);
-    llvm::sys::DynamicLibrary::AddSymbol("allocate_buffers", plugin_allocate_buffers);
-    llvm::sys::DynamicLibrary::AddSymbol("allocate_bytes", plugin_allocate_bytes);
+    llvm::sys::DynamicLibrary::AddSymbol("plugin_allocate_buffer_app", plugin_allocate_buffer);
+    llvm::sys::DynamicLibrary::AddSymbol("plugin_allocate_buffers_app", plugin_allocate_buffers);
+    llvm::sys::DynamicLibrary::AddSymbol("plugin_allocate_bytes_app", plugin_allocate_bytes);
     
     llvm::sys::DynamicLibrary::AddSymbol("fft_initialize", plugin_fft_initialize);
     llvm::sys::DynamicLibrary::AddSymbol("fft_forward", fft_forward);
@@ -396,7 +398,61 @@ LLVM_Context* create_llvm_context_impl()
     llvm::initializeInstrumentation(Registry);
     llvm::initializeTarget(Registry);
     
+    
     auto* llvm_ctx = new LLVM_Context();
+    
+    {
+        auto compiler_instance = clang::CompilerInstance();
+        
+        clang::LangOptions language_options{};
+        language_options.Bool = 1;
+        language_options.CPlusPlus = 1;
+        language_options.RTTI = 0;
+        language_options.CXXExceptions = 0;
+        language_options.MSVCCompat = 1;
+        language_options.MicrosoftExt = 1;
+        
+        auto triple = llvm::sys::getDefaultTargetTriple();
+        auto triple_str = "-triple=" + triple;
+        
+        compiler_instance.createDiagnostics();
+        clang::CompilerInvocation::CreateFromArgs(compiler_instance.getInvocation(),
+                                                  {
+                                                      triple_str.c_str(),
+                                                      "-xc++",
+                                                      "-std=c++17",
+                                                      "-fdeclspec",
+                                                      "-fms-extensions",
+                                                      "-fms-compatibility",
+                                                      "-fcxx-exceptions", 
+                                                      "-fexceptions",
+                                                      "-v",
+                                                  }, 
+                                                  compiler_instance.getDiagnostics());
+        
+        compiler_instance.getTargetOpts().Triple = triple;
+        compiler_instance.getLangOpts() = language_options;
+        auto& header_opts = compiler_instance.getHeaderSearchOpts();
+        /*
+        Clang.getHeaderSearchOpts().ResourceDir =
+            CompilerInvocation::GetResourcesPath(argv[0], MainAddr);
+        */
+        //TODO delete this ?
+        compiler_instance.createTarget();
+        
+        auto kind = clang::InputKind(clang::Language::CXX);
+        clang::FrontendInputFile input_file = clang::FrontendInputFile("../wrapper_plugin_object.cpp", kind);
+        
+        compiler_instance.getFrontendOpts().Inputs.clear();
+        compiler_instance.getFrontendOpts().Inputs.push_back(std::move(input_file));
+        
+        auto back = compiler_instance.getFrontendOpts().Inputs.back();
+        
+        
+        auto compile_action = clang::EmitLLVMOnlyAction(&llvm_ctx->llvm_context);
+        (compiler_instance.ExecuteAction(compile_action));
+        llvm_ctx->wrapper_module = compile_action.takeModule();
+    }
     
     return llvm_ctx;
 }
@@ -452,7 +508,6 @@ Plugin try_compile_impl(const char* filename, LLVM_Context* llvm_ctx, Arena *all
                                                   {
                                                       triple_str.c_str(),
                                                       "-Ofast", 
-                                                      "-fcxx-exceptions", 
                                                       "-fms-extensions", 
                                                       "-ffast-math", 
                                                       "-fdenormal-fp-math=positive-zero"
@@ -462,9 +517,10 @@ Plugin try_compile_impl(const char* filename, LLVM_Context* llvm_ctx, Arena *all
         compiler_instance->getTargetOpts().Triple = triple;
         compiler_instance->getLangOpts() = language_options;
         auto& header_opts = compiler_instance->getHeaderSearchOpts();
-        //header_opts.Verbose = true;
         header_opts.AddPath(".", clang::frontend::Quoted , false, false);
+        header_opts.UseBuiltinIncludes = 0; //TODO ????
         
+        //TODO est-ce que je peux enlever cette ligne ? 
         compiler_instance->createTarget();
     }
     
@@ -514,7 +570,7 @@ Plugin try_compile_impl(const char* filename, LLVM_Context* llvm_ctx, Arena *all
         }
         
         plugin.failure_stage = Compiler_Failure_Stage_Clang_First_Pass;
-        delete ast_context;
+        ast_context->Release();
         delete compiler_instance;
         return plugin;
     }
@@ -533,10 +589,9 @@ Plugin try_compile_impl(const char* filename, LLVM_Context* llvm_ctx, Arena *all
             decls.state_struct.error
         };
         
-        delete ast_context;
+        ast_context->Release();
         delete compiler_instance;
         return plugin;
-        
     }
     
     bool plugin_needs_to_be_reinitialized = true;
@@ -558,9 +613,9 @@ Plugin try_compile_impl(const char* filename, LLVM_Context* llvm_ctx, Arena *all
     if(plugin.descriptor.error.flag != Compiler_Success){
         plugin.failure_stage = Compiler_Failure_Stage_Parsing_Parameters; 
         
-        delete ast_context;
+        ast_context->Release();
         delete compiler_instance;
-        return plugin; 
+        return plugin;
     }
     
     new_buffer = rewrite_plugin_source(decls, 
@@ -575,10 +630,11 @@ Plugin try_compile_impl(const char* filename, LLVM_Context* llvm_ctx, Arena *all
                 plugin.descriptor,
                 decls,
                 &llvm_ctx->llvm_context,
+                llvm_ctx->wrapper_module.get(),
                 ast_context,
                 &plugin, allocator);
     if(plugin.failure_stage == Compiler_Failure_Stage_Clang_Second_Pass){
-        delete ast_context;
+        ast_context->Release();
         delete compiler_instance;
     }
     else {
@@ -1138,13 +1194,12 @@ rewrite_plugin_source(Plugin_Required_Decls decls,
         "}\n";
     
     std::string initialize_state_type_wrapper = "\n"
-        "extern \"C\" int initialize_state_type_wrapper(void* parameters_ptr, void* out_initial_state_ptr, unsigned int num_channels, float sample_rate, void *allocator)\n"
+        "extern \"C\" void initialize_state_type_wrapper(void* parameters_ptr, void* out_initial_state_ptr, unsigned int num_channels, float sample_rate, void *allocator)\n"
         "{\n"
         + parameters_name + "* parameters = (" + parameters_name + "*)parameters_ptr;\n"
         
         + state_name + "* out_initial_state = (" + state_name + "*)out_initial_state_ptr;\n"
         "*out_initial_state = initialize_state(*parameters, num_channels, sample_rate, allocator);\n"
-        "return 0;\n"
         "}\n";
     
     clang::Rewriter rewriter{source_manager, language_options};
@@ -1166,6 +1221,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
                  Plugin_Descriptor& descriptor,
                  Plugin_Required_Decls& decls,
                  llvm::LLVMContext *llvm_context,
+                 llvm::Module *wrapper_module,
                  clang::ASTContext *ast_context,
                  Plugin *plugin, Arena *allocator)
 {
@@ -1188,9 +1244,7 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
     if(error_count != 0)
     {
         ensure(action_result == false);
-        
         //NOTE only possible because we set this ourselves
-        
         plugin->clang_error_log = {
             (Clang_Error*)arena_allocate(allocator, sizeof(Clang_Error) * error_count),
             0,
@@ -1201,49 +1255,54 @@ void jit_compile(llvm::MemoryBufferRef new_buffer, clang::CompilerInstance& comp
         {
             errors_push_clang(&plugin->clang_error_log, {allocate_and_copy_std_string(allocator, error_it->second)});
         }
-        
         plugin->failure_stage = { Compiler_Failure_Stage_Clang_Second_Pass };
         return;
     }
     std::unique_ptr<llvm::Module> module = compile_action.takeModule();
     
+    
+    
     ensure(module); 
+    {
+        //Optimizations
+        llvm::PassBuilder passBuilder;
+        llvm::LoopAnalysisManager loopAnalysisManager;
+        llvm::FunctionAnalysisManager functionAnalysisManager;
+        llvm::CGSCCAnalysisManager cGSCCAnalysisManager;
+        llvm::ModuleAnalysisManager moduleAnalysisManager;
+        
+        passBuilder.registerModuleAnalyses(moduleAnalysisManager);
+        passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
+        functionAnalysisManager.registerPass([&]{ return passBuilder.buildDefaultAAPipeline(); });
+        passBuilder.registerFunctionAnalyses(functionAnalysisManager);
+        passBuilder.registerLoopAnalyses(loopAnalysisManager);
+        passBuilder.crossRegisterProxies(loopAnalysisManager, 
+                                         functionAnalysisManager, 
+                                         cGSCCAnalysisManager, 
+                                         moduleAnalysisManager);
+        
+        llvm::ModulePassManager module_pass_manager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
+        module_pass_manager.run(*module, moduleAnalysisManager);
+    }
     
-    //Optimizations
-    llvm::PassBuilder passBuilder;
-    llvm::LoopAnalysisManager loopAnalysisManager;
-    llvm::FunctionAnalysisManager functionAnalysisManager;
-    llvm::CGSCCAnalysisManager cGSCCAnalysisManager;
-    llvm::ModuleAnalysisManager moduleAnalysisManager;
-    
-    passBuilder.registerModuleAnalyses(moduleAnalysisManager);
-    passBuilder.registerCGSCCAnalyses(cGSCCAnalysisManager);
-    functionAnalysisManager.registerPass([&]{ return passBuilder.buildDefaultAAPipeline(); });
-    passBuilder.registerFunctionAnalyses(functionAnalysisManager);
-    passBuilder.registerLoopAnalyses(loopAnalysisManager);
-    passBuilder.crossRegisterProxies(loopAnalysisManager, 
-                                     functionAnalysisManager, 
-                                     cGSCCAnalysisManager, 
-                                     moduleAnalysisManager);
-    
-    llvm::ModulePassManager module_pass_manager = passBuilder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3);
-    module_pass_manager.run(*module, moduleAnalysisManager);
-    
-    llvm::EngineBuilder builder(std::move(module));
-    builder.setMCJITMemoryManager(std::make_unique<llvm::SectionMemoryManager>());
-    builder.setOptLevel(llvm::CodeGenOpt::Level::Aggressive);
-    
-    llvm::ExecutionEngine *engine = builder.create();
-    ensure(engine); 
-    
-    //return { Compiler_Cant_Launch_Jit };
-    
-    //on en a pas vraiment besoin de faire ça. C'est dans le cas où on chargerait plusieur modules sur le même executionEngine
-    engine->finalizeObject();
+    llvm::ExecutionEngine *engine;
+    {
+        
+        auto wrapper_clone = llvm::CloneModule(*wrapper_module);
+        ensure(!llvm::Linker::linkModules(*module, std::move(wrapper_clone) ));
+        llvm::EngineBuilder builder(std::move(module));
+        
+        builder.setMCJITMemoryManager(std::make_unique<llvm::SectionMemoryManager>());
+        builder.setOptLevel(llvm::CodeGenOpt::Level::Aggressive);
+        
+        engine = builder.create();
+        ensure(engine); 
+        engine->finalizeObject();
+    }
     
     auto audio_callback_f = (audio_callback_t)engine->getFunctionAddress("audio_callback_type_wrapper");
     auto default_parameters_f = (default_parameters_t)engine->getFunctionAddress("default_parameters_type_wrapper");
-    auto initialize_state_f = (initialize_state_t)engine->getFunctionAddress("initialize_state_type_wrapper");
+    auto initialize_state_f = (initialize_state_t)engine->getFunctionAddress("initialize_state_error_wrapper");
     
     
     ensure(audio_callback_f && default_parameters_f && initialize_state_f);

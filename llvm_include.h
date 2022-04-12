@@ -46,8 +46,8 @@
 #include <llvm/Support/DynamicLibrary.h>
 #include <llvm/Analysis/AliasAnalysis.h>
 
-
-
-#include <clang/Frontend/CompilerInstance.h>
-
+#include <llvm/Transforms/Utils/Cloning.h>
+#include <llvm/Linker/Linker.h>
+#include <llvm/Bitcode/BitcodeReader.h>
+#include "llvm/Bitcode/BitcodeWriter.h"
 #endif //COMPILER_PCH_H

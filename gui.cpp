@@ -582,7 +582,7 @@ void header(Asset_File_State plugin_state,
             {
                 Rect load_plugin_button_bounds = rect_take_left(title_bounds, TITLE_HEIGHT * 3);
                 title_bounds = rect_drop_left(title_bounds, TITLE_HEIGHT * 3);
-                if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, ui))
+                if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1025, ui))
                 {
                     *load_plugin_was_clicked = true;
                 }
@@ -621,7 +621,7 @@ void header(Asset_File_State plugin_state,
         {
             Rect load_plugin_button_bounds = rect_take_left(header_bounds, TITLE_HEIGHT * 3);
             header_bounds = rect_drop_left(header_bounds, TITLE_HEIGHT * 3);
-            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1024, ui))
+            if(button(load_plugin_button_bounds, StringLit("Load Plugin"), 1025, ui))
             {
                 *load_plugin_was_clicked = true;
             }
@@ -863,7 +863,7 @@ void audio_file_footer(Asset_File_State audio_file_state,
     Rect load_button_bounds = rect_take_left(footer_bounds, TITLE_HEIGHT * 3);
     footer_bounds = rect_drop_left(footer_bounds, TITLE_HEIGHT * 3);
     
-    if(button(load_button_bounds, StringLit("Load"), 1024, ui))
+    if(button(load_button_bounds, StringLit("Load"), 1032, ui))
         *clicked_on_load = true;
     
     draw_rectangle(footer_bounds, 1.0f, ui.color_frame, &ui.g->command_list);

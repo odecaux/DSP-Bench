@@ -40,13 +40,13 @@ enum Asset_File_State : u32 {
 
 //~ Compiler Error Handling
 
-#define CUSTOM_ERROR_FLAG(flag) flag, 
-
+#define CUSTOM_COMPILER_ERROR_FLAG(flag) flag, 
+#define CUSTOM_RUNTIME_ERROR_FLAG(flag) 
 enum Compiler_Error_Flag{
 #include "errors.inc"
 };
-#undef CUSTOM_ERROR_FLAG
-
+#undef CUSTOM_COMPILER_ERROR_FLAG
+#undef CUSTOM_RUNTIME_ERROR_FLAG
 
 enum Compiler_Failure_Stage{
     Compiler_Failure_Stage_Clang_First_Pass,

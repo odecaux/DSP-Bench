@@ -38,12 +38,14 @@ void compute_IR(Plugin& handle,
     
     plugin_set_parameter_holder_from_values(&handle.descriptor, current_parameters_values, IR_parameters_holder);
     
-    handle.initialize_state_f(IR_parameters_holder, 
-                              IR_state_holder, 
-                              audio_parameters.num_channels, 
-                              audio_parameters.sample_rate, 
-                              initializer);
+    int error_code = handle.initialize_state_f(IR_parameters_holder, 
+                                               IR_state_holder, 
+                                               audio_parameters.num_channels, 
+                                               audio_parameters.sample_rate, 
+                                               initializer);
     
+    printf("error code : %d\n", error_code);
+    exit(0);
     handle.audio_callback_f(IR_parameters_holder, 
                             IR_state_holder, 
                             IR_buffer, 
@@ -635,7 +637,9 @@ void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m)
 }
 
 //~ Error messages
-#define CUSTOM_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
+#define CUSTOM_COMPILER_ERROR_FLAG(flag) case flag : return StringLit(#flag); break;
+#define CUSTOM_RUNTIME_ERROR_FLAG(flag) 
+
 String compiler_error_flag_to_string(Compiler_Error_Flag flag)
 {
     switch(flag)
@@ -647,7 +651,8 @@ String compiler_error_flag_to_string(Compiler_Error_Flag flag)
         }
     }
 }
-#undef CUSTOM_ERROR_FLAG
+#undef CUSTOM_COMPILER_ERROR_FLAG
+#undef CUSTOM_RUNTIME_ERROR_FLAG
 
 void maybe_append_fun_error(Compiler_Gui_Log *log, String function_name, Custom_Error error)
 {
