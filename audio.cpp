@@ -10,12 +10,12 @@
 #include "audio.h"
 #include "plugin.h"
 
-void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thread_Context* ctx)
+void render_audio(real32** output_buffer, Audio_Format format, Audio_Thread_Context* ctx)
 {
     
-    for(auto channel = 0; channel < parameters.num_channels; channel++)
+    for(auto channel = 0; channel < format.num_channels; channel++)
     {
-        memset(output_buffer[channel], 0, parameters.num_samples * sizeof(real32));
+        memset(output_buffer[channel], 0, format.num_samples * sizeof(real32));
     }
     
     if(ctx->m)
@@ -62,7 +62,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
            audio_file_play)
         {
             real32** audio_file_buffer = ctx->audio_file->deinterleaved_buffer;
-            u64 channels_to_write = octave_min(ctx->audio_file->num_channels, parameters.num_channels);
+            u64 channels_to_write = octave_min(ctx->audio_file->num_channels, format.num_channels);
             u64 audio_file_length = ctx->audio_file->samples_by_channel;
             u64 read_cursor = ctx->audio_file->read_cursor;
             u64 original_read_cursor = read_cursor;
@@ -72,7 +72,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
             if(audio_file_loop == 0)
             {
                 u64 samples_left_in_file = audio_file_length - read_cursor;
-                u64 samples_to_write  = octave_min(samples_left_in_file, parameters.num_samples);
+                u64 samples_to_write  = octave_min(samples_left_in_file, format.num_samples);
                 
                 //copy audio
                 for(auto channel = 0; channel < channels_to_write; channel++)
@@ -83,7 +83,7 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                 //zero remaining of buffer
                 for(auto channel = 0; channel < channels_to_write; channel++)
                 {
-                    for(auto sample = samples_to_write; sample < parameters.num_samples; sample++)
+                    for(auto sample = samples_to_write; sample < format.num_samples; sample++)
                     {
                         output_buffer[channel][sample] = 0.0f;
                     }
@@ -101,10 +101,10 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
             {
                 u64 written_samples = 0;
                 
-                while(written_samples < parameters.num_samples)
+                while(written_samples < format.num_samples)
                 {
                     u64 samples_left_in_file = audio_file_length - read_cursor;
-                    u64 samples_left_in_buffer = parameters.num_samples - written_samples; 
+                    u64 samples_left_in_buffer = format.num_samples - written_samples; 
                     
                     if(samples_left_in_file > samples_left_in_buffer)
                     {
@@ -135,9 +135,9 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                                 read_cursor,
                                 original_read_cursor);
             //zero buffers that don't map to a channel 
-            for(auto channel = channels_to_write; channel < parameters.num_channels; channel++)
+            for(auto channel = channels_to_write; channel < format.num_channels; channel++)
             {
-                memset(output_buffer[channel], 0, parameters.num_samples * sizeof(real32));
+                memset(output_buffer[channel], 0, format.num_samples * sizeof(real32));
             }
         }
         
@@ -160,9 +160,9 @@ void render_audio(real32** output_buffer, Audio_Parameters parameters, Audio_Thr
                         plugin->audio_callback_f(plugin->parameters_holder,
                                                  plugin->state_holder,
                                                  output_buffer,
-                                                 parameters.num_channels,
-                                                 parameters.num_samples,
-                                                 parameters.sample_rate);
+                                                 format.num_channels,
+                                                 format.num_samples,
+                                                 format.sample_rate);
                     }
                 }break;
                 case Asset_File_State_HOT_RELOAD_SWAPPING :

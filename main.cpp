@@ -6,6 +6,7 @@
 #include "windows.h"
 #include "string.h"
 
+
 #include "base.h"
 #include "structs.h"
 #include "memory.h"
@@ -41,6 +42,7 @@ typedef void(*frame_t)(
                        Plugin_Parameter_Value* current_parameter_values, 
                        Audio_Thread_Context *audio_ctx, 
                        Compiler_Gui_Log *error_log,
+                       Device_List *audio_device_list,
                        Analysis *analysis, 
                        bool *parameters_were_tweaked, 
                        bool *load_was_clicked, 
@@ -177,11 +179,15 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     audio_context.audio_file_state = &wav_state;
     audio_context.plugin_state = &plugin_state;
     audio_context.m = nullptr;
-    Audio_Parameters audio_parameters = {};
+    Audio_Format audio_format = {};
     MemoryBarrier();
     
     
-    if(!audio_initialize(&platform_audio_context, &audio_parameters, &audio_context, &app_allocator))
+    auto audio_device_list = get_device_list();
+    
+    Audio_Device *default_output = &audio_device_list.outputs[audio_device_list.default_output_idx];
+    
+    if(!audio_initialize(&platform_audio_context, &audio_format, &audio_context, &app_allocator, default_output))
     {
         printf("failed to initialize audio\n");
         return -1;
@@ -240,7 +246,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
     Arena gui_IR_allocator = allocator_init(100 * 1204);
     IPP_FFT_Context gui_ipp_context = ipp_initialize(&app_allocator);
     Initializer gui_initializer = { &gui_IR_allocator, &gui_ipp_context};
-    Analysis analysis = analysis_initialize(IR_BUFFER_LENGTH, audio_parameters.num_channels, &app_allocator, &gui_ipp_context);
+    Analysis analysis = analysis_initialize(IR_BUFFER_LENGTH, audio_format.num_channels, &app_allocator, &gui_ipp_context);
     
     //~ UI init
 #ifdef DEBUG
@@ -310,7 +316,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
         }
         
         Plugin *plugin_to_pull_ir_from = nullptr;
-        plugin_reloading_update_gui_side(&plugin_reloading_manager, &audio_context, audio_parameters, &plugin_to_pull_ir_from);
+        plugin_reloading_update_gui_side(&plugin_reloading_manager, &audio_context, audio_format, &plugin_to_pull_ir_from);
         
         if(plugin_to_pull_ir_from)
         {
@@ -319,7 +325,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
             compute_IR(*plugin_to_pull_ir_from, 
                        analysis.IR_buffer, 
                        IR_BUFFER_LENGTH, 
-                       audio_parameters, 
+                       audio_format, 
                        plugin_to_pull_ir_from->parameter_values_ui_side, 
                        &scratch_allocator, 
                        &gui_initializer);
@@ -339,6 +345,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
               plugin_reloading_manager.front_handle->parameter_values_ui_side, 
               &audio_context, 
               &plugin_reloading_manager.gui_log,
+              &audio_device_list,
               &analysis,
               &parameters_were_tweaked,
               &load_wav_was_clicked,
@@ -353,7 +360,7 @@ i32 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR  pCmdLine, int n
             gui_IR_allocator.current = gui_IR_allocator.base;
             compute_IR(*plugin_reloading_manager.front_handle, analysis.IR_buffer, 
                        IR_BUFFER_LENGTH, 
-                       audio_parameters, 
+                       audio_format, 
                        plugin_reloading_manager.front_handle->parameter_values_ui_side, 
                        &scratch_allocator,
                        &gui_initializer);

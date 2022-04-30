@@ -789,7 +789,8 @@ void main_panel_compiler_log(Compiler_Gui_Log *error_log,
     }
 }
 
-void main_panel_audio_setup(Rect bounds, 
+void main_panel_audio_setup(Device_List *audio_device_list, 
+                            Rect bounds, 
                             UI_Context ui)
 {
     bounds = rect_shrinked(bounds, 5.0f, 5.0f);
@@ -807,21 +808,18 @@ void main_panel_audio_setup(Rect bounds,
     Rect audio_output_dropdown_bounds = rect_move_by(audio_input_dropdown_bounds, Vec2{120, 0.0f});
     
     auto input_drop = dropdown_start(audio_input_dropdown_bounds, StringLit("input 1"), 5556, ui); 
-    if(dropdown_elem(StringLit("input 1"), &input_drop , ui))
+    for(i32 i = 0; i < audio_device_list->input_count; i++)
     {
-    }
-    if(dropdown_elem(StringLit("input 2"), &input_drop , ui))
-    {
+        Audio_Device *device = &audio_device_list->inputs[i]; 
+        if(dropdown_elem(device->name, &input_drop , ui));
     }
     dropdown_end(input_drop, ui);
     
-    
     auto output_drop = dropdown_start(audio_output_dropdown_bounds, StringLit("output 1"), 5557, ui); 
-    if(dropdown_elem(StringLit("output 1"), &output_drop , ui))
+    for(i32 i = 0; i < audio_device_list->output_count; i++)
     {
-    }
-    if(dropdown_elem(StringLit("output 2"), &output_drop , ui))
-    {
+        Audio_Device *device = &audio_device_list->outputs[i]; 
+        if(dropdown_elem(device->name, &output_drop , ui));
     }
     dropdown_end(output_drop, ui);
 }
@@ -899,6 +897,7 @@ void frame(Plugin_Descriptor& descriptor,
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Thread_Context *audio_ctx,
            Compiler_Gui_Log *error_log,
+           Device_List *audio_device_list,
            Analysis *analysis,
            bool *parameters_were_tweaked,
            bool *load_wav_was_clicked,
@@ -985,7 +984,7 @@ void frame(Plugin_Descriptor& descriptor,
         
         case Panel_Audio_Setup :
         {
-            main_panel_audio_setup(main_panel_bounds, ui);
+            main_panel_audio_setup(audio_device_list, main_panel_bounds, ui);
         } break;
     }
     

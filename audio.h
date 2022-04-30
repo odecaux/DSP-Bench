@@ -27,7 +27,7 @@ typedef struct
     u32 num_channels;
     u32 num_samples;
     u32 bit_depth;
-} Audio_Parameters;
+} Audio_Format;
 
 struct Plugin_Reloading_Manager;
 
@@ -132,9 +132,42 @@ internal void interleave(real32** in, real32* out,
     }
 }
 
-bool audio_initialize(void** ctx, Audio_Parameters* parameters, Audio_Thread_Context* audio_context, Arena *app_allocator);
+
+enum Flow
+{
+    Flow_Input,
+    Flow_Output
+};
+
+struct Audio_Device
+{
+    String name;
+    bool support_44100;
+    bool support_48000;
+    Flow flow;
+    real64 min_duration_s;
+    real64 default_duration_s;
+    
+    void *wasapi_device;
+};
+
+struct Device_List
+{
+    Audio_Device *inputs;
+    u32 input_count;
+    Audio_Device *outputs;
+    u32 output_count;
+    
+    i32 default_input_idx;
+    i32 default_output_idx;
+};
+
+
+Device_List get_device_list();
+
+bool audio_initialize(void** ctx, Audio_Format* format, Audio_Thread_Context* audio_context, Arena *app_allocator, Audio_Device *output_device);
 void audio_uninitialize(void* ctx);
 
-void render_audio(real32** output_buffer, Audio_Parameters audio_parameters, Audio_Thread_Context *audio_context);
+void render_audio(real32** output_buffer, Audio_Format audio_format, Audio_Thread_Context *audio_context);
 
 #endif //AUDIO_H

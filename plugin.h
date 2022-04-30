@@ -284,7 +284,7 @@ void plugin_reloader_stage_cold_compilation(Plugin_Reloading_Manager *m);
 
 void plugin_reloader_stage_hot_compilation(Plugin_Reloading_Manager *m);
 
-void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m, Audio_Thread_Context *audio_context, Audio_Parameters audio_parameters, Plugin **handle_to_pull_ir_from);
+void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m, Audio_Thread_Context *audio_context, Audio_Format audio_format, Plugin **handle_to_pull_ir_from);
 
 void plugin_reloading_update_audio_side(Plugin_Reloading_Manager *m);
 
@@ -297,7 +297,7 @@ void plugin_check_for_save_and_stage_hot_reload(Plugin_Reloading_Manager *m);
 Runtime_Error_Flag compute_IR(Plugin& handle, 
                               real32** IR_buffer, 
                               u32 IR_length, 
-                              Audio_Parameters audio_parameters,
+                              Audio_Format audio_format,
                               Plugin_Parameter_Value* current_parameters_values,
                               Arena *scratch_allocator,
                               Initializer *initializer);

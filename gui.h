@@ -15,6 +15,8 @@ void frame(Plugin_Descriptor& descriptor,
            Plugin_Parameter_Value* current_parameter_values,
            Audio_Thread_Context *audio_ctx,
            Compiler_Gui_Log *error_log,
+           Device_List *audio_device_list,
+           Analysis *analysis,
            bool *parameters_were_tweaked,
            bool *load_was_clicked,
            bool *load_plugin_was_clicked);

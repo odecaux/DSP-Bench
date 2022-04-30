@@ -62,7 +62,11 @@ typedef struct{
         char* str;
         char* data;
     };
-    u64 size;
+    union {
+        u64 size;
+        u64 length;
+        u64 len;
+    };
 } String;
 
 

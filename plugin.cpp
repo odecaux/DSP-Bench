@@ -17,14 +17,14 @@
 Runtime_Error_Flag compute_IR(Plugin& handle, 
                               real32** IR_buffer, 
                               u32 IR_length, 
-                              Audio_Parameters audio_parameters,
+                              Audio_Format audio_format,
                               Plugin_Parameter_Value* current_parameters_values,
                               Arena *scratch_allocator,
                               Initializer *initializer)
 {
     char *initial_allocator_position = arena_current(scratch_allocator);
     
-    for(u32 channel = 0; channel < audio_parameters.num_channels; channel++)
+    for(u32 channel = 0; channel < audio_format.num_channels; channel++)
     {
         IR_buffer[channel][0] = 1.0f;
         for(u32 sample = 1; sample < IR_length; sample++)
@@ -40,8 +40,8 @@ Runtime_Error_Flag compute_IR(Plugin& handle,
     
     Runtime_Error_Flag error = handle.initialize_state_f(IR_parameters_holder, 
                                                          IR_state_holder, 
-                                                         audio_parameters.num_channels, 
-                                                         audio_parameters.sample_rate, 
+                                                         audio_format.num_channels, 
+                                                         audio_format.sample_rate, 
                                                          initializer);
     
     if(error == Runtime_No_Error)
@@ -49,9 +49,9 @@ Runtime_Error_Flag compute_IR(Plugin& handle,
         handle.audio_callback_f(IR_parameters_holder, 
                                 IR_state_holder, 
                                 IR_buffer, 
-                                audio_parameters.num_channels, 
+                                audio_format.num_channels, 
                                 IR_length, 
-                                audio_parameters.sample_rate);
+                                audio_format.sample_rate);
     }
     arena_reset(scratch_allocator, initial_allocator_position);
     return error;
@@ -335,7 +335,7 @@ void plugin_reloading_manager_init(Plugin_Reloading_Manager *m,
 Runtime_Error_Flag plugin_populate_from_descriptor(Plugin *handle, 
                                                    Arena *allocator, 
                                                    Initializer *initializer,
-                                                   Audio_Parameters audio_parameters)
+                                                   Audio_Format audio_format)
 {
     handle->parameter_values_audio_side = (Plugin_Parameter_Value*)arena_allocate(allocator, sizeof(Plugin_Parameter_Value) *  handle->descriptor.num_parameters);
     
@@ -349,8 +349,8 @@ Runtime_Error_Flag plugin_populate_from_descriptor(Plugin *handle,
     
     Runtime_Error_Flag error = handle->initialize_state_f(handle->parameters_holder, 
                                                           handle->state_holder, 
-                                                          audio_parameters.num_channels,
-                                                          audio_parameters.sample_rate, 
+                                                          audio_format.num_channels,
+                                                          audio_format.sample_rate, 
                                                           initializer);
     
     if(error != Runtime_No_Error)
@@ -367,7 +367,7 @@ Runtime_Error_Flag plugin_populate_from_descriptor(Plugin *handle,
 
 void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m, 
                                       Audio_Thread_Context *audio_context, 
-                                      Audio_Parameters audio_parameters,
+                                      Audio_Format audio_format,
                                       Plugin **handle_to_pull_ir_from)
 {
     auto old_plugin_state = *m->plugin_state;
@@ -386,7 +386,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             ATOMIC_HARNESS();
             if(m->front_handle->failure_stage == Compiler_Failure_Stage_No_Failure)
             {
-                Runtime_Error_Flag error = plugin_populate_from_descriptor(m->front_handle, m->front_allocator, m->front_initializer, audio_parameters);
+                Runtime_Error_Flag error = plugin_populate_from_descriptor(m->front_handle, m->front_allocator, m->front_initializer, audio_format);
                 
                 if(error == Runtime_No_Error)
                 {
@@ -440,7 +440,7 @@ void plugin_reloading_update_gui_side(Plugin_Reloading_Manager *m,
             {
                 printf("hot : compiler success\n");
                 
-                Runtime_Error_Flag error = plugin_populate_from_descriptor(m->back_handle, m->back_allocator, m->back_initializer, audio_parameters);
+                Runtime_Error_Flag error = plugin_populate_from_descriptor(m->back_handle, m->back_allocator, m->back_initializer, audio_format);
                 
                 if(error == Runtime_No_Error) 
                 {
